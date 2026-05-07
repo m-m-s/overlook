@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -507,7 +508,9 @@ export default function LibraryScreen() {
         userEmail={session?.user.email ?? null}
         onUpload={() => {
           setSidebarOpen(false);
-          void onPick();
+          // Navigate to bulk upload screen instead of opening the small picker.
+          // The small picker is also still available via the FAB on the grid.
+          router.push('/upload');
         }}
         onLibrary={() => {
           setSidebarOpen(false);

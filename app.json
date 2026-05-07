@@ -39,6 +39,14 @@
             "backgroundColor": "#1F1E1B"
           }
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Overlook needs access to your photos to import screenshots into your library.",
+          "savePhotosPermission": "Overlook needs to save edited screenshots back to your photos.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
     "experiments": {

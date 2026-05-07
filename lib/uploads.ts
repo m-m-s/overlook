@@ -39,8 +39,15 @@ const uriToBytes = async (uri: string): Promise<ArrayBuffer> => {
  *
  * Caller is responsible for kicking off analysis after the returned record
  * has been added to UI state — see analyzeAndPersist in lib/analyze.
+ *
+ * `fileHash` is an optional fingerprint stored on the row for duplicate
+ * detection. If a row with the same file_hash already exists for this user,
+ * the upload is skipped and the existing row is returned.
  */
-export const uploadScreenshot = async (uri: string): Promise<LocalScreenshot> => {
+export const uploadScreenshot = async (
+  uri: string,
+  opts: { fileHash?: string; fileCreatedAt?: string } = {},
+): Promise<LocalScreenshot> => {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const createdAt = new Date().toISOString();
 
@@ -65,13 +72,33 @@ export const uploadScreenshot = async (uri: string): Promise<LocalScreenshot> =>
     return { id, uri, createdAt };
   }
 
-  const { error: insertErr } = await supabase
-    .from('screenshots')
-    .insert({ id, user_id: userId, storage_path: storagePath });
+  const { error: insertErr } = await supabase.from('screenshots').insert({
+    id,
+    user_id: userId,
+    storage_path: storagePath,
+    file_hash: opts.fileHash ?? null,
+    file_created_at: opts.fileCreatedAt ?? null,
+  });
   if (insertErr) {
     // eslint-disable-next-line no-console
     console.warn('[uploadScreenshot] row insert failed', insertErr);
   }
 
   return { id, uri, storagePath, createdAt };
+};
+
+/** Get the set of file_hash values already stored for the current user. */
+export const fetchExistingFingerprints = async (): Promise<Set<string>> => {
+  if (!isSupabaseConfigured) return new Set();
+  const { data, error } = await supabase
+    .from('screenshots')
+    .select('file_hash')
+    .not('file_hash', 'is', null)
+    .limit(10000);
+  if (error || !data) {
+    // eslint-disable-next-line no-console
+    console.warn('[fetchExistingFingerprints] failed', error);
+    return new Set();
+  }
+  return new Set(data.map((r: { file_hash: string | null }) => r.file_hash).filter(Boolean) as string[]);
 };
