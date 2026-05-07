@@ -8,8 +8,6 @@ import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'rea
 import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { CategoryIcon, type Category } from './CategoryIcon';
-import { useToast } from './Toast';
-import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES, TAG_TYPES } from '@/lib/options';
@@ -87,9 +85,6 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
 
 export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Props) => {
   const { session } = useSession();
-  const toast = useToast();
-  const [reanalyzing, setReanalyzing] = useState(false);
-  const [reanalyzeStatus, setReanalyzeStatus] = useState<string | null>(null);
 
   // Image preview height grows with the snap index per spec ("Drag up for full
   // detail view"). At compact snap, preview is a portrait thumbnail. At full,
@@ -233,43 +228,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     }
   };
 
-  const onReanalyze = async () => {
-    if (reanalyzing) return;
-    setReanalyzing(true);
-    setReanalyzeStatus('reading image…');
-    try {
-      setReanalyzeStatus('sending to Claude…');
-      const patch = await analyzeAndPersist(item.uri, item.id);
-      if (!patch) {
-        setReanalyzeStatus(null);
-        toast.error('AI analysis failed — check Vercel function logs');
-        return;
-      }
-      setReanalyzeStatus('saving tags…');
-      onChange(patch as Partial<LocalScreenshot>);
-      // refresh local tag state so AI tags appear in the sheet
-      const meta = await fetchScreenshotMeta(item.id);
-      if (meta) {
-        setAiTags(meta.ai_typed_tags);
-        setAiSubjects(meta.ai_suggested_subjects);
-        const tagsAdded = meta.ai_typed_tags.length;
-        toast.show(
-          tagsAdded > 0
-            ? `tagged ✓ — ${tagsAdded} tag${tagsAdded === 1 ? '' : 's'}, category: ${patch.category ?? 'none'}`
-            : `tagged but AI returned no tags (category: ${patch.category ?? 'none'})`,
-        );
-      } else {
-        toast.error('analyzed but couldn\'t reload tags from server');
-      }
-      setReanalyzeStatus(null);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setReanalyzeStatus(null);
-      toast.error(`AI analyze threw: ${msg.slice(0, 100)}`);
-    } finally {
-      setReanalyzing(false);
-    }
-  };
 
   // Compute edge gradient colors for the preview (uses staged values via `view`).
   const statusColor = view.status ? statusColors[view.status] : undefined;
@@ -496,26 +454,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         style={styles.notesInput}
       />
 
-      {/* Re-analyze status banner — visible inside the sheet so failures are debuggable */}
-      {reanalyzeStatus && (
-        <View style={styles.statusBanner}>
-          <Text style={styles.statusText}>{reanalyzeStatus}</Text>
-        </View>
-      )}
-
-      {/* Footer actions: re-analyze + share + delete */}
+      {/* Footer actions: share + delete (per spec — no AI re-analyze button) */}
       <View style={styles.footer}>
-        {isAnalyzeConfigured && (
-          <Pressable
-            onPress={onReanalyze}
-            disabled={reanalyzing}
-            style={styles.footerBtn}
-            accessibilityLabel="Analyze with AI"
-          >
-            <Ionicons name="sparkles-outline" size={18} color={colors.ink} />
-            <Text style={styles.footerText}>{reanalyzing ? '…' : 'AI tag'}</Text>
-          </Pressable>
-        )}
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
           <Ionicons name="share-outline" size={18} color={colors.ink} />
           <Text style={styles.footerText}>share</Text>
@@ -661,19 +601,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     minHeight: 80,
     textAlignVertical: 'top',
-  },
-  statusBanner: {
-    marginTop: 24,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: colors.ink,
-    borderRadius: 4,
-  },
-  statusText: {
-    color: colors.parchment,
-    fontSize: 12,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
   },
   footer: {
     flexDirection: 'row',
