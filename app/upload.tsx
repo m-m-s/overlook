@@ -7,7 +7,6 @@ import {
   Alert,
   FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -142,7 +141,6 @@ export default function UploadScreen() {
         }
         setDoneCount((c) => c + 1);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[upload]', err);
         setFailCount((c) => c + 1);
       }
@@ -276,7 +274,7 @@ export default function UploadScreen() {
           <View style={[styles.progressFill, { width: `${pct}%` }]} />
         </View>
 
-        <Text style={styles.subtleSmall}>you can leave this screen — it'll keep going</Text>
+        <Text style={styles.subtleSmall}>you can leave this screen &mdash; it&apos;ll keep going</Text>
       </View>
     );
   }

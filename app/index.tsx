@@ -1,31 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { ActiveFilters } from '@/components/ActiveFilters';
-import { BulkTagSheet } from '@/components/BulkTagSheet';
 import { Card, type CardData } from '@/components/Card';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
-import { SignIn } from '@/components/SignIn';
-import { useToast } from '@/components/Toast';
-import { applyFilters, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
-import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import { markHintSeen, wasHintSeen } from '@/lib/hints';
-import { deleteScreenshots, fetchScreenshots } from '@/lib/screenshots';
-import { isSupabaseConfigured } from '@/lib/supabase';
-import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
+import { emptyFilters, type Filters } from '@/lib/filters';
+import { fetchScreenshots } from '@/lib/screenshots';
+import type { LocalScreenshot } from '@/lib/uploads';
 
-type ColCount = 1 | 2 | 3 | 4;
-const COLS_KEY = 'overlook.grid_cols';
-const GRID_GAP = 3;
+const URGENT_KEYS = new Set(['today', 'expires_soon', 'this_week']);
 
 const toCardData = (it: LocalScreenshot): CardData => ({
   id: it.id,
@@ -36,297 +24,57 @@ const toCardData = (it: LocalScreenshot): CardData => ({
   resonance: it.resonance ?? null,
 });
 
-export default function LibraryScreen() {
-  const { session, loading } = useSession();
-  const toast = useToast();
+/**
+ * Home screen per spec: urgent row, pinned filters (when present), recently
+ * added grid, untagged row at bottom. Auto-surfaced category rows are
+ * deferred per Maggie's call.
+ */
+export default function HomeScreen() {
+  const { session } = useSession();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
-  const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>(emptyFilters());
-  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
-  const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
-  const [cols, setCols] = useState<ColCount>(3);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const inSelectMode = multiSelectIds.size > 0;
-  const isIntentMode = cols === 1;
+  const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sheetIndex, setSheetIndex] = useState(0);
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
 
-  // Load persisted column count
-  useEffect(() => {
-    AsyncStorage.getItem(COLS_KEY).then((v) => {
-      const n = v ? parseInt(v, 10) : 3;
-      if (n === 1 || n === 2 || n === 3 || n === 4) setCols(n);
-    });
-  }, []);
-
-  // Persist on change
-  useEffect(() => {
-    AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
-  }, [cols]);
-
-  // Android hardware back: nav-style. Sidebar > multi-select > filters >
-  // default (exit app).
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (sidebarOpen) {
-        setSidebarOpen(false);
-        return true;
-      }
-      if (inSelectMode) {
-        exitMultiSelect();
-        return true;
-      }
-      if (filtersActive(filters) > 0) {
-        setFilters(emptyFilters());
-        return true;
-      }
-      return false;
-    });
-    return () => sub.remove();
-  }, [sidebarOpen, inSelectMode, filters]);
-
-  // First-card hint: when items first appear, drop a one-time toast pointing
-  // at the gestures users wouldn't discover otherwise.
-  const prevItemsCount = useRef(items.length);
-  useEffect(() => {
-    if (prevItemsCount.current === 0 && items.length > 0) {
-      void (async () => {
-        if (!(await wasHintSeen('first-card-gestures'))) {
-          toast.show('tap a card to view • pinch to zoom • long-press to select');
-          await markHintSeen('first-card-gestures');
-        }
-      })();
-    }
-    prevItemsCount.current = items.length;
-  }, [items.length, toast]);
-
-  // Pinch gesture: pinch out (scale > 1.3) -> zoom in (fewer cols).
-  // Pinch in (scale < 0.7) -> zoom out (more cols).
-  const pinchGesture = useMemo(
-    () =>
-      Gesture.Pinch()
-        .runOnJS(true)
-        .onEnd((e) => {
-          if (e.scale > 1.3) {
-            setCols((prev) => (prev > 1 ? ((prev - 1) as ColCount) : 1));
-          } else if (e.scale < 0.7) {
-            setCols((prev) => (prev < 4 ? ((prev + 1) as ColCount) : 4));
-          }
-        }),
-    [],
-  );
-
-  // Show a hint once when user enters intent mode (1 col) for the first time.
-  useEffect(() => {
-    if (cols !== 1) return;
-    void (async () => {
-      if (!(await wasHintSeen('intent-mode'))) {
-        toast.show('intent mode — pinch in to return to grid');
-        await markHintSeen('intent-mode');
-      }
-    })();
-  }, [cols, toast]);
-
-  const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
-
-  const onRefresh = useCallback(async () => {
+  const loadItems = useCallback(async () => {
     if (!session) return;
+    const rows = await fetchScreenshots();
+    setItems(rows);
+  }, [session]);
+
+  useEffect(() => {
+    void loadItems();
+  }, [loadItems]);
+
+  const onRefresh = async () => {
     setRefreshing(true);
     try {
-      const rows = await fetchScreenshots();
-      setItems(rows);
+      await loadItems();
     } finally {
       setRefreshing(false);
     }
-  }, [session]);
-
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const bulkSheetRef = useRef<BottomSheetModal>(null);
-  // 3 snap points lets user drag from 60% (compact) -> 85% -> 100% (full detail per spec).
-  const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
-  const bulkSnapPoints = useMemo(() => ['85%'], []);
-  const [sheetIndex, setSheetIndex] = useState(0);
-
-  useEffect(() => {
-    if (!session) return;
-    fetchScreenshots().then((rows) => setItems(rows));
-  }, [session]);
-
-  // Two-step upload per spec privacy model: pick first, then user explicitly
-  // chooses to analyze with AI or add without AI. "Nothing auto-sends ever."
-  const runUpload = async (assets: ImagePicker.ImagePickerAsset[], analyze: boolean) => {
-    const uploads = await Promise.all(assets.map((a) => uploadScreenshot(a.uri)));
-
-    // Show cards immediately
-    setItems((prev) => [...uploads, ...prev]);
-
-    if (!analyze || !isAnalyzeConfigured) return;
-
-    // Mark as analyzing
-    setAnalyzingIds((prev) => {
-      const next = new Set(prev);
-      for (const u of uploads) next.add(u.id);
-      return next;
-    });
-
-    let failures = 0;
-    for (const u of uploads) {
-      void (async () => {
-        const patch = await analyzeAndPersist(u.uri, u.id);
-        setAnalyzingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(u.id);
-          return next;
-        });
-        if (!patch) {
-          failures++;
-          if (failures === 1) toast.error('AI tagging failed for some images — retry from card detail');
-          return;
-        }
-        setItems((prev) => prev.map((it) => (it.id === u.id ? { ...it, ...patch } : it)));
-      })();
-    }
   };
 
-  const onPick = async () => {
-    setBusy(true);
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(
-          'Photo permission needed',
-          'Overlook needs access to your gallery to add screenshots. Open Settings → Apps → Overlook → Permissions to enable.',
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: 10,
-        quality: 0.9,
-      });
-      if (result.canceled || result.assets.length === 0) return;
-
-      const count = result.assets.length;
-      const assets = result.assets;
-
-      // Per spec privacy model: "Nothing auto-sends ever. Post-screenshot popup
-      // requires explicit tap to analyze." Confirm before AI analysis.
-      if (isAnalyzeConfigured) {
-        Alert.alert(
-          `Add ${count} screenshot${count === 1 ? '' : 's'}?`,
-          'Choose how to add them. AI tagging sends each image to Claude for analysis (~$0.003/image). "Add without AI" keeps them local-only — you can tag manually or analyze later from the card detail view.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Add without AI', onPress: () => void runUpload(assets, false) },
-            {
-              text: 'Analyze with AI',
-              style: 'default',
-              onPress: () => void runUpload(assets, true),
-            },
-          ],
-        );
-      } else {
-        // No AI configured — just add them
-        await runUpload(assets, false);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openDetail = (it: LocalScreenshot) => {
-    setSelectedId(it.id);
-    sheetRef.current?.present();
-  };
-
-  const toggleMultiSelect = (id: string) => {
-    setMultiSelectIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const exitMultiSelect = () => setMultiSelectIds(new Set());
-
-  const onCardPress = (it: LocalScreenshot) => {
-    if (inSelectMode) toggleMultiSelect(it.id);
-    else openDetail(it);
-  };
-
-  const onCardLongPress = (it: LocalScreenshot) => {
-    // Long-press always selects (or de-selects if already in)
-    setMultiSelectIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(it.id)) next.delete(it.id);
-      else next.add(it.id);
-      return next;
-    });
-  };
-
-  const onBulkTag = () => {
-    if (multiSelectIds.size === 0) return;
-    bulkSheetRef.current?.present();
-  };
-
-  const onBulkApplied = (
-    patch: Partial<LocalScreenshot>,
-    appendedTag: { type?: string; value: string } | null,
-  ) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        multiSelectIds.has(it.id)
-          ? {
-              ...it,
-              ...patch,
-              // appendedTag changes manual_typed_tags but we don't store those in
-              // LocalScreenshot — server stays source of truth, list-view ignores.
-            }
-          : it,
-      ),
-    );
-    if (appendedTag) {
-      // intentionally a no-op locally — appended tag isn't in card visual.
-    }
-    exitMultiSelect();
-  };
-
-  const onBulkDelete = () => {
-    const count = multiSelectIds.size;
-    if (count === 0) return;
-    Alert.alert(
-      `Delete ${count} screenshot${count === 1 ? '' : 's'}?`,
-      'This removes them from your library.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const targets = items
-              .filter((it) => multiSelectIds.has(it.id))
-              .map((it) => ({ id: it.id, storagePath: it.storagePath }));
-            await deleteScreenshots(targets);
-            setItems((prev) => prev.filter((it) => !multiSelectIds.has(it.id)));
-            exitMultiSelect();
-          },
-        },
-      ],
-    );
-  };
-
-  const onItemChange = (patch: Partial<LocalScreenshot>) => {
-    if (!selectedId) return;
-    setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
-  };
+  const urgent = useMemo(
+    () => items.filter((it) => it.urgency && URGENT_KEYS.has(it.urgency)),
+    [items],
+  );
+  const recent = useMemo(() => items.slice(0, 24), [items]);
+  const untagged = useMemo(() => items.filter((it) => !it.category), [items]);
 
   const onItemDelete = () => {
     if (!selectedId) return;
     setItems((prev) => prev.filter((it) => it.id !== selectedId));
     sheetRef.current?.dismiss();
+  };
+
+  const onItemChange = (patch: Partial<LocalScreenshot>) => {
+    if (!selectedId) return;
+    setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
   };
 
   const renderBackdrop = useCallback(
@@ -336,137 +84,142 @@ export default function LibraryScreen() {
     [],
   );
 
-  const selected = items.find((it) => it.id === selectedId) ?? null;
-
-  const onSignOut = () => {
-    Alert.alert('Sign out?', `You'll be signed out of ${session?.user.email ?? 'your account'}.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          setItems([]);
-        },
-      },
-    ]);
+  const open = (it: LocalScreenshot) => {
+    setSelectedId(it.id);
+    sheetRef.current?.present();
   };
 
-  if (loading) {
+  const selected = items.find((it) => it.id === selectedId) ?? null;
+
+  // Apply filters (from sidebar) → navigate to filtered grid page (which is /library for now;
+  // dedicated /filtered route to be added). For sprint v2 simplicity we stay on home and
+  // just route to /library when a filter is applied via the sidebar.
+
+  // EMPTY STATE
+  if (items.length === 0) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color={colors.ink} />
+        <Pressable
+          onPress={() => setSidebarOpen(true)}
+          accessibilityLabel="Open menu"
+          style={styles.edgeBar}
+          hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
+        />
+        <Text style={styles.title}>Overlook</Text>
+        <Text style={styles.subtitle}>your screenshot library</Text>
+        <Pressable onPress={() => router.push('/upload')} style={styles.bigBtn}>
+          <Text style={styles.bigBtnText}>upload screenshots</Text>
+        </Pressable>
+        <SidebarRender
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          filters={filters}
+          onFiltersChange={(f) => {
+            setFilters(f);
+            setSidebarOpen(false);
+            router.push('/library');
+          }}
+          email={session?.user.email ?? null}
+        />
       </View>
     );
   }
 
-  if (isSupabaseConfigured && !session) {
-    return <SignIn />;
-  }
-
   return (
     <View style={styles.container}>
-      {/* Persistent edge hint bar (per spec) — tap to open sidebar */}
-      {!inSelectMode && session && (
-        <Pressable
-          onPress={() => setSidebarOpen(true)}
-          accessibilityLabel="Open filters and nav"
-          style={styles.edgeBar}
-          hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
-        />
-      )}
+      <Pressable
+        onPress={() => setSidebarOpen(true)}
+        accessibilityLabel="Open menu"
+        style={styles.edgeBar}
+        hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
+      />
 
-      {inSelectMode && (
-        <View style={styles.bulkBar}>
-          <Pressable onPress={exitMultiSelect} hitSlop={12} style={styles.bulkIconBtn}>
-            <Ionicons name="close" size={22} color={colors.parchment} />
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 60 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink} />}
+      >
+        {/* Top header — sidebar trigger + title */}
+        <View style={styles.header}>
+          <Pressable onPress={() => setSidebarOpen(true)} hitSlop={10}>
+            <Ionicons name="menu" size={24} color={colors.ink} />
           </Pressable>
-          <Text style={styles.bulkCount}>
-            {multiSelectIds.size} selected
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Pressable onPress={onBulkTag} hitSlop={12} style={styles.bulkIconBtn}>
-              <Ionicons name="pricetag-outline" size={20} color={colors.parchment} />
-            </Pressable>
-            <Pressable onPress={onBulkDelete} hitSlop={12} style={styles.bulkIconBtn}>
-              <Ionicons name="trash-outline" size={20} color={colors.parchment} />
-            </Pressable>
+          <Text style={styles.headerTitle}>Overlook</Text>
+          <Pressable onPress={() => router.push('/library')} hitSlop={10}>
+            <Text style={styles.headerLink}>all</Text>
+          </Pressable>
+        </View>
+
+        {/* Urgent row — auto-hides when nothing urgent (per spec) */}
+        {urgent.length > 0 && (
+          <Row title="urgent" count={urgent.length} onSeeAll={() => router.push('/library')}>
+            <FlatList
+              horizontal
+              data={urgent}
+              keyExtractor={(it) => it.id}
+              showsHorizontalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
+              contentContainerStyle={styles.rowList}
+              renderItem={({ item }) => (
+                <View style={styles.rowCell}>
+                  <Card data={toCardData(item)} onPress={() => open(item)} />
+                </View>
+              )}
+            />
+          </Row>
+        )}
+
+        {/* Recently added — full-bleed 3-col grid (12-24 items) */}
+        <Row title="recently added" count={recent.length} onSeeAll={() => router.push('/library')}>
+          <View style={styles.recentGrid}>
+            {recent.map((item, idx) => (
+              <View
+                key={item.id}
+                style={[
+                  styles.recentCell,
+                  // 3 cols, 3px gap
+                  { marginRight: (idx + 1) % 3 === 0 ? 0 : 3, marginBottom: 3 },
+                ]}
+              >
+                <Card data={toCardData(item)} onPress={() => open(item)} />
+              </View>
+            ))}
           </View>
-        </View>
-      )}
-      {items.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Overlook</Text>
-          <Text style={styles.emptySub}>your screenshot library</Text>
-          <Pressable
-            accessibilityLabel="Upload screenshots"
-            onPress={onPick}
-            disabled={busy}
-            style={({ pressed }) => [styles.bigBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.bigBtnText}>{busy ? 'uploading…' : 'upload screenshots'}</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <GestureDetector gesture={pinchGesture}>
-          <FlatList
-            // key on cols forces FlatList to remount when numColumns changes.
-            key={`grid-${cols}`}
-            data={visibleItems}
-            keyExtractor={(it) => it.id}
-            numColumns={cols}
-            contentContainerStyle={{ paddingBottom: 96 }}
-            columnWrapperStyle={cols > 1 ? { gap: GRID_GAP } : undefined}
-            ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
-            ListHeaderComponent={
-              <ActiveFilters
-                filters={filters}
-                onChange={setFilters}
-                totalCount={items.length}
-                filteredCount={visibleItems.length}
-                onOpenSidebar={() => setSidebarOpen(true)}
-              />
-            }
-            ListEmptyComponent={
-              <View style={styles.empty}>
-                <Text style={styles.emptySub}>no screenshots match these filters</Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <View style={isIntentMode ? styles.cellIntent : { flex: 1 / cols, aspectRatio: 1 }}>
-                <Card
-                  data={toCardData(item)}
-                  analyzing={analyzingIds.has(item.id)}
-                  inSelectMode={inSelectMode}
-                  selected={multiSelectIds.has(item.id)}
-                  mode={isIntentMode ? 'intent' : 'grid'}
-                  onPress={() => onCardPress(item)}
-                  onLongPress={() => onCardLongPress(item)}
-                />
-              </View>
-            )}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={colors.ink}
-                colors={[colors.ink]}
-              />
-            }
-          />
-        </GestureDetector>
-      )}
-      {items.length > 0 && (
-        <Pressable
-          accessibilityLabel="Add more screenshots"
-          onPress={onPick}
-          disabled={busy}
-          style={({ pressed }) => [styles.fab, pressed && { opacity: 0.8 }]}
-        >
-          <Text style={styles.fabText}>{busy ? '…' : '+'}</Text>
-        </Pressable>
-      )}
+        </Row>
 
+        {/* Untagged row at bottom — bare dimmed cards */}
+        {untagged.length > 0 && (
+          <Row
+            title="untagged"
+            count={untagged.length}
+            onSeeAll={() => {
+              // Navigate to library and filter by untagged category? Sidebar approach:
+              // For sprint v2: just go to library.
+              router.push('/library');
+            }}
+          >
+            <FlatList
+              horizontal
+              data={untagged}
+              keyExtractor={(it) => it.id}
+              showsHorizontalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
+              contentContainerStyle={styles.rowList}
+              renderItem={({ item }) => (
+                <View style={[styles.rowCell, styles.untaggedDim]}>
+                  <Card data={toCardData(item)} onPress={() => open(item)} />
+                </View>
+              )}
+            />
+          </Row>
+        )}
+      </ScrollView>
+
+      {/* FAB to bulk-upload */}
+      <Pressable onPress={() => router.push('/upload')} style={styles.fab}>
+        <Ionicons name="add" size={28} color={colors.parchment} />
+      </Pressable>
+
+      {/* Bottom sheet detail */}
       <BottomSheetModal
         ref={sheetRef}
         snapPoints={snapPoints}
@@ -477,60 +230,90 @@ export default function LibraryScreen() {
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
       >
         {selected && (
-          <ScreenshotDetail
-            item={selected}
-            onChange={onItemChange}
-            onDelete={onItemDelete}
-            snapIndex={sheetIndex}
-          />
+          <ScreenshotDetail item={selected} onChange={onItemChange} onDelete={onItemDelete} snapIndex={sheetIndex} />
         )}
       </BottomSheetModal>
 
-      <BottomSheetModal
-        ref={bulkSheetRef}
-        snapPoints={bulkSnapPoints}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: colors.parchment }}
-        handleIndicatorStyle={{ backgroundColor: colors.inkMuted }}
-      >
-        <BulkTagSheet
-          selectedIds={Array.from(multiSelectIds)}
-          onApplied={onBulkApplied}
-          onClose={() => bulkSheetRef.current?.dismiss()}
-        />
-      </BottomSheetModal>
-
-      <Sidebar
+      <SidebarRender
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         filters={filters}
-        onFiltersChange={setFilters}
-        userEmail={session?.user.email ?? null}
-        onUpload={() => {
+        onFiltersChange={(f) => {
+          setFilters(f);
           setSidebarOpen(false);
-          // Navigate to bulk upload screen instead of opening the small picker.
-          // The small picker is also still available via the FAB on the grid.
-          router.push('/upload');
+          router.push('/library');
         }}
-        onLibrary={() => {
-          setSidebarOpen(false);
-          setFilters(emptyFilters());
-        }}
-        onSignOut={() => {
-          setSidebarOpen(false);
-          onSignOut();
-        }}
+        email={session?.user.email ?? null}
       />
     </View>
   );
 }
 
+// Row helper — title bar + see-all + children body
+const Row = ({
+  title,
+  count,
+  onSeeAll,
+  children,
+}: {
+  title: string;
+  count: number;
+  onSeeAll: () => void;
+  children: React.ReactNode;
+}) => (
+  <View style={styles.row}>
+    <View style={styles.rowHeader}>
+      <Text style={styles.rowTitle}>{title}</Text>
+      <Text style={styles.rowCount}>({count})</Text>
+      <View style={{ flex: 1 }} />
+      <Pressable onPress={onSeeAll} hitSlop={6}>
+        <Text style={styles.rowSeeAll}>see all ›</Text>
+      </Pressable>
+    </View>
+    {children}
+  </View>
+);
+
+// Wraps Sidebar with consistent nav callbacks
+const SidebarRender = ({
+  open,
+  onClose,
+  filters,
+  onFiltersChange,
+  email,
+}: {
+  open: boolean;
+  onClose: () => void;
+  filters: Filters;
+  onFiltersChange: (f: Filters) => void;
+  email: string | null;
+}) => (
+  <Sidebar
+    open={open}
+    onClose={onClose}
+    filters={filters}
+    onFiltersChange={onFiltersChange}
+    userEmail={email}
+    onUpload={() => {
+      onClose();
+      router.push('/upload');
+    }}
+    onLibrary={() => {
+      onClose();
+      router.push('/library');
+    }}
+    onSignOut={() => {
+      onClose();
+      void signOut();
+    }}
+  />
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.parchment },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { fontFamily: 'Georgia', fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
-  emptySub: {
+  center: { alignItems: 'center', justifyContent: 'center', padding: 32 },
+  title: { fontFamily: 'Georgia', fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
+  subtitle: {
     fontSize: 11,
     letterSpacing: 2,
     textTransform: 'uppercase',
@@ -551,19 +334,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontWeight: '600',
   },
-  cellIntent: { width: '100%', aspectRatio: 9 / 16 },
-  fab: {
-    position: 'absolute',
-    right: 24,
-    bottom: 36,
-    width: 56,
-    height: 56,
-    borderRadius: 4,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabText: { color: colors.parchment, fontSize: 28, lineHeight: 30 },
   edgeBar: {
     position: 'absolute',
     left: 0,
@@ -576,26 +346,65 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 2,
     zIndex: 5,
   },
-  bulkBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    backgroundColor: colors.ink,
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 20,
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 16,
+    gap: 12,
   },
-  bulkCount: {
-    color: colors.parchment,
-    fontSize: 13,
+  headerTitle: { fontFamily: 'Georgia', fontSize: 28, color: colors.ink, letterSpacing: -0.4 },
+  headerLink: {
+    fontSize: 11,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    fontWeight: '600',
+    color: colors.inkMuted,
+    textDecorationLine: 'underline',
   },
-  bulkIconBtn: { padding: 4 },
+  row: { marginBottom: 28 },
+  rowHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  rowTitle: {
+    fontFamily: 'Georgia',
+    fontSize: 18,
+    color: colors.ink,
+  },
+  rowCount: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.inkMuted,
+  },
+  rowSeeAll: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.inkMuted,
+  },
+  rowList: { paddingHorizontal: 20 },
+  rowCell: { width: 140, aspectRatio: 1 },
+  untaggedDim: { opacity: 0.65 },
+  recentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  recentCell: { width: '33.0%', aspectRatio: 1 },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    bottom: 36,
+    width: 56,
+    height: 56,
+    borderRadius: 4,
+    backgroundColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 6,
+  },
 });
