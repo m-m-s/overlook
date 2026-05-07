@@ -52,7 +52,13 @@ export default function LibraryScreen() {
       });
       if (result.canceled) return;
 
-      const uploads = await Promise.all(result.assets.map((a) => uploadScreenshot(a.uri)));
+      const onAnalyzed = (id: string, patch: Partial<LocalScreenshot> | null) => {
+        if (!patch) return;
+        setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+      };
+      const uploads = await Promise.all(
+        result.assets.map((a) => uploadScreenshot(a.uri, { onAnalyzed })),
+      );
       setItems((prev) => [...uploads, ...prev]);
     } finally {
       setBusy(false);
