@@ -8,11 +8,13 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import 'react-native-url-polyfill/auto';
 
+import { PostScreenshotPopup } from '@/components/PostScreenshotPopup';
 import { SignIn } from '@/components/SignIn';
 import { ToastProvider } from '@/components/Toast';
 import { handleAuthDeepLink, useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 import { FilterProvider } from '@/lib/filtersContext';
+import { ScreenshotWatcherProvider } from '@/lib/screenshotWatcher';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 const RootGate = () => {
@@ -29,7 +31,12 @@ const RootGate = () => {
   // Local-only mode (no supabase wired): allow through. Otherwise gate on session.
   if (isSupabaseConfigured && !session) return <SignIn />;
 
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.parchment } }} />;
+  return (
+    <ScreenshotWatcherProvider>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.parchment } }} />
+      <PostScreenshotPopup />
+    </ScreenshotWatcherProvider>
+  );
 };
 
 export default function RootLayout() {
