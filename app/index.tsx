@@ -10,6 +10,7 @@ import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { useBatchState } from '@/lib/batchState';
 import { applyFilters as applyFiltersToItems, emptyFilters, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { mergeWithDefaults, useRowOrder } from '@/lib/rowOrder';
@@ -39,6 +40,8 @@ export default function HomeScreen() {
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [pinnedFilters, setPinnedFilters] = useState<SavedFilter[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [batchRefreshKey, setBatchRefreshKey] = useState(0);
+  const batchState = useBatchState(batchRefreshKey);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { filters, setFilters, applyFilters: applyFilterCtx } = useFilters();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export default function HomeScreen() {
     setRefreshing(true);
     try {
       await loadItems();
+      setBatchRefreshKey((k) => k + 1);
     } finally {
       setRefreshing(false);
     }
@@ -158,6 +162,18 @@ export default function HomeScreen() {
         contentContainerStyle={{ paddingBottom: 60 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink} />}
       >
+        {/* Batch resume banner — appears when a bulk import is in progress
+            or has remaining items. Tap to jump back into /upload. */}
+        {batchState && batchState.processed < batchState.total && (
+          <Pressable onPress={() => router.push('/upload')} style={styles.batchBanner}>
+            <Ionicons name="arrow-forward" size={16} color={colors.parchment} />
+            <Text style={styles.batchBannerText}>
+              bulk import: {batchState.total - batchState.processed} of {batchState.total} remaining
+              · tap to continue
+            </Text>
+          </Pressable>
+        )}
+
         {/* Top header — sidebar trigger + title */}
         <View style={styles.header}>
           <Pressable onPress={() => setSidebarOpen(true)} hitSlop={10}>
@@ -528,6 +544,24 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   recentCell: { width: '33.333%', aspectRatio: 1 },
+  batchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.ink,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 50,
+    borderRadius: 4,
+  },
+  batchBannerText: {
+    flex: 1,
+    color: colors.parchment,
+    fontSize: 12,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   fab: {
     position: 'absolute',
     right: 24,

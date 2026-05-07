@@ -60,7 +60,10 @@ type Pending = Partial<{
   timeToComplete: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
   sourceUrlManual: string | null;
   notes: string | null;
+  localOnly: boolean;
 }>;
+
+const LOCAL_ONLY_DEFAULT_CATEGORIES = new Set(['documents', 'messages']);
 
 /**
  * Tappable section header. Long-press to enter/exit edit mode for that
@@ -183,6 +186,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     timeToComplete: 'timeToComplete' in pending ? pending.timeToComplete : item.timeToComplete ?? null,
     sourceUrlManual: 'sourceUrlManual' in pending ? pending.sourceUrlManual : item.sourceUrlManual ?? null,
     notes: 'notes' in pending ? pending.notes : serverNotes,
+    localOnly: 'localOnly' in pending ? pending.localOnly : item.localOnly ?? false,
   };
   // Effective source URL: user-set if present, otherwise AI-extracted.
   const effectiveSourceUrl = view.sourceUrlManual ?? item.sourceUrl ?? null;
@@ -218,7 +222,15 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   const stage = (patch: Pending) => setPending((prev) => ({ ...prev, ...patch }));
 
   const setCategory = (cat: Category | null) => {
-    stage({ category: view.category === cat ? null : cat });
+    const next = view.category === cat ? null : cat;
+    const updates: Pending = { category: next };
+    // Per spec: "Certain categories (Documents, Messages, Finance) default
+    // to local-only." If user changes to one of those AND localOnly hasn't
+    // been explicitly set, flip it on.
+    if (next && LOCAL_ONLY_DEFAULT_CATEGORIES.has(next) && !view.localOnly) {
+      updates.localOnly = true;
+    }
+    stage(updates);
   };
   const setStatus = (s: string | null) => {
     stage({ status: view.status === s ? null : s });
@@ -244,6 +256,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     if ('timeToComplete' in patch) dbPatch.time_to_complete = patch.timeToComplete;
     if ('sourceUrlManual' in patch) dbPatch.source_url_manual = patch.sourceUrlManual;
     if ('notes' in patch) dbPatch.notes = patch.notes;
+    if ('localOnly' in patch) dbPatch.local_only = patch.localOnly;
 
     // Optimistic UI: update parent + close edit mode immediately. If the
     // server rejects, restore the pending patch and toast the error so the
@@ -749,6 +762,33 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         <Text style={styles.emptyHint}>not set</Text>
       )}
 
+      {/* Privacy: local-only toggle. When on, skip AI analysis entirely.
+          Auto-flips when category becomes documents / messages. */}
+      <View style={styles.localOnlyRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionLabel}>private (local-only)</Text>
+          <Text style={styles.emptyHint}>
+            {view.localOnly
+              ? 'AI analysis is disabled for this card'
+              : 'allow AI to tag this card'}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => stage({ localOnly: !view.localOnly })}
+          style={[styles.localOnlySwitch, view.localOnly && styles.localOnlySwitchOn]}
+          accessibilityLabel="Toggle private (local-only)"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: view.localOnly }}
+        >
+          <View
+            style={[
+              styles.localOnlyThumb,
+              view.localOnly && { transform: [{ translateX: 18 }] },
+            ]}
+          />
+        </Pressable>
+      </View>
+
       {/* Footer actions: share + delete (per spec — no AI re-analyze button) */}
       <View style={styles.footer}>
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
@@ -834,6 +874,30 @@ const styles = StyleSheet.create({
     color: colors.ink,
     paddingVertical: 6,
     lineHeight: 20,
+  },
+  localOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 28,
+    paddingVertical: 8,
+    gap: 12,
+  },
+  localOnlySwitch: {
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.divider,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  localOnlySwitchOn: {
+    backgroundColor: colors.ink,
+  },
+  localOnlyThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.parchment,
   },
   row: { flexDirection: 'row', gap: 6 },
   wrap: { flexWrap: 'wrap', rowGap: 8 },

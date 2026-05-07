@@ -104,31 +104,36 @@ export const analyzeImage = async (
   }
 };
 
+// Categories that default to local-only (per CLAUDE.md privacy model).
+const LOCAL_ONLY_CATEGORIES = new Set(['documents', 'messages']);
+
 /** Write AI-analysis results back to the screenshots row. */
 export const persistAnalyzeResult = async (
   screenshotId: string,
   result: AnalyzeResult,
 ): Promise<void> => {
   if (!isSupabaseConfigured) return;
-  const { error } = await supabase
-    .from('screenshots')
-    .update({
-      analyzed: true,
-      ai_typed_tags: result.typed_tags,
-      ai_suggested_subjects: result.suggested_subjects,
-      ai_suggested_category: result.category,
-      // Pre-fill user-set fields when AI is confident — user can override in the sheet.
-      category: result.category,
-      subject: result.subject,
-      urgency: result.urgency,
-      urgency_date: result.urgency_date,
-      source_url: result.source_url ?? null,
-      action_url: result.action_url ?? null,
-      action_url_type: result.action_url_type ?? null,
-    })
-    .eq('id', screenshotId);
+  // Auto-flag local-only when AI detects a sensitive category. User can
+  // override in the detail sheet.
+  const autoLocalOnly = result.category && LOCAL_ONLY_CATEGORIES.has(result.category);
+
+  const update: Record<string, unknown> = {
+    analyzed: true,
+    ai_typed_tags: result.typed_tags,
+    ai_suggested_subjects: result.suggested_subjects,
+    ai_suggested_category: result.category,
+    category: result.category,
+    subject: result.subject,
+    urgency: result.urgency,
+    urgency_date: result.urgency_date,
+    source_url: result.source_url ?? null,
+    action_url: result.action_url ?? null,
+    action_url_type: result.action_url_type ?? null,
+  };
+  if (autoLocalOnly) update.local_only = true;
+
+  const { error } = await supabase.from('screenshots').update(update).eq('id', screenshotId);
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[analyze] persist failed', error);
   }
 };

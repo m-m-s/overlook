@@ -9,6 +9,7 @@ import { Iris } from '@/components/Iris';
 import { useToast } from '@/components/Toast';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { enqueueAnalysis } from '@/lib/analysisQueue';
+import { setBatchState } from '@/lib/batchState';
 import { useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 import {
@@ -148,10 +149,14 @@ export default function UploadScreen() {
     setDoneCount(0);
     setFailCount(0);
     setPhase('processing');
+    void setBatchState({ total: queue.length, processed: 0, startedAt: Date.now() });
     void runProcessing(queue);
   };
 
   const runProcessing = async (queue: { asset: ScannedAsset; analyze: boolean }[]) => {
+    let processed = 0;
+    const total = queue.length;
+    const startedAt = Date.now();
     for (const { asset, analyze } of queue) {
       try {
         const fp = fingerprintAsset(asset);
@@ -164,7 +169,6 @@ export default function UploadScreen() {
         if (analyze && isAnalyzeConfigured) {
           const patch = await analyzeAndPersist(asset.uri, local.id, asset.id);
           if (!patch) {
-            // Queue for offline retry; row exists already so no data lost.
             await enqueueAnalysis(local.id, asset.uri, asset.id);
           }
         }
@@ -172,8 +176,14 @@ export default function UploadScreen() {
       } catch (err) {
         console.warn('[upload]', err);
         setFailCount((c) => c + 1);
+      } finally {
+        processed++;
+        // Persist progress so the home banner can show "N remaining" if the
+        // user backgrounds the app mid-batch.
+        void setBatchState({ total, processed, startedAt });
       }
     }
+    void setBatchState(null); // batch done, clear
     setPhase('done');
   };
 
