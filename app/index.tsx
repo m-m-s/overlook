@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, type CardData } from '@/components/Card';
+import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { SignIn } from '@/components/SignIn';
 import { useSession } from '@/lib/auth';
@@ -29,6 +30,9 @@ export default function LibraryScreen() {
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [busy, setBusy] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(emptyFilters());
+
+  const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
 
   const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['70%', '95%'], []);
@@ -119,12 +123,18 @@ export default function LibraryScreen() {
         </View>
       ) : (
         <FlatList
-          data={items}
+          data={visibleItems}
           keyExtractor={(it) => it.id}
           numColumns={GRID_COLUMNS}
-          contentContainerStyle={{ paddingTop: 24, paddingBottom: 96 }}
+          contentContainerStyle={{ paddingBottom: 96 }}
           columnWrapperStyle={{ gap: GRID_GAP }}
           ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
+          ListHeaderComponent={<FilterBar filters={filters} onChange={setFilters} />}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptySub}>no screenshots match these filters</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <View style={styles.cell}>
               <Card data={toCardData(item)} onPress={() => openDetail(item)} />
