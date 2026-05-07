@@ -10,6 +10,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { BulkTagSheet } from '@/components/BulkTagSheet';
 import { Card, type CardData } from '@/components/Card';
+import { EdgeSwipe } from '@/components/EdgeSwipe';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
@@ -353,15 +354,8 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Persistent edge hint bar (per spec) — tap to open sidebar */}
-      {!inSelectMode && session && (
-        <Pressable
-          onPress={() => setSidebarOpen(true)}
-          accessibilityLabel="Open filters and nav"
-          style={styles.edgeBar}
-          hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
-        />
-      )}
+      {/* Persistent edge hint bar + swipe (per spec) */}
+      {!inSelectMode && session && <EdgeSwipe onOpen={() => setSidebarOpen(true)} />}
 
       {inSelectMode && (
         <View style={styles.bulkBar}>
@@ -555,18 +549,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fabText: { color: colors.parchment, fontSize: 28, lineHeight: 30 },
-  edgeBar: {
-    position: 'absolute',
-    left: 0,
-    top: '40%',
-    width: 4,
-    height: 60,
-    backgroundColor: colors.inkMuted,
-    opacity: 0.55,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-    zIndex: 5,
-  },
   bulkBar: {
     position: 'absolute',
     top: 0,

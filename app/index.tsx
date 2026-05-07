@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, type CardData } from '@/components/Card';
+import { EdgeSwipe } from '@/components/EdgeSwipe';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { signOut, useSession } from '@/lib/auth';
@@ -106,12 +107,7 @@ export default function HomeScreen() {
   if (items.length === 0) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Pressable
-          onPress={() => setSidebarOpen(true)}
-          accessibilityLabel="Open menu"
-          style={styles.edgeBar}
-          hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
-        />
+        <EdgeSwipe onOpen={() => setSidebarOpen(true)} />
         <Text style={styles.title}>Overlook</Text>
         <Text style={styles.subtitle}>your screenshot library</Text>
         <Pressable onPress={() => router.push('/upload')} style={styles.bigBtn}>
@@ -134,12 +130,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Pressable
-        onPress={() => setSidebarOpen(true)}
-        accessibilityLabel="Open menu"
-        style={styles.edgeBar}
-        hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
-      />
+      <EdgeSwipe onOpen={() => setSidebarOpen(true)} />
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 60 }}
@@ -375,18 +366,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     fontWeight: '600',
-  },
-  edgeBar: {
-    position: 'absolute',
-    left: 0,
-    top: '40%',
-    width: 4,
-    height: 60,
-    backgroundColor: colors.inkMuted,
-    opacity: 0.55,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-    zIndex: 5,
   },
   header: {
     flexDirection: 'row',
