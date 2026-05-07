@@ -12,6 +12,7 @@ import { SignIn } from '@/components/SignIn';
 import { ToastProvider } from '@/components/Toast';
 import { handleAuthDeepLink, useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
+import { FilterProvider } from '@/lib/filtersContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 const RootGate = () => {
@@ -45,10 +46,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.parchment }}>
       <ToastProvider>
-        <BottomSheetModalProvider>
-          <RootGate />
-          <StatusBar style="dark" />
-        </BottomSheetModalProvider>
+        <FilterProvider>
+          <BottomSheetModalProvider>
+            <RootGate />
+            <StatusBar style="dark" />
+          </BottomSheetModalProvider>
+        </FilterProvider>
       </ToastProvider>
     </GestureHandlerRootView>
   );

@@ -14,7 +14,8 @@ import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
-import { applyFilters, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
+import { applyFilters, filtersActive } from '@/lib/filters';
+import { useFilters } from '@/lib/filtersContext';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
@@ -43,7 +44,7 @@ export default function LibraryScreen() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const { filters, setFilters, clearFilters } = useFilters();
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
   const [cols, setCols] = useState<ColCount>(3);
@@ -77,13 +78,13 @@ export default function LibraryScreen() {
         return true;
       }
       if (filtersActive(filters) > 0) {
-        setFilters(emptyFilters());
+        clearFilters();
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [sidebarOpen, inSelectMode, filters]);
+  }, [sidebarOpen, inSelectMode, filters, clearFilters]);
 
   // First-card hint: when items first appear, drop a one-time toast pointing
   // at the gestures users wouldn't discover otherwise.
@@ -514,8 +515,9 @@ export default function LibraryScreen() {
         }}
         onLibrary={() => {
           setSidebarOpen(false);
-          setFilters(emptyFilters());
+          clearFilters();
         }}
+        // onSavedFilters wired once /saved-filters route is added by the saved-filters work
         onSignOut={() => {
           setSidebarOpen(false);
           onSignOut();

@@ -9,7 +9,8 @@ import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import { emptyFilters, type Filters } from '@/lib/filters';
+import type { Filters } from '@/lib/filters';
+import { useFilters } from '@/lib/filtersContext';
 import { fetchScreenshots } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
 
@@ -34,7 +35,7 @@ export default function HomeScreen() {
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const { filters, setFilters } = useFilters();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheetIndex, setSheetIndex] = useState(0);
   const sheetRef = useRef<BottomSheetModal>(null);
