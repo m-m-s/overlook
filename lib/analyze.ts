@@ -1,8 +1,8 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { resolveDeviceAsset } from './deviceUri';
+import { isLocalOnly, type TypedTag } from './screenshots';
 import { isSupabaseConfigured, supabase } from './supabase';
-import type { TypedTag } from './screenshots';
 
 export type AnalyzeResult = {
   category: string | null;
@@ -142,6 +142,11 @@ export const persistAnalyzeResult = async (
  * Convenience: run analysis + persist + return a UI-friendly patch.
  * Returns null when analysis is not configured or failed.
  *
+ * Privacy gate: short-circuits BEFORE reading any bytes if the row is
+ * marked local_only. This protects against the race where an item is
+ * queued for analysis, the user marks it local_only, then a queue drain
+ * fires later. The gate ensures bytes never leave the device.
+ *
  * Accepts deviceAssetId so we can resolve to a file:// localUri for the
  * actual byte read (more reliable on Android than content:// URIs).
  */
@@ -150,6 +155,9 @@ export const analyzeAndPersist = async (
   screenshotId: string,
   deviceAssetId?: string | null,
 ): Promise<{ category: string | null; subject: string | null; urgency: string | null } | null> => {
+  if (await isLocalOnly(screenshotId)) {
+    return null;
+  }
   const result = await analyzeImage(uri, deviceAssetId);
   if (!result) return null;
   await persistAnalyzeResult(screenshotId, result);

@@ -10,6 +10,7 @@ import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { useToast } from './Toast';
+import { dropFromAnalysisQueue } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
 import { successHaptic, warnHaptic } from '@/lib/haptics';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
@@ -274,6 +275,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
       // Restore the pending state so the user can fix and re-apply.
       setPending(patch);
       toast.error(`save failed: ${error.slice(0, 80)}`);
+      return;
+    }
+    // Privacy: if we just marked this item local-only, also drop it from the
+    // offline analysis queue so a later drain can't re-send it.
+    if (patch.localOnly === true) {
+      void dropFromAnalysisQueue(item.id);
     }
   };
 

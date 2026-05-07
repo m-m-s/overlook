@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { analyzeAndPersist } from './analyze';
+import { isLocalOnly } from './screenshots';
 
 /**
  * Persistent queue of screenshots that failed AI analysis. We retry on app
@@ -55,6 +56,13 @@ export const enqueueAnalysis = async (
   await write(queue);
 };
 
+/** Remove a screenshot from the analysis queue (e.g., user marked it local_only). */
+export const dropFromAnalysisQueue = async (screenshotId: string): Promise<void> => {
+  const queue = await read();
+  const next = queue.filter((q) => q.screenshotId !== screenshotId);
+  if (next.length !== queue.length) await write(next);
+};
+
 export const queueLength = async (): Promise<number> => {
   return (await read()).length;
 };
@@ -81,6 +89,12 @@ export const drainAnalysisQueue = async (): Promise<{ done: number; failed: numb
     for (const item of queue) {
       if (item.attempts >= 5) {
         // Give up — probably permanent (auth issue, deleted item, etc.)
+        continue;
+      }
+      // Privacy gate: drop local-only items from the queue without sending.
+      // Same check exists inside analyzeAndPersist as belt-and-suspenders,
+      // but this avoids even a wasted DB read inside the analyze path.
+      if (await isLocalOnly(item.screenshotId)) {
         continue;
       }
       try {

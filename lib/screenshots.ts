@@ -121,6 +121,22 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   return out;
 };
 
+/**
+ * Privacy gate: returns true if the row is marked local_only. Every code
+ * path that's about to send the image to Claude must check this first to
+ * honor user intent even if the flag was set after the original upload.
+ */
+export const isLocalOnly = async (id: string): Promise<boolean> => {
+  if (!isSupabaseConfigured) return false;
+  const { data, error } = await supabase
+    .from('screenshots')
+    .select('local_only')
+    .eq('id', id)
+    .single();
+  if (error || !data) return false;
+  return data.local_only === true;
+};
+
 export const updateScreenshot = async (
   id: string,
   patch: ScreenshotPatch,

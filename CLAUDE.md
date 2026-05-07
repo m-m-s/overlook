@@ -69,6 +69,18 @@ Build APK via Expo for sideloading. No app store needed for v1.
 - Certain categories (Documents, Messages, Finance) default to local-only
 - Redaction tool before API send (v2 feature)
 
+### Privacy invariant (architectural rule)
+
+**Every code path that sends image bytes off-device MUST check `local_only` first.** Bytes only leave the phone when the row's `local_only === false`. This is a hard invariant, not a soft preference.
+
+Concretely:
+- The `analyzeAndPersist` / `analyzeImage` path queries `local_only` before reading any bytes. If true, it returns null without touching the file or making a network call.
+- The offline analysis queue drain re-checks `local_only` on every item before dispatch. Items that became `local_only` after enqueue are silently dropped from the queue.
+- When a user toggles `local_only=true` on a card, the app removes that card from the analysis queue immediately so a later drain can't re-send it.
+- New code that talks to the AI proxy (or any future server-side analysis) must add the same gate. There is no allowlist exception.
+
+This invariant exists because user intent can change between enqueue and dispatch. The flag is the single source of truth, queried at the latest possible moment.
+
 ---
 
 ## Visual design language
