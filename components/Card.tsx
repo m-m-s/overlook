@@ -19,6 +19,7 @@ export type CardData = {
 
 type Props = {
   data: CardData;
+  analyzing?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
 };
@@ -33,7 +34,7 @@ type Props = {
  * Sprint note: vertical fade on the gradient band is omitted for v1 — it's a
  * sharp horizontal band ~22% of card height. Soften pass deferred (NOTES.md).
  */
-export const Card = ({ data, onPress, onLongPress }: Props) => {
+export const Card = ({ data, analyzing, onPress, onLongPress }: Props) => {
   const statusColor = data.status ? statusColors[data.status] : undefined;
   const urgencyColor = data.urgency ? urgencyColors[data.urgency] : undefined;
   const showEdge = Boolean(statusColor && statusColor !== 'transparent') || Boolean(urgencyColor);
@@ -73,6 +74,14 @@ export const Card = ({ data, onPress, onLongPress }: Props) => {
           <Iris level={data.resonance} />
         </View>
       ) : null}
+
+      {analyzing && (
+        <View style={styles.analyzingPill} pointerEvents="none">
+          <View style={styles.analyzingDot} />
+          <View style={styles.analyzingDot} />
+          <View style={styles.analyzingDot} />
+        </View>
+      )}
     </Pressable>
   );
 };
@@ -102,4 +111,22 @@ const styles = StyleSheet.create({
   },
   bottomLeft: { position: 'absolute', left: 8, bottom: 8, ...ICON_SHADOW },
   bottomRight: { position: 'absolute', right: 8, bottom: 8, ...ICON_SHADOW },
+  analyzingPill: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  analyzingDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.parchment,
+  },
 });

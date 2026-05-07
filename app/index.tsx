@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { Card, type CardData } from '@/components/Card';
 import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
@@ -30,10 +30,23 @@ export default function LibraryScreen() {
   const { session, loading } = useSession();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
 
   const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
+
+  const onRefresh = useCallback(async () => {
+    if (!session) return;
+    setRefreshing(true);
+    try {
+      const rows = await fetchScreenshots();
+      setItems(rows);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [session]);
 
   const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['70%', '95%'], []);
@@ -64,6 +77,11 @@ export default function LibraryScreen() {
       if (result.canceled) return;
 
       const onAnalyzed = (id: string, patch: Partial<LocalScreenshot> | null) => {
+        setAnalyzingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
         if (!patch) return;
         setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
       };
@@ -71,6 +89,11 @@ export default function LibraryScreen() {
         result.assets.map((a) => uploadScreenshot(a.uri, { onAnalyzed })),
       );
       setItems((prev) => [...uploads, ...prev]);
+      setAnalyzingIds((prev) => {
+        const next = new Set(prev);
+        for (const u of uploads) next.add(u.id);
+        return next;
+      });
     } finally {
       setBusy(false);
     }
@@ -168,9 +191,21 @@ export default function LibraryScreen() {
           }
           renderItem={({ item }) => (
             <View style={styles.cell}>
-              <Card data={toCardData(item)} onPress={() => openDetail(item)} />
+              <Card
+                data={toCardData(item)}
+                analyzing={analyzingIds.has(item.id)}
+                onPress={() => openDetail(item)}
+              />
             </View>
           )}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.ink}
+              colors={[colors.ink]}
+            />
+          }
         />
       )}
       {items.length > 0 && (
