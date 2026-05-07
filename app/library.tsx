@@ -505,6 +505,10 @@ export default function LibraryScreen() {
           setSidebarOpen(false);
           router.push('/saved-filters');
         }}
+        onTriage={() => {
+          setSidebarOpen(false);
+          router.push('/triage');
+        }}
         onSignOut={() => {
           setSidebarOpen(false);
           onSignOut();

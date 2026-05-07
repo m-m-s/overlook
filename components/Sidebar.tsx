@@ -198,14 +198,12 @@ export const Sidebar = ({
             <Pressable onPress={onTriage} style={styles.navRow}>
               <Ionicons name="swap-vertical-outline" size={18} color={colors.inkMuted} />
               <Text style={styles.navLink}>triage</Text>
-              <Text style={styles.navHint}>(coming soon)</Text>
             </Pressable>
           )}
           {onSavedFilters && (
             <Pressable onPress={onSavedFilters} style={styles.navRow}>
               <Ionicons name="bookmark-outline" size={18} color={colors.inkMuted} />
               <Text style={styles.navLink}>saved filters</Text>
-              <Text style={styles.navHint}>(coming soon)</Text>
             </Pressable>
           )}
 

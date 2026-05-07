@@ -381,6 +381,10 @@ const SidebarRender = ({
       onClose();
       router.push('/saved-filters');
     }}
+    onTriage={() => {
+      onClose();
+      router.push('/triage');
+    }}
     onSignOut={() => {
       onClose();
       void signOut();
