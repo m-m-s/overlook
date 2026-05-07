@@ -35,6 +35,7 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - Run git commands for her, don't hand them off.
 - For anything outside code (Supabase dashboard, Vercel UI, env vars, phone taps): step-by-step numbered instructions.
 - If she signals confusion, stop and explain — don't steamroll.
+- **Teach as you go.** After non-trivial code/config changes, briefly explain what the new code does and why this approach over alternatives. 2-4 sentences max.
 
 ## Things to remember before the account switch
 

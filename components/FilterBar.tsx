@@ -1,8 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
-import { CategoryIcon } from './CategoryIcon';
-import { Iris } from './Iris';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
 
