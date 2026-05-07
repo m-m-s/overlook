@@ -517,7 +517,10 @@ export default function LibraryScreen() {
           setSidebarOpen(false);
           clearFilters();
         }}
-        // onSavedFilters wired once /saved-filters route is added by the saved-filters work
+        onSavedFilters={() => {
+          setSidebarOpen(false);
+          router.push('/saved-filters');
+        }}
         onSignOut={() => {
           setSidebarOpen(false);
           onSignOut();

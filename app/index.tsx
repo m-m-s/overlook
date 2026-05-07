@@ -303,6 +303,10 @@ const SidebarRender = ({
       onClose();
       router.push('/library');
     }}
+    onSavedFilters={() => {
+      onClose();
+      router.push('/saved-filters');
+    }}
     onSignOut={() => {
       onClose();
       void signOut();

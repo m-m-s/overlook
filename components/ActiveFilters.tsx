@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
+import { SaveFilterButton } from './SaveFilterButton';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { STATUSES, URGENCIES } from '@/lib/options';
@@ -56,6 +57,12 @@ export const ActiveFilters = ({
           </Pressable>
         )}
       </View>
+
+      {active > 0 && (
+        <View style={styles.saveRow}>
+          <SaveFilterButton filters={filters} />
+        </View>
+      )}
 
       {active > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -124,4 +131,5 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   chips: { flexDirection: 'row', gap: 6, paddingTop: 12 },
+  saveRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
 });
