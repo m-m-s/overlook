@@ -17,6 +17,8 @@ type QueueItem = {
   screenshotId: string;
   /** URI to read for analysis. May be a local file:// or remote https:// URL. */
   uri: string;
+  /** Device-library asset id, used to resolve the file:// localUri at drain time. */
+  deviceAssetId?: string;
   /** When this item was first enqueued (epoch ms). */
   queuedAt: number;
   /** Number of failed retry attempts so far. */
@@ -42,11 +44,14 @@ const write = async (queue: QueueItem[]): Promise<void> => {
   }
 };
 
-export const enqueueAnalysis = async (screenshotId: string, uri: string): Promise<void> => {
+export const enqueueAnalysis = async (
+  screenshotId: string,
+  uri: string,
+  deviceAssetId?: string,
+): Promise<void> => {
   const queue = await read();
-  // Avoid duplicates
   if (queue.some((q) => q.screenshotId === screenshotId)) return;
-  queue.push({ screenshotId, uri, queuedAt: Date.now(), attempts: 0 });
+  queue.push({ screenshotId, uri, deviceAssetId, queuedAt: Date.now(), attempts: 0 });
   await write(queue);
 };
 
@@ -79,7 +84,7 @@ export const drainAnalysisQueue = async (): Promise<{ done: number; failed: numb
         continue;
       }
       try {
-        const patch = await analyzeAndPersist(item.uri, item.screenshotId);
+        const patch = await analyzeAndPersist(item.uri, item.screenshotId, item.deviceAssetId);
         if (patch) {
           done++;
         } else {

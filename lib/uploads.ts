@@ -1,5 +1,3 @@
-import * as FileSystem from 'expo-file-system/legacy';
-
 import { isSupabaseConfigured, supabase } from './supabase';
 
 type TypedTag = { type?: string; value: string };
@@ -29,29 +27,15 @@ export type LocalScreenshot = {
   localOnly?: boolean;
 };
 
-const guessExt = (uri: string): string => {
-  const m = uri.match(/\.(\w{3,4})(\?|$)/);
-  return (m?.[1] ?? 'jpg').toLowerCase();
-};
-
-const uriToBytes = async (uri: string): Promise<ArrayBuffer> => {
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-};
-
 /**
- * Uploads to Supabase Storage if configured + signed in. Otherwise no-ops and
- * returns a local-only record (sprint mode — env may not be wired yet).
+ * Device-only architecture per CLAUDE.md: "Images: On device only. Never
+ * stored on server." We persist metadata + device_asset_id; the image stays
+ * on the phone. The only time bytes leave the device is during Claude
+ * analysis (and they're discarded after).
  *
- * Caller is responsible for kicking off analysis after the returned record
- * has been added to UI state — see analyzeAndPersist in lib/analyze.
- *
- * `fileHash` is an optional fingerprint stored on the row for duplicate
- * detection. If a row with the same file_hash already exists for this user,
- * the upload is skipped and the existing row is returned.
+ * `uri` is kept in the returned record for immediate UI render but is NOT
+ * persisted to the row. On reload, fetchScreenshots re-resolves the URI from
+ * device_asset_id via MediaLibrary.
  */
 export const uploadScreenshot = async (
   uri: string,
@@ -61,40 +45,26 @@ export const uploadScreenshot = async (
   const createdAt = new Date().toISOString();
 
   if (!isSupabaseConfigured) {
-    return { id, uri, createdAt };
+    return { id, uri, createdAt, deviceAssetId: opts.deviceAssetId ?? null };
   }
 
   const { data: userRes } = await supabase.auth.getUser();
   const userId = userRes.user?.id;
-  if (!userId) return { id, uri, createdAt };
-
-  const ext = guessExt(uri);
-  const storagePath = `${userId}/${id}.${ext}`;
-  const bytes = await uriToBytes(uri);
-
-  const { error: uploadErr } = await supabase.storage
-    .from('screenshots')
-    .upload(storagePath, bytes, { contentType: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
-  if (uploadErr) {
-    // eslint-disable-next-line no-console
-    console.warn('[uploadScreenshot] storage upload failed', uploadErr);
-    return { id, uri, createdAt };
-  }
+  if (!userId) return { id, uri, createdAt, deviceAssetId: opts.deviceAssetId ?? null };
 
   const { error: insertErr } = await supabase.from('screenshots').insert({
     id,
     user_id: userId,
-    storage_path: storagePath,
+    storage_path: null,
     file_hash: opts.fileHash ?? null,
     file_created_at: opts.fileCreatedAt ?? null,
     device_asset_id: opts.deviceAssetId ?? null,
   });
   if (insertErr) {
-    // eslint-disable-next-line no-console
     console.warn('[uploadScreenshot] row insert failed', insertErr);
   }
 
-  return { id, uri, storagePath, createdAt, deviceAssetId: opts.deviceAssetId ?? null };
+  return { id, uri, createdAt, deviceAssetId: opts.deviceAssetId ?? null };
 };
 
 /** Get the set of file_hash values already stored for the current user. */

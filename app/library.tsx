@@ -212,7 +212,25 @@ export default function LibraryScreen() {
   // Two-step upload per spec privacy model: pick first, then user explicitly
   // chooses to analyze with AI or add without AI. "Nothing auto-sends ever."
   const runUpload = async (assets: ImagePicker.ImagePickerAsset[], analyze: boolean) => {
-    const uploads = await Promise.all(assets.map((a) => uploadScreenshot(a.uri)));
+    // Device-only architecture: we need an assetId for each picked image to
+    // resolve its URI on subsequent loads. Skip + warn for any picker assets
+    // missing an assetId (camera-captured items don't expose one).
+    const skipped = assets.filter((a) => !a.assetId).length;
+    const usable = assets.filter((a) => a.assetId);
+    if (skipped > 0) {
+      toast.error(
+        `${skipped} image${skipped === 1 ? '' : 's'} skipped (camera-only — must come from your Photos library to import)`,
+      );
+    }
+    if (usable.length === 0) return;
+
+    const uploads = await Promise.all(
+      usable.map((a) =>
+        uploadScreenshot(a.uri, {
+          deviceAssetId: a.assetId ?? undefined,
+        }),
+      ),
+    );
 
     // Show cards immediately
     setItems((prev) => [...uploads, ...prev]);
@@ -231,7 +249,7 @@ export default function LibraryScreen() {
     const results = await Promise.allSettled(
       uploads.map(async (u) => ({
         id: u.id,
-        patch: await analyzeAndPersist(u.uri, u.id),
+        patch: await analyzeAndPersist(u.uri, u.id, u.deviceAssetId ?? undefined),
       })),
     );
 
@@ -249,7 +267,10 @@ export default function LibraryScreen() {
       }
     }
     // Enqueue failed analyses for offline retry on next app foreground.
-    for (const f of failedIds) await enqueueAnalysis(f.id, f.uri);
+    for (const f of failedIds) {
+      const u = uploads.find((x) => x.id === f.id);
+      await enqueueAnalysis(f.id, f.uri, u?.deviceAssetId ?? undefined);
+    }
 
     setAnalyzingIds((prev) => {
       const next = new Set(prev);

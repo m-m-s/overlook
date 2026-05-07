@@ -99,8 +99,8 @@ export const PostScreenshotPopup = () => {
 
       if (mode === 'analyze' && isAnalyzeConfigured) {
         // Fire-and-forget; if it fails, queue for offline retry.
-        void analyzeAndPersist(next.uri, local.id).then((patch) => {
-          if (!patch) void enqueueAnalysis(local.id, next.uri);
+        void analyzeAndPersist(next.uri, local.id, next.id).then((patch) => {
+          if (!patch) void enqueueAnalysis(local.id, next.uri, next.id);
         });
       }
 

@@ -162,10 +162,10 @@ export default function UploadScreen() {
           deviceAssetId: asset.id,
         });
         if (analyze && isAnalyzeConfigured) {
-          const patch = await analyzeAndPersist(asset.uri, local.id);
+          const patch = await analyzeAndPersist(asset.uri, local.id, asset.id);
           if (!patch) {
             // Queue for offline retry; row exists already so no data lost.
-            await enqueueAnalysis(local.id, asset.uri);
+            await enqueueAnalysis(local.id, asset.uri, asset.id);
           }
         }
         setDoneCount((c) => c + 1);

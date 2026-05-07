@@ -1,3 +1,4 @@
+import { resolveDeviceAsset } from './deviceUri';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type { LocalScreenshot } from './uploads';
 
@@ -66,41 +67,58 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   const rows = (data ?? []) as Row[];
   if (rows.length === 0) return [];
 
-  const { data: signed, error: signErr } = await supabase.storage
-    .from('screenshots')
-    .createSignedUrls(
-      rows.map((r) => r.storage_path),
-      60 * 60,
-    );
-  if (signErr || !signed) {
-    // eslint-disable-next-line no-console
-    console.warn('[screenshots] sign failed', signErr);
-    return [];
+  // Device-only architecture: resolve URI per row from MediaLibrary asset id.
+  // Legacy rows (storage_path set, device_asset_id null) fall back to a
+  // signed URL so existing test data keeps rendering.
+  const legacyRows = rows.filter((r) => !r.device_asset_id && r.storage_path);
+  let legacySigned: { path: string; signedUrl: string }[] = [];
+  if (legacyRows.length > 0) {
+    const { data: signed } = await supabase.storage
+      .from('screenshots')
+      .createSignedUrls(
+        legacyRows.map((r) => r.storage_path).filter((p): p is string => Boolean(p)),
+        60 * 60,
+      );
+    legacySigned = (signed ?? [])
+      .filter((s): s is typeof s & { signedUrl: string } => Boolean(s.signedUrl))
+      .map((s) => ({ path: s.path ?? '', signedUrl: s.signedUrl }));
   }
 
-  return rows.map((r, i) => ({
-    id: r.id,
-    uri: signed[i]?.signedUrl ?? '',
-    storagePath: r.storage_path,
-    createdAt: r.created_at,
-    deviceAssetId: r.device_asset_id,
-    category: r.category,
-    subject: r.subject,
-    status: r.status,
-    urgency: r.urgency,
-    resonance: (r.resonance === 1 || r.resonance === 2 || r.resonance === 3 ? r.resonance : null),
-    difficulty: (r.difficulty as 'beginner' | 'intermediate' | 'advanced' | null) ?? null,
-    timeToComplete: (r.time_to_complete as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null) ?? null,
-    sourceUrl: r.source_url,
-    sourceUrlManual: r.source_url_manual,
-    actionUrl: r.action_url,
-    actionUrlType: r.action_url_type,
-    manualTags: r.manual_typed_tags ?? [],
-    aiTags: r.ai_typed_tags ?? [],
-    notes: r.notes,
-    aiReviewed: r.ai_reviewed ?? false,
-    localOnly: r.local_only ?? false,
-  }));
+  const out = await Promise.all(
+    rows.map(async (r): Promise<LocalScreenshot> => {
+      let uri = '';
+      if (r.device_asset_id) {
+        const resolved = await resolveDeviceAsset(r.device_asset_id);
+        uri = resolved?.uri ?? '';
+      } else if (r.storage_path) {
+        uri = legacySigned.find((s) => s.path === r.storage_path)?.signedUrl ?? '';
+      }
+      return {
+        id: r.id,
+        uri,
+        storagePath: r.storage_path ?? undefined,
+        createdAt: r.created_at,
+        deviceAssetId: r.device_asset_id,
+        category: r.category,
+        subject: r.subject,
+        status: r.status,
+        urgency: r.urgency,
+        resonance: (r.resonance === 1 || r.resonance === 2 || r.resonance === 3 ? r.resonance : null),
+        difficulty: (r.difficulty as 'beginner' | 'intermediate' | 'advanced' | null) ?? null,
+        timeToComplete: (r.time_to_complete as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null) ?? null,
+        sourceUrl: r.source_url,
+        sourceUrlManual: r.source_url_manual,
+        actionUrl: r.action_url,
+        actionUrlType: r.action_url_type,
+        manualTags: r.manual_typed_tags ?? [],
+        aiTags: r.ai_typed_tags ?? [],
+        notes: r.notes,
+        aiReviewed: r.ai_reviewed ?? false,
+        localOnly: r.local_only ?? false,
+      };
+    }),
+  );
+  return out;
 };
 
 export const updateScreenshot = async (

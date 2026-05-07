@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { resolveDeviceAsset } from './deviceUri';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type { TypedTag } from './screenshots';
 
@@ -28,14 +29,25 @@ const guessMime = (uri: string): 'image/jpeg' | 'image/png' | 'image/webp' | 'im
   return 'image/jpeg';
 };
 
-/** Read URI as base64. Supports file:// (local picker URIs) and https:// (signed URLs from Supabase). */
+/** Read URI as base64. Supports:
+ *   file://   — picker / MediaLibrary localUri, read directly
+ *   https://  — signed Storage URLs (legacy data only), download then read
+ *   content:// — Android MediaLibrary public URIs; we resolve to localUri
+ *                via the deviceUri cache before reading
+ */
 const readAsBase64 = async (uri: string): Promise<string> => {
+  // content:// URIs aren't directly readable by FileSystem on Android.
+  // Caller should pass the file:// localUri; if it's content://, fail loudly
+  // so we update the call site instead of silently returning bad bytes.
+  if (uri.startsWith('content://')) {
+    throw new Error(
+      'analyzeImage was passed a content:// URI. Resolve it to a file:// localUri via resolveDeviceAsset() first.',
+    );
+  }
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
-    // Download to a temp file, then read as base64. Keeps memory low.
     const tmp = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ''}analyze-${Date.now()}.bin`;
     const { uri: localUri } = await FileSystem.downloadAsync(uri, tmp);
     const data = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
-    // Best-effort cleanup; ignore errors.
     try {
       await FileSystem.deleteAsync(localUri, { idempotent: true });
     } catch {
@@ -46,12 +58,27 @@ const readAsBase64 = async (uri: string): Promise<string> => {
   return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
 };
 
-/** Send an image to the Vercel function for vision analysis. */
-export const analyzeImage = async (uri: string): Promise<AnalyzeResult | null> => {
+/** Send an image to the Vercel function for vision analysis.
+ *
+ *  Optionally accepts a deviceAssetId — if present, we resolve via
+ *  MediaLibrary to get a file:// localUri (more reliable than the asset's
+ *  raw uri, which can be content:// on Android).
+ */
+export const analyzeImage = async (
+  uri: string,
+  deviceAssetId?: string | null,
+): Promise<AnalyzeResult | null> => {
   if (!VERCEL_URL) return null;
 
-  const base64 = await readAsBase64(uri);
-  const mime = guessMime(uri);
+  // Prefer resolved localUri for device assets to avoid content:// pitfalls.
+  let readUri = uri;
+  if (deviceAssetId) {
+    const resolved = await resolveDeviceAsset(deviceAssetId);
+    if (resolved?.localUri) readUri = resolved.localUri;
+  }
+
+  const base64 = await readAsBase64(readUri);
+  const mime = guessMime(readUri);
 
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -109,12 +136,16 @@ export const persistAnalyzeResult = async (
 /**
  * Convenience: run analysis + persist + return a UI-friendly patch.
  * Returns null when analysis is not configured or failed.
+ *
+ * Accepts deviceAssetId so we can resolve to a file:// localUri for the
+ * actual byte read (more reliable on Android than content:// URIs).
  */
 export const analyzeAndPersist = async (
   uri: string,
   screenshotId: string,
+  deviceAssetId?: string | null,
 ): Promise<{ category: string | null; subject: string | null; urgency: string | null } | null> => {
-  const result = await analyzeImage(uri);
+  const result = await analyzeImage(uri, deviceAssetId);
   if (!result) return null;
   await persistAnalyzeResult(screenshotId, result);
   return {
