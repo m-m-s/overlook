@@ -85,6 +85,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const { session } = useSession();
   const [manualTags, setManualTags] = useState<TypedTag[]>([]);
   const [aiTags, setAiTags] = useState<TypedTag[]>([]);
+  const [aiSubjects, setAiSubjects] = useState<string[]>([]);
   const [serverNotes, setServerNotes] = useState('');
   const [newTag, setNewTag] = useState('');
   const [pendingAmbiguous, setPendingAmbiguous] = useState<{ value: string; candidates: string[] } | null>(null);
@@ -108,6 +109,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       if (!meta) return;
       setManualTags(meta.manual_typed_tags);
       setAiTags(meta.ai_typed_tags);
+      setAiSubjects(meta.ai_suggested_subjects);
       setServerNotes(meta.notes ?? '');
     });
   }, [item.id, session]);
@@ -283,6 +285,19 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
 
       {/* Subject */}
       <SectionLabel>subject</SectionLabel>
+      {aiSubjects.length > 0 && !view.subject && (
+        <View style={[styles.row, styles.wrap, { marginBottom: 8 }]}>
+          {aiSubjects.map((s) => (
+            <Chip
+              key={s}
+              label={s}
+              variant="ai"
+              color={colors.inkMuted}
+              onPress={() => stage({ subject: s })}
+            />
+          ))}
+        </View>
+      )}
       <BottomSheetTextInput
         value={view.subject ?? ''}
         onChangeText={(t) => stage({ subject: t || null })}

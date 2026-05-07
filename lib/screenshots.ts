@@ -98,17 +98,23 @@ export type TypedTag = { type?: string; value: string };
 /** Fetch a single screenshot's manual tags + notes (not preloaded in list query). */
 export const fetchScreenshotMeta = async (
   id: string,
-): Promise<{ manual_typed_tags: TypedTag[]; ai_typed_tags: TypedTag[]; notes: string | null } | null> => {
+): Promise<{
+  manual_typed_tags: TypedTag[];
+  ai_typed_tags: TypedTag[];
+  ai_suggested_subjects: string[];
+  notes: string | null;
+} | null> => {
   if (!isSupabaseConfigured) return null;
   const { data, error } = await supabase
     .from('screenshots')
-    .select('manual_typed_tags, ai_typed_tags, notes')
+    .select('manual_typed_tags, ai_typed_tags, ai_suggested_subjects, notes')
     .eq('id', id)
     .single();
   if (error || !data) return null;
   return {
     manual_typed_tags: (data.manual_typed_tags ?? []) as TypedTag[],
     ai_typed_tags: (data.ai_typed_tags ?? []) as TypedTag[],
+    ai_suggested_subjects: (data.ai_suggested_subjects ?? []) as string[],
     notes: data.notes,
   };
 };
