@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
@@ -131,6 +132,15 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
         },
       },
     ]);
+  };
+
+  const onShare = async () => {
+    try {
+      await Share.share({ url: item.uri, message: item.subject ?? '' });
+    } catch (err) {
+       
+      console.warn('[share] failed', err);
+    }
   };
 
   // Compute edge gradient colors for the preview (same logic as Card).
@@ -309,10 +319,17 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
         style={styles.notesInput}
       />
 
-      {/* Delete */}
-      <Pressable onPress={onTrash} style={styles.deleteBtn}>
-        <Text style={styles.deleteText}>delete from library</Text>
-      </Pressable>
+      {/* Footer actions: share + delete (spec: "Share button (Android native share sheet)") */}
+      <View style={styles.footer}>
+        <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
+          <Ionicons name="share-outline" size={18} color={colors.ink} />
+          <Text style={styles.footerText}>share</Text>
+        </Pressable>
+        <Pressable onPress={onTrash} style={styles.footerBtn} accessibilityLabel="Delete screenshot">
+          <Ionicons name="trash-outline" size={18} color="#C0392B" />
+          <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
+        </Pressable>
+      </View>
     </BottomSheetScrollView>
   );
 };
@@ -393,16 +410,24 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  deleteBtn: {
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     marginTop: 32,
     paddingVertical: 14,
-    alignItems: 'center',
     borderTopWidth: 2,
     borderTopColor: colors.divider,
     borderStyle: 'dashed',
   },
-  deleteText: {
-    color: '#C0392B',
+  footerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  footerText: {
+    color: colors.ink,
     fontSize: 12,
     letterSpacing: 1.5,
     textTransform: 'uppercase',

@@ -107,7 +107,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: '22%',
+    // Spec says "edge bleed" — keep it thin so it reads as a top stripe, not a band over the image.
+    height: '12%',
   },
   bottomLeft: { position: 'absolute', left: 8, bottom: 8, ...ICON_SHADOW },
   bottomRight: { position: 'absolute', right: 8, bottom: 8, ...ICON_SHADOW },

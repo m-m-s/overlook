@@ -50,7 +50,8 @@ export default function LibraryScreen() {
   }, [session]);
 
   const sheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ['70%', '95%'], []);
+  // 3 snap points lets user drag from 60% (compact) -> 85% -> 100% (full detail per spec).
+  const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
 
   useEffect(() => {
     if (!session) return;

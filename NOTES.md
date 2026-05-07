@@ -13,8 +13,8 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 
 ## Gotchas to capture as we hit them
 
-- **2026-05-07** Card component edge bleed: spec shows a vertical fade-to-transparent on the top color band, but expo-linear-gradient is single-axis. Sprint v1 ships a sharp ~22% band; vertical fade can be added later via stacked gradients or react-native-skia.
-- **2026-05-07** Category icons use @expo/vector-icons (Material/Ionicons) for sprint speed instead of hand-drawn 24x24 silhouettes per spec. Visual fidelity gap; swap for polish.
+- **2026-05-07** ~~Card edge bleed: vertical fade omitted~~ — false deviation; re-read of spec says `linear-gradient(to right, ...)` only. Horizontal gradient is correct. Adjusted band height down for a more "bleed" feel.
+- **2026-05-07** Category icons use @expo/vector-icons. Originally mixed Material + Ionicons (inconsistent stroke weight) — switched to single library (Ionicons) for visual consistency. Hand-drawn 24x24 silhouettes per spec deferred (15+ icons, polish).
 - **2026-05-07** First Anthropic API key leaked in chat → rotated immediately. Always paste API keys directly into Vercel/Supabase dashboards, never into Claude Code chat (chat is logged).
 - **2026-05-07** Image picker capped at 10 per pick (selectionLimit: 10) — guards against 20+ parallel base64 reads + Vercel calls overwhelming the phone process. Bulk-import flow per CLAUDE.md is a separate UX (not in sprint).
 
