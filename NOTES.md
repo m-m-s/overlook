@@ -42,6 +42,12 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - **Keep deepening.** When something has ranged data (dictionary entries, prompt content, options lists), don't ship the minimum-viable and call it done. Expand iteratively as time allows. Maggie will notice if something feels shallow at the end.
 - **Don't ask, just go.** Make reasonable choices and document them here in NOTES.md. Only pause for genuine blockers (undoable actions, truly missing info you can't reasonably guess). When a body of work is complete, run a final check (type-check, lint, expo doctor) and report a status summary.
 
+## Vercel function mounting (2026-05-07)
+
+Originally placed the function in `server/api/analyze.ts` with the intent that Maggie would set Root Directory = `server` in Vercel. She couldn't find that setting in the UI, so I restructured: function is now at `api/analyze.ts` at the repo root, with deps (`@anthropic-ai/sdk`, `@vercel/node`) added to the root `package.json`. Vercel auto-detects `api/*` files at root with zero config. `vercel.json` at root sets `maxDuration: 60`. `tsconfig.json` excludes `api/` from app's tsc since the function uses `@vercel/node` types not present at runtime in the RN bundle.
+
+If you ever want the function and app split into separate projects, move it back to `server/` and configure root dir on Vercel — it's the cleaner long-term setup. For sprint, single repo + auto-detection is simpler.
+
 ## Phone-test debugging tips
 
 - **Magic link "dimmed screen" / "site can't be reached":** the link redirected to `localhost:3000` because Supabase's default Site URL is set there AND our `exp://*` allowlist wildcard didn't actually match. Per Supabase wildcard rules, `*` matches one segment only (no `/`), so `exp://*` doesn't match `exp://192.168.1.5:8081/--/...`. Use `exp://**` (double asterisk) to match across slashes. Or — preferred — use the 6-digit OTP code path so deep linking is irrelevant.

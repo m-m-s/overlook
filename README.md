@@ -8,9 +8,11 @@ Personal screenshot organization app for Android. See [CLAUDE.md](./CLAUDE.md) f
 app/             — Expo Router screens (currently a single library route)
 components/      — Card, ScreenshotDetail, Iris, CategoryIcon, FilterBar, etc.
 lib/             — supabase client, auth, uploads, screenshots, analyze (vision API client)
+api/             — Vercel serverless function: Claude vision API proxy
 supabase/
   migrations/    — SQL migrations to run via Supabase SQL editor
-server/          — Vercel project: Claude vision API proxy (deploy separately)
+vercel.json      — config for the api/ function (maxDuration etc.)
+eas.json         — EAS Build profiles for the production APK
 ```
 
 ## First-time setup (read top to bottom — order matters)
@@ -44,16 +46,17 @@ You should already have a Supabase project. If not, create one at https://supaba
 
 ### 3. Set up the Vercel function (for AI tagging)
 
-The `server/` folder is an independent Vercel project that proxies image analysis to Claude. The Anthropic API key never lives in the mobile app.
+The `api/` folder at the repo root is a Vercel serverless function that proxies image analysis to Claude. The Anthropic API key never lives in the mobile app.
 
 1. Go to https://vercel.com → **Add New** → **Project** → import the `overlook` GitHub repo.
-2. Set **Root Directory** to `server`.
+2. Leave **Root Directory** as the default (`.`). Vercel auto-detects `api/*.ts` files at the root.
 3. **Framework Preset:** Other.
 4. Add environment variables:
    - `ANTHROPIC_API_KEY` — your Anthropic console key.
-   - `OVERLOOK_SHARED_SECRET` — any random string (use a password generator). The mobile app will send this in a header to prove it's the right caller.
+   - `OVERLOOK_SHARED_SECRET` — any random string (`openssl rand -hex 32`). The mobile app will send this in a header to prove it's the right caller.
 5. Click **Deploy**.
 6. Copy the deployed URL (looks like `https://overlook-xyz.vercel.app`).
+7. Verify it's live by hitting `https://your-deployment.vercel.app/api/analyze` in a browser — should return `{"error":"method not allowed"}` (because GET ≠ POST). That means the function is mounted.
 
 ### 4. Create the local `.env`
 
