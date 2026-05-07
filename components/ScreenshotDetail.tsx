@@ -17,6 +17,7 @@ import {
   updateScreenshot,
   type TypedTag,
 } from '@/lib/screenshots';
+import { buildTagFromValue, rememberTagType } from '@/lib/tagDictionary';
 import type { LocalScreenshot } from '@/lib/uploads';
 
 type Props = {
@@ -66,6 +67,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const [notes, setNotes] = useState('');
   const [subject, setSubject] = useState(item.subject ?? '');
   const [newTag, setNewTag] = useState('');
+  const [pendingAmbiguous, setPendingAmbiguous] = useState<{ value: string; candidates: string[] } | null>(null);
 
   // Hydrate tags + notes from server when sheet opens.
   useEffect(() => {
@@ -99,13 +101,32 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
     persist({ resonance: r });
   };
 
-  const addTag = () => {
-    const v = newTag.trim();
-    if (!v) return;
-    const updated = [...manualTags, { value: v }];
+  const commitTag = (tag: TypedTag) => {
+    const updated = [...manualTags, tag];
     setManualTags(updated);
     setNewTag('');
+    setPendingAmbiguous(null);
     persist({ manual_typed_tags: updated });
+  };
+
+  const addTag = async () => {
+    const v = newTag.trim();
+    if (!v) return;
+    const result = await buildTagFromValue(v);
+    if ('ambiguous' in result) {
+      setPendingAmbiguous({ value: result.value, candidates: result.candidates });
+      return;
+    }
+    commitTag(result);
+  };
+
+  const resolveAmbiguous = (type: string | null) => {
+    if (!pendingAmbiguous) return;
+    const tag: TypedTag = type
+      ? { type, value: pendingAmbiguous.value }
+      : { value: pendingAmbiguous.value };
+    if (type) void rememberTagType(pendingAmbiguous.value, type);
+    commitTag(tag);
   };
 
   const removeTag = (idx: number) => {
@@ -118,6 +139,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
     const updated = manualTags.map((t, i) => (i === idx ? { ...t, type } : t));
     setManualTags(updated);
     persist({ manual_typed_tags: updated });
+    // Remember user's manual type assignment so future tags with this value auto-type.
+    if (type) void rememberTagType(manualTags[idx].value, type);
   };
 
   const onTrash = () => {
@@ -306,6 +329,30 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
           style={styles.tagInput}
         />
       </View>
+      {pendingAmbiguous && (
+        <View style={styles.ambiguousRow}>
+          <Text style={styles.ambiguousLabel}>
+            is &quot;{pendingAmbiguous.value}&quot; a…
+          </Text>
+          <View style={[styles.row, styles.wrap]}>
+            {pendingAmbiguous.candidates.map((cand) => (
+              <Chip
+                key={cand}
+                label={cand}
+                variant="meta"
+                color={colors.ink}
+                onPress={() => resolveAmbiguous(cand)}
+              />
+            ))}
+            <Chip
+              label="neither — keep untyped"
+              variant="add"
+              color={colors.inkMuted}
+              onPress={() => resolveAmbiguous(null)}
+            />
+          </View>
+        </View>
+      )}
 
       {/* Notes */}
       <SectionLabel>notes</SectionLabel>
@@ -389,6 +436,21 @@ const styles = StyleSheet.create({
   },
   irisBtnActive: { backgroundColor: colors.ink },
   addTagRow: { marginTop: 8 },
+  ambiguousRow: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.divider,
+    borderRadius: 4,
+    gap: 10,
+  },
+  ambiguousLabel: {
+    fontSize: 12,
+    color: colors.ink,
+    fontStyle: 'italic',
+  },
   tagInput: {
     fontSize: 13,
     color: colors.ink,
