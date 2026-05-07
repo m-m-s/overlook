@@ -72,8 +72,10 @@ export default function LibraryScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
-        selectionLimit: 0,
-        quality: 1,
+        // Sprint v1: cap at 10 so 10 simultaneous base64 reads + AI calls don't
+        // crash the phone process. Bulk import (per CLAUDE.md) is a separate flow.
+        selectionLimit: 10,
+        quality: 0.9,
       });
       if (result.canceled) return;
 
