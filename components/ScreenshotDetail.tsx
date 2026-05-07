@@ -339,52 +339,73 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         </View>
       )}
 
-      {/* Category */}
-      <SectionHeader label="category" editing={isEditing('category')} onToggle={() => toggleEditing('category')} />
-      {isEditing('category') ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {CATEGORIES.map((cat) => (
-            <Chip
-              key={cat}
-              label={cat}
-              selected={view.category === cat}
-              variant="meta"
-              onPress={() => setCategory(cat)}
-              color={view.category === cat ? colors.ink : colors.inkMuted}
-            />
-          ))}
-        </ScrollView>
-      ) : view.category ? (
-        <View style={styles.row}>
-          <Chip label={view.category} variant="meta" selected color={colors.ink} />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
+      {/* Category → Subject as connected chips per spec ("Category depth: Category → Subject as connected chips") */}
+      {!isEditing('category') && !isEditing('subject') && (view.category || view.subject) && (
+        <Pressable onLongPress={() => toggleEditing('category')} style={styles.breadcrumb}>
+          {view.category && <Chip label={view.category} variant="meta" selected color={colors.ink} />}
+          {view.category && view.subject && (
+            <Ionicons name="chevron-forward" size={14} color={colors.inkMuted} />
+          )}
+          {view.subject && <Text style={styles.breadcrumbSubject}>{view.subject}</Text>}
+        </Pressable>
       )}
 
-      {/* Subject */}
-      <SectionHeader label="subject" editing={isEditing('subject')} onToggle={() => toggleEditing('subject')} />
-      {isEditing('subject') ? (
+      {/* Category — only show separately when editing OR neither category nor subject is set */}
+      {(isEditing('category') || (!view.category && !view.subject)) && (
         <>
-          {aiSubjects.length > 0 && !view.subject && (
-            <View style={[styles.row, styles.wrap, { marginBottom: 8 }]}>
-              {aiSubjects.map((s) => (
-                <Chip key={s} label={s} variant="ai" color={colors.inkMuted} onPress={() => stage({ subject: s })} />
-              ))}
-            </View>
-          )}
-          <BottomSheetTextInput
-            value={view.subject ?? ''}
-            onChangeText={(t) => stage({ subject: t || null })}
-            placeholder="specific thing — Crochet, React hook, Italian restaurant…"
-            placeholderTextColor={colors.inkMuted}
-            style={styles.subjectInput}
+          <SectionHeader
+            label="category"
+            editing={isEditing('category')}
+            onToggle={() => toggleEditing('category')}
           />
+          {isEditing('category') ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+              {CATEGORIES.map((cat) => (
+                <Chip
+                  key={cat}
+                  label={cat}
+                  selected={view.category === cat}
+                  variant="meta"
+                  onPress={() => setCategory(cat)}
+                  color={view.category === cat ? colors.ink : colors.inkMuted}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyHint}>not set</Text>
+          )}
         </>
-      ) : view.subject ? (
-        <Text style={styles.subjectReadOnly}>{view.subject}</Text>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
+      )}
+
+      {/* Subject — only show separately when editing OR no value */}
+      {(isEditing('subject') || (!view.subject && !view.category)) && (
+        <>
+          <SectionHeader
+            label="subject"
+            editing={isEditing('subject')}
+            onToggle={() => toggleEditing('subject')}
+          />
+          {isEditing('subject') ? (
+            <>
+              {aiSubjects.length > 0 && !view.subject && (
+                <View style={[styles.row, styles.wrap, { marginBottom: 8 }]}>
+                  {aiSubjects.map((s) => (
+                    <Chip key={s} label={s} variant="ai" color={colors.inkMuted} onPress={() => stage({ subject: s })} />
+                  ))}
+                </View>
+              )}
+              <BottomSheetTextInput
+                value={view.subject ?? ''}
+                onChangeText={(t) => stage({ subject: t || null })}
+                placeholder="specific thing — Crochet, React hook, Italian restaurant…"
+                placeholderTextColor={colors.inkMuted}
+                style={styles.subjectInput}
+              />
+            </>
+          ) : (
+            <Text style={styles.emptyHint}>not set</Text>
+          )}
+        </>
       )}
 
       {/* Resonance */}
@@ -736,6 +757,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Georgia',
     color: colors.ink,
     paddingVertical: 4,
+  },
+  breadcrumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 22,
+    marginBottom: 4,
+    flexWrap: 'wrap',
+  },
+  breadcrumbSubject: {
+    fontFamily: 'Georgia',
+    fontSize: 17,
+    color: colors.ink,
   },
   notesReadOnly: {
     fontSize: 14,

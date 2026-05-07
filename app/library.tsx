@@ -23,6 +23,7 @@ import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { fetchScreenshots } from '@/lib/screenshots';
+import { heavyHaptic, warnHaptic } from '@/lib/haptics';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
@@ -266,7 +267,7 @@ export default function LibraryScreen() {
   };
 
   const onCardLongPress = (it: LocalScreenshot) => {
-    // Long-press always selects (or de-selects if already in)
+    void heavyHaptic();
     setMultiSelectIds((prev) => {
       const next = new Set(prev);
       if (next.has(it.id)) next.delete(it.id);
@@ -305,6 +306,7 @@ export default function LibraryScreen() {
   const onBulkDelete = () => {
     const targets = items.filter((it) => multiSelectIds.has(it.id));
     if (targets.length === 0) return;
+    void warnHaptic();
     undoableRemoveMany(targets);
     exitMultiSelect();
   };
