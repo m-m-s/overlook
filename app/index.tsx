@@ -9,8 +9,9 @@ import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import type { Filters } from '@/lib/filters';
+import { applyFilters as applyFiltersToItems, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
+import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
 import { fetchScreenshots } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
 
@@ -33,9 +34,10 @@ const toCardData = (it: LocalScreenshot): CardData => ({
 export default function HomeScreen() {
   const { session } = useSession();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
+  const [pinnedFilters, setPinnedFilters] = useState<SavedFilter[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { filters, setFilters } = useFilters();
+  const { filters, setFilters, applyFilters: applyFilterCtx } = useFilters();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheetIndex, setSheetIndex] = useState(0);
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -43,8 +45,9 @@ export default function HomeScreen() {
 
   const loadItems = useCallback(async () => {
     if (!session) return;
-    const rows = await fetchScreenshots();
+    const [rows, pinned] = await Promise.all([fetchScreenshots(), listPinnedFilters()]);
     setItems(rows);
+    setPinnedFilters(pinned);
   }, [session]);
 
   useEffect(() => {
@@ -168,6 +171,37 @@ export default function HomeScreen() {
             />
           </Row>
         )}
+
+        {/* Pinned saved-filter rows — auto-update as items change */}
+        {pinnedFilters.map((pf) => {
+          const matched = applyFiltersToItems(items, pf.filters);
+          if (matched.length === 0) return null;
+          return (
+            <Row
+              key={pf.id}
+              title={pf.name}
+              count={matched.length}
+              onSeeAll={() => {
+                applyFilterCtx(pf.filters);
+                router.push('/library');
+              }}
+            >
+              <FlatList
+                horizontal
+                data={matched.slice(0, 30)}
+                keyExtractor={(it) => it.id}
+                showsHorizontalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
+                contentContainerStyle={styles.rowList}
+                renderItem={({ item }) => (
+                  <View style={styles.rowCell}>
+                    <Card data={toCardData(item)} onPress={() => open(item)} />
+                  </View>
+                )}
+              />
+            </Row>
+          );
+        })}
 
         {/* Recently added — full-bleed 3-col grid (12-24 items) */}
         <Row title="recently added" count={recent.length} onSeeAll={() => router.push('/library')}>
