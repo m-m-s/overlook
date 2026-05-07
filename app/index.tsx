@@ -309,8 +309,12 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* FAB to bulk-upload */}
-      <Pressable onPress={() => router.push('/upload')} style={styles.fab}>
+      {/* FAB to bulk-upload — slight scale on press for tactile feel */}
+      <Pressable
+        onPress={() => router.push('/upload')}
+        style={({ pressed }) => [styles.fab, pressed && { transform: [{ scale: 0.92 }] }]}
+        accessibilityLabel="Upload screenshots"
+      >
         <Ionicons name="add" size={28} color={colors.parchment} />
       </Pressable>
 
@@ -523,7 +527,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
-  recentCell: { width: '33.0%', aspectRatio: 1 },
+  recentCell: { width: '33.333%', aspectRatio: 1 },
   fab: {
     position: 'absolute',
     right: 24,

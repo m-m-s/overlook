@@ -198,15 +198,23 @@ export const Sidebar = ({
 
           <View style={styles.divider} />
 
-          {/* Nav links */}
+          {/* Nav links — pressed state shows muted background for feedback */}
           {onTriage && (
-            <Pressable onPress={onTriage} style={styles.navRow}>
+            <Pressable
+              onPress={onTriage}
+              style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+              android_ripple={{ color: colors.divider }}
+            >
               <Ionicons name="swap-vertical-outline" size={18} color={colors.inkMuted} />
               <Text style={styles.navLink}>triage</Text>
             </Pressable>
           )}
           {onSavedFilters && (
-            <Pressable onPress={onSavedFilters} style={styles.navRow}>
+            <Pressable
+              onPress={onSavedFilters}
+              style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+              android_ripple={{ color: colors.divider }}
+            >
               <Ionicons name="bookmark-outline" size={18} color={colors.inkMuted} />
               <Text style={styles.navLink}>saved filters</Text>
             </Pressable>
@@ -309,7 +317,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginHorizontal: -4,
+    borderRadius: 4,
   },
+  navRowPressed: { backgroundColor: colors.divider, opacity: 0.7 },
   navLink: { fontSize: 14, color: colors.ink, flex: 1 },
   navHint: { fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase', color: colors.inkMuted },
   primaryBtn: {
