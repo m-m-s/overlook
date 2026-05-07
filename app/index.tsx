@@ -12,6 +12,7 @@ import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { applyFilters as applyFiltersToItems, emptyFilters, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
+import { mergeWithDefaults, useRowOrder } from '@/lib/rowOrder';
 import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
 import { fetchScreenshots } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
@@ -42,6 +43,8 @@ export default function HomeScreen() {
   const { filters, setFilters, applyFilters: applyFilterCtx } = useFilters();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { remove: undoableRemove } = useUndoableDelete(setItems);
+  const [reorderMode, setReorderMode] = useState(false);
+  const { order: rowOrder, moveUp: moveCatUp, moveDown: moveCatDown } = useRowOrder();
   const [sheetIndex, setSheetIndex] = useState(0);
   const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
@@ -73,22 +76,24 @@ export default function HomeScreen() {
   const recent = useMemo(() => items.slice(0, 24), [items]);
   const untagged = useMemo(() => items.filter((it) => !it.category), [items]);
 
-  // Auto-surfaced category rows: most populous categories first (top 5).
-  // Spec also mentions user-reorderable; deferred — natural order by count for now.
+  // Auto-surfaced category rows: top 5 by count, then re-ordered by user's
+  // saved row order if any. Long-press a row title -> reorder mode.
   const categoryRows = useMemo(() => {
     const counts = new Map<string, number>();
     for (const it of items) {
       if (!it.category) continue;
       counts.set(it.category, (counts.get(it.category) ?? 0) + 1);
     }
-    const sorted = Array.from(counts.entries())
+    const top5 = Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-    return sorted.map(([cat]) => ({
+      .slice(0, 5)
+      .map(([cat]) => cat);
+    const ordered = mergeWithDefaults(rowOrder, top5);
+    return ordered.map((cat) => ({
       category: cat,
       items: items.filter((it) => it.category === cat),
     }));
-  }, [items]);
+  }, [items, rowOrder]);
 
   const onItemDelete = () => {
     if (!selectedId) return;
@@ -159,9 +164,15 @@ export default function HomeScreen() {
             <Ionicons name="menu" size={24} color={colors.ink} />
           </Pressable>
           <Text style={styles.headerTitle}>Overlook</Text>
-          <Pressable onPress={() => router.push('/library')} hitSlop={10}>
-            <Text style={styles.headerLink}>all</Text>
-          </Pressable>
+          {reorderMode ? (
+            <Pressable onPress={() => setReorderMode(false)} hitSlop={10}>
+              <Text style={styles.headerLink}>done</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => router.push('/library')} hitSlop={10}>
+              <Text style={styles.headerLink}>all</Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Urgent row — auto-hides when nothing urgent (per spec) */}
@@ -183,34 +194,43 @@ export default function HomeScreen() {
           </Row>
         )}
 
-        {/* Auto-surfaced category rows (top 5 by count) */}
-        {categoryRows.map((row) => (
-          <Row
-            key={`cat-${row.category}`}
-            title={row.category}
-            count={row.items.length}
-            onSeeAll={() => {
-              const next = emptyFilters();
-              next.categories.add(row.category);
-              applyFilterCtx(next);
-              router.push('/library');
-            }}
-          >
-            <FlatList
-              horizontal
-              data={row.items.slice(0, 30)}
-              keyExtractor={(it) => it.id}
-              showsHorizontalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-              contentContainerStyle={styles.rowList}
-              renderItem={({ item }) => (
-                <View style={styles.rowCell}>
-                  <Card data={toCardData(item)} onPress={() => open(item)} />
-                </View>
-              )}
-            />
-          </Row>
-        ))}
+        {/* Auto-surfaced category rows (top 5 by count, user-reorderable) */}
+        {categoryRows.map((row, idx) => {
+          const allCats = categoryRows.map((r) => r.category);
+          return (
+            <Row
+              key={`cat-${row.category}`}
+              title={row.category}
+              count={row.items.length}
+              onSeeAll={() => {
+                const next = emptyFilters();
+                next.categories.add(row.category);
+                applyFilterCtx(next);
+                router.push('/library');
+              }}
+              onTitleLongPress={() => setReorderMode((v) => !v)}
+              reorderMode={reorderMode}
+              canMoveUp={idx > 0}
+              canMoveDown={idx < categoryRows.length - 1}
+              onMoveUp={() => moveCatUp(row.category, allCats)}
+              onMoveDown={() => moveCatDown(row.category, allCats)}
+            >
+              <FlatList
+                horizontal
+                data={row.items.slice(0, 30)}
+                keyExtractor={(it) => it.id}
+                showsHorizontalScrollIndicator={false}
+                ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
+                contentContainerStyle={styles.rowList}
+                renderItem={({ item }) => (
+                  <View style={styles.rowCell}>
+                    <Card data={toCardData(item)} onPress={() => open(item)} />
+                  </View>
+                )}
+              />
+            </Row>
+          );
+        })}
 
         {/* Pinned saved-filter rows — auto-update as items change */}
         {pinnedFilters.map((pf) => {
@@ -324,26 +344,60 @@ export default function HomeScreen() {
   );
 }
 
-// Row helper — title bar + see-all + children body
+// Row helper — title bar + see-all + children body. Reorder mode shows
+// up/down arrows on the title bar instead of "see all".
 const Row = ({
   title,
   count,
   onSeeAll,
+  onTitleLongPress,
+  reorderMode,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
   children,
 }: {
   title: string;
   count: number;
   onSeeAll: () => void;
+  onTitleLongPress?: () => void;
+  reorderMode?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   children: React.ReactNode;
 }) => (
   <View style={styles.row}>
     <View style={styles.rowHeader}>
-      <Text style={styles.rowTitle}>{title}</Text>
+      <Pressable onLongPress={onTitleLongPress} hitSlop={6}>
+        <Text style={styles.rowTitle}>{title}</Text>
+      </Pressable>
       <Text style={styles.rowCount}>({count})</Text>
       <View style={{ flex: 1 }} />
-      <Pressable onPress={onSeeAll} hitSlop={6}>
-        <Text style={styles.rowSeeAll}>see all ›</Text>
-      </Pressable>
+      {reorderMode && onMoveUp && onMoveDown ? (
+        <View style={{ flexDirection: 'row', gap: 14 }}>
+          <Pressable onPress={onMoveUp} disabled={!canMoveUp} hitSlop={8}>
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={canMoveUp ? colors.ink : colors.divider}
+            />
+          </Pressable>
+          <Pressable onPress={onMoveDown} disabled={!canMoveDown} hitSlop={8}>
+            <Ionicons
+              name="arrow-down"
+              size={18}
+              color={canMoveDown ? colors.ink : colors.divider}
+            />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable onPress={onSeeAll} hitSlop={6}>
+          <Text style={styles.rowSeeAll}>see all ›</Text>
+        </Pressable>
+      )}
     </View>
     {children}
   </View>
