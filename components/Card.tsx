@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -20,6 +21,10 @@ export type CardData = {
 type Props = {
   data: CardData;
   analyzing?: boolean;
+  /** Whether the grid is in multi-select mode. Affects visual treatment. */
+  inSelectMode?: boolean;
+  /** Whether this card is currently part of the selection. */
+  selected?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
 };
@@ -34,7 +39,7 @@ type Props = {
  * Sprint note: vertical fade on the gradient band is omitted for v1 — it's a
  * sharp horizontal band ~22% of card height. Soften pass deferred (NOTES.md).
  */
-export const Card = ({ data, analyzing, onPress, onLongPress }: Props) => {
+export const Card = ({ data, analyzing, inSelectMode, selected, onPress, onLongPress }: Props) => {
   const statusColor = data.status ? statusColors[data.status] : undefined;
   const urgencyColor = data.urgency ? urgencyColors[data.urgency] : undefined;
   const showEdge = Boolean(statusColor && statusColor !== 'transparent') || Boolean(urgencyColor);
@@ -80,6 +85,14 @@ export const Card = ({ data, analyzing, onPress, onLongPress }: Props) => {
           <View style={styles.analyzingDot} />
           <View style={styles.analyzingDot} />
           <View style={styles.analyzingDot} />
+        </View>
+      )}
+
+      {inSelectMode && (
+        <View style={[styles.selectMask, !selected && styles.selectMaskDim]} pointerEvents="none">
+          <View style={[styles.selectCheck, selected && styles.selectCheckOn]}>
+            {selected && <Ionicons name="checkmark" size={18} color={colors.parchment} />}
+          </View>
         </View>
       )}
     </Pressable>
@@ -129,5 +142,27 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: colors.parchment,
+  },
+  selectMask: {
+    position: 'absolute',
+    inset: 0,
+    alignItems: 'flex-end',
+    padding: 8,
+  },
+  selectMaskDim: {
+    backgroundColor: 'rgba(31,30,27,0.45)',
+  },
+  selectCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: colors.parchment,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectCheckOn: {
+    backgroundColor: colors.ink,
   },
 });

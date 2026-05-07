@@ -11,7 +11,7 @@ import { SignIn } from '@/components/SignIn';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import { fetchScreenshots } from '@/lib/screenshots';
+import { deleteScreenshots, fetchScreenshots } from '@/lib/screenshots';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
 
@@ -35,6 +35,8 @@ export default function LibraryScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(emptyFilters());
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
+  const inSelectMode = multiSelectIds.size > 0;
 
   const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
 
@@ -117,6 +119,56 @@ export default function LibraryScreen() {
     sheetRef.current?.present();
   };
 
+  const toggleMultiSelect = (id: string) => {
+    setMultiSelectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const exitMultiSelect = () => setMultiSelectIds(new Set());
+
+  const onCardPress = (it: LocalScreenshot) => {
+    if (inSelectMode) toggleMultiSelect(it.id);
+    else openDetail(it);
+  };
+
+  const onCardLongPress = (it: LocalScreenshot) => {
+    // Long-press always selects (or de-selects if already in)
+    setMultiSelectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(it.id)) next.delete(it.id);
+      else next.add(it.id);
+      return next;
+    });
+  };
+
+  const onBulkDelete = () => {
+    const count = multiSelectIds.size;
+    if (count === 0) return;
+    Alert.alert(
+      `Delete ${count} screenshot${count === 1 ? '' : 's'}?`,
+      'This removes them from your library.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const targets = items
+              .filter((it) => multiSelectIds.has(it.id))
+              .map((it) => ({ id: it.id, storagePath: it.storagePath }));
+            await deleteScreenshots(targets);
+            setItems((prev) => prev.filter((it) => !multiSelectIds.has(it.id)));
+            exitMultiSelect();
+          },
+        },
+      ],
+    );
+  };
+
   const onItemChange = (patch: Partial<LocalScreenshot>) => {
     if (!selectedId) return;
     setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
@@ -165,7 +217,7 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      {session && (
+      {session && !inSelectMode && (
         <Pressable
           onPress={onSignOut}
           accessibilityLabel="Sign out"
@@ -174,6 +226,20 @@ export default function LibraryScreen() {
         >
           <Ionicons name="log-out-outline" size={20} color={colors.inkMuted} />
         </Pressable>
+      )}
+
+      {inSelectMode && (
+        <View style={styles.bulkBar}>
+          <Pressable onPress={exitMultiSelect} hitSlop={12} style={styles.bulkIconBtn}>
+            <Ionicons name="close" size={22} color={colors.parchment} />
+          </Pressable>
+          <Text style={styles.bulkCount}>
+            {multiSelectIds.size} selected
+          </Text>
+          <Pressable onPress={onBulkDelete} hitSlop={12} style={styles.bulkIconBtn}>
+            <Ionicons name="trash-outline" size={20} color={colors.parchment} />
+          </Pressable>
+        </View>
       )}
       {items.length === 0 ? (
         <View style={styles.empty}>
@@ -207,7 +273,10 @@ export default function LibraryScreen() {
               <Card
                 data={toCardData(item)}
                 analyzing={analyzingIds.has(item.id)}
-                onPress={() => openDetail(item)}
+                inSelectMode={inSelectMode}
+                selected={multiSelectIds.has(item.id)}
+                onPress={() => onCardPress(item)}
+                onLongPress={() => onCardLongPress(item)}
               />
             </View>
           )}
@@ -294,4 +363,26 @@ const styles = StyleSheet.create({
     zIndex: 10,
     padding: 6,
   },
+  bulkBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.ink,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 20,
+  },
+  bulkCount: {
+    color: colors.parchment,
+    fontSize: 13,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  bulkIconBtn: { padding: 4 },
 });

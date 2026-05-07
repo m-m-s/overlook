@@ -39,6 +39,14 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - **Teach as you go.** After non-trivial code/config changes, briefly explain what the new code does and why this approach over alternatives. 2-4 sentences max.
 - **Follow the spec.** Default to spec compliance (CLAUDE.md, SPRINT.md, mockups). Deviations need a real reason (technical constraint, sprint cut). Don't quietly take "sprint speed" shortcuts that aren't justified.
 - **Keep building.** Less than 48h on the sprint clock (minus sleep + commute). Bias toward action — only stop to ask when undoing would be harder than building. Add things, run the type-check, commit, push, move on.
+- **Keep deepening.** When something has ranged data (dictionary entries, prompt content, options lists), don't ship the minimum-viable and call it done. Expand iteratively as time allows. Maggie will notice if something feels shallow at the end.
+
+## Shallow-implementation watchlist (deepen iteratively)
+
+- **AI vision prompt** in `server/api/analyze.ts` is a baseline I wrote, NOT Maggie's tested prompt. Swap when she pastes it.
+- **Built-in tag dictionary** in `lib/tagDictionary.ts` is at ~450 entries; could grow to 1000+ for more coverage. Common gaps: brand names (source type), more food items, more home decor items.
+- **Empty states / error messages** are minimal. Could be warmer, more specific.
+- **Onboarding hints** (per CLAUDE.md gesture-discoverability section) entirely deferred.
 
 ## Things to remember before the account switch
 

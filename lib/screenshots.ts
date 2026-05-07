@@ -93,6 +93,38 @@ export const deleteScreenshot = async (id: string, storagePath?: string): Promis
   }
 };
 
+/** Bulk delete: remove rows + best-effort remove storage objects. */
+export const deleteScreenshots = async (
+  items: { id: string; storagePath?: string }[],
+): Promise<void> => {
+  if (!isSupabaseConfigured || items.length === 0) return;
+  const paths = items.map((i) => i.storagePath).filter((p): p is string => Boolean(p));
+  if (paths.length > 0) {
+    await supabase.storage.from('screenshots').remove(paths);
+  }
+  const { error } = await supabase
+    .from('screenshots')
+    .delete()
+    .in('id', items.map((i) => i.id));
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[screenshots] bulk delete failed', error);
+  }
+};
+
+/** Bulk update — apply same patch to many screenshots. */
+export const updateScreenshots = async (
+  ids: string[],
+  patch: ScreenshotPatch,
+): Promise<void> => {
+  if (!isSupabaseConfigured || ids.length === 0) return;
+  const { error } = await supabase.from('screenshots').update(patch).in('id', ids);
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[screenshots] bulk update failed', error);
+  }
+};
+
 export type TypedTag = { type?: string; value: string };
 
 /** Fetch a single screenshot's manual tags + notes (not preloaded in list query). */
