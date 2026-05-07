@@ -81,3 +81,21 @@ export const persistAnalyzeResult = async (
     console.warn('[analyze] persist failed', error);
   }
 };
+
+/**
+ * Convenience: run analysis + persist + return a UI-friendly patch.
+ * Returns null when analysis is not configured or failed.
+ */
+export const analyzeAndPersist = async (
+  uri: string,
+  screenshotId: string,
+): Promise<{ category: string | null; subject: string | null; urgency: string | null } | null> => {
+  const result = await analyzeImage(uri);
+  if (!result) return null;
+  await persistAnalyzeResult(screenshotId, result);
+  return {
+    category: result.category,
+    subject: result.subject,
+    urgency: result.urgency,
+  };
+};

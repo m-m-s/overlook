@@ -8,6 +8,7 @@ import { Card, type CardData } from '@/components/Card';
 import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { SignIn } from '@/components/SignIn';
+import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { fetchScreenshots } from '@/lib/screenshots';
@@ -76,24 +77,33 @@ export default function LibraryScreen() {
       });
       if (result.canceled) return;
 
-      const onAnalyzed = (id: string, patch: Partial<LocalScreenshot> | null) => {
+      const uploads = await Promise.all(result.assets.map((a) => uploadScreenshot(a.uri)));
+
+      // 1) Show the cards immediately (no AI tags yet).
+      setItems((prev) => [...uploads, ...prev]);
+
+      // 2) Mark them as analyzing only if AI is configured.
+      if (isAnalyzeConfigured) {
         setAnalyzingIds((prev) => {
           const next = new Set(prev);
-          next.delete(id);
+          for (const u of uploads) next.add(u.id);
           return next;
         });
-        if (!patch) return;
-        setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
-      };
-      const uploads = await Promise.all(
-        result.assets.map((a) => uploadScreenshot(a.uri, { onAnalyzed })),
-      );
-      setItems((prev) => [...uploads, ...prev]);
-      setAnalyzingIds((prev) => {
-        const next = new Set(prev);
-        for (const u of uploads) next.add(u.id);
-        return next;
-      });
+
+        // 3) Fire analyses after setItems so the cards exist before patches arrive.
+        for (const u of uploads) {
+          void (async () => {
+            const patch = await analyzeAndPersist(u.uri, u.id);
+            setAnalyzingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(u.id);
+              return next;
+            });
+            if (!patch) return;
+            setItems((prev) => prev.map((it) => (it.id === u.id ? { ...it, ...patch } : it)));
+          })();
+        }
+      }
     } finally {
       setBusy(false);
     }

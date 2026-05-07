@@ -1,6 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-import { analyzeImage, isAnalyzeConfigured, persistAnalyzeResult } from './analyze';
 import { isSupabaseConfigured, supabase } from './supabase';
 
 export type LocalScreenshot = {
@@ -28,31 +27,18 @@ const uriToBytes = async (uri: string): Promise<ArrayBuffer> => {
   return bytes.buffer;
 };
 
-type UploadOptions = {
-  /** Trigger Claude vision analysis after upload. Default true if Vercel URL is set. */
-  analyze?: boolean;
-  /** Called when AI analysis completes (or fails) so caller can refresh UI. */
-  onAnalyzed?: (id: string, patch: Partial<LocalScreenshot> | null) => void;
-};
-
 /**
  * Uploads to Supabase Storage if configured + signed in. Otherwise no-ops and
  * returns a local-only record (sprint mode — env may not be wired yet).
  *
- * Kicks off Claude vision analysis in the background when configured. The
- * caller can listen via onAnalyzed to update the grid as results stream in.
+ * Caller is responsible for kicking off analysis after the returned record
+ * has been added to UI state — see analyzeAndPersist in lib/analyze.
  */
-export const uploadScreenshot = async (
-  uri: string,
-  opts: UploadOptions = {},
-): Promise<LocalScreenshot> => {
+export const uploadScreenshot = async (uri: string): Promise<LocalScreenshot> => {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const createdAt = new Date().toISOString();
 
-  const shouldAnalyze = opts.analyze ?? isAnalyzeConfigured;
-
   if (!isSupabaseConfigured) {
-    if (shouldAnalyze) kickOffAnalysis(id, uri, opts.onAnalyzed);
     return { id, uri, createdAt };
   }
 
@@ -81,28 +67,5 @@ export const uploadScreenshot = async (
     console.warn('[uploadScreenshot] row insert failed', insertErr);
   }
 
-  if (shouldAnalyze) kickOffAnalysis(id, uri, opts.onAnalyzed, /*persist*/ true);
   return { id, uri, storagePath, createdAt };
-};
-
-const kickOffAnalysis = (
-  id: string,
-  uri: string,
-  onAnalyzed?: UploadOptions['onAnalyzed'],
-  persist = false,
-): void => {
-  // Fire-and-forget — UI shows the card immediately, gets enriched when this resolves.
-  void (async () => {
-    const result = await analyzeImage(uri);
-    if (!result) {
-      onAnalyzed?.(id, null);
-      return;
-    }
-    if (persist) await persistAnalyzeResult(id, result);
-    onAnalyzed?.(id, {
-      category: result.category,
-      subject: result.subject,
-      urgency: result.urgency,
-    });
-  })();
 };
