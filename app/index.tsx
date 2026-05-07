@@ -1,17 +1,28 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { SignIn } from '@/components/SignIn';
+import { useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
+import { fetchScreenshots } from '@/lib/screenshots';
 
 const GRID_COLUMNS = 3;
 const GRID_GAP = 3;
 
 export default function LibraryScreen() {
+  const { session, loading } = useSession();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [busy, setBusy] = useState(false);
+
+  // Hydrate from Supabase when signed in.
+  useEffect(() => {
+    if (!session) return;
+    fetchScreenshots().then((rows) => setItems(rows));
+  }, [session]);
 
   const onPick = async () => {
     setBusy(true);
@@ -33,6 +44,20 @@ export default function LibraryScreen() {
       setBusy(false);
     }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator color={colors.ink} />
+      </View>
+    );
+  }
+
+  // Show sign-in only when supabase is configured but the user isn't signed in.
+  // In local-only mode (no env), we allow browsing without auth.
+  if (isSupabaseConfigured && !session) {
+    return <SignIn />;
+  }
 
   return (
     <View style={styles.container}>
@@ -80,6 +105,7 @@ export default function LibraryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.parchment },
+  center: { alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontFamily: 'Georgia', fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
   emptySub: {
