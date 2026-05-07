@@ -145,7 +145,10 @@ const styles = StyleSheet.create({
   },
   selectMask: {
     position: 'absolute',
-    inset: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'flex-end',
     padding: 8,
   },

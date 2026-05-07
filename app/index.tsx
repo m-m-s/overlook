@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { BulkTagSheet } from '@/components/BulkTagSheet';
 import { Card, type CardData } from '@/components/Card';
 import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
@@ -52,8 +53,10 @@ export default function LibraryScreen() {
   }, [session]);
 
   const sheetRef = useRef<BottomSheetModal>(null);
+  const bulkSheetRef = useRef<BottomSheetModal>(null);
   // 3 snap points lets user drag from 60% (compact) -> 85% -> 100% (full detail per spec).
   const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
+  const bulkSnapPoints = useMemo(() => ['85%'], []);
 
   useEffect(() => {
     if (!session) return;
@@ -143,6 +146,33 @@ export default function LibraryScreen() {
       else next.add(it.id);
       return next;
     });
+  };
+
+  const onBulkTag = () => {
+    if (multiSelectIds.size === 0) return;
+    bulkSheetRef.current?.present();
+  };
+
+  const onBulkApplied = (
+    patch: Partial<LocalScreenshot>,
+    appendedTag: { type?: string; value: string } | null,
+  ) => {
+    setItems((prev) =>
+      prev.map((it) =>
+        multiSelectIds.has(it.id)
+          ? {
+              ...it,
+              ...patch,
+              // appendedTag changes manual_typed_tags but we don't store those in
+              // LocalScreenshot — server stays source of truth, list-view ignores.
+            }
+          : it,
+      ),
+    );
+    if (appendedTag) {
+      // intentionally a no-op locally — appended tag isn't in card visual.
+    }
+    exitMultiSelect();
   };
 
   const onBulkDelete = () => {
@@ -236,9 +266,14 @@ export default function LibraryScreen() {
           <Text style={styles.bulkCount}>
             {multiSelectIds.size} selected
           </Text>
-          <Pressable onPress={onBulkDelete} hitSlop={12} style={styles.bulkIconBtn}>
-            <Ionicons name="trash-outline" size={20} color={colors.parchment} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <Pressable onPress={onBulkTag} hitSlop={12} style={styles.bulkIconBtn}>
+              <Ionicons name="pricetag-outline" size={20} color={colors.parchment} />
+            </Pressable>
+            <Pressable onPress={onBulkDelete} hitSlop={12} style={styles.bulkIconBtn}>
+              <Ionicons name="trash-outline" size={20} color={colors.parchment} />
+            </Pressable>
+          </View>
         </View>
       )}
       {items.length === 0 ? (
@@ -312,6 +347,20 @@ export default function LibraryScreen() {
         {selected && (
           <ScreenshotDetail item={selected} onChange={onItemChange} onDelete={onItemDelete} />
         )}
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        ref={bulkSheetRef}
+        snapPoints={bulkSnapPoints}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: colors.parchment }}
+        handleIndicatorStyle={{ backgroundColor: colors.inkMuted }}
+      >
+        <BulkTagSheet
+          selectedIds={Array.from(multiSelectIds)}
+          onApplied={onBulkApplied}
+          onClose={() => bulkSheetRef.current?.dismiss()}
+        />
       </BottomSheetModal>
     </View>
   );
