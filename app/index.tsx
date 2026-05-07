@@ -6,12 +6,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { BulkTagSheet } from '@/components/BulkTagSheet';
 import { Card, type CardData } from '@/components/Card';
-import { applyFilters, emptyFilters, FilterBar, filtersActive, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
+import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
+import { applyFilters, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
@@ -44,6 +46,7 @@ export default function LibraryScreen() {
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
   const [cols, setCols] = useState<ColCount>(3);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const inSelectMode = multiSelectIds.size > 0;
   const isIntentMode = cols === 1;
 
@@ -60,23 +63,26 @@ export default function LibraryScreen() {
     AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
   }, [cols]);
 
-  // Android hardware back: in multi-select mode, clear the selection instead
-  // of exiting the app. With active filters, clear filters first. Otherwise
-  // fall through to default behavior.
+  // Android hardware back: nav-style. Sidebar > multi-select > filters >
+  // default (exit app).
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (sidebarOpen) {
+        setSidebarOpen(false);
+        return true;
+      }
       if (inSelectMode) {
         exitMultiSelect();
-        return true; // consumed
+        return true;
       }
       if (filtersActive(filters) > 0) {
         setFilters(emptyFilters());
         return true;
       }
-      return false; // let OS handle (exit app)
+      return false;
     });
     return () => sub.remove();
-  }, [inSelectMode, filters]);
+  }, [sidebarOpen, inSelectMode, filters]);
 
   // First-card hint: when items first appear, drop a one-time toast pointing
   // at the gestures users wouldn't discover otherwise.
@@ -359,15 +365,14 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      {session && !inSelectMode && (
+      {/* Persistent edge hint bar (per spec) — tap to open sidebar */}
+      {!inSelectMode && session && (
         <Pressable
-          onPress={onSignOut}
-          accessibilityLabel="Sign out"
-          hitSlop={12}
-          style={styles.signOutBtn}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.inkMuted} />
-        </Pressable>
+          onPress={() => setSidebarOpen(true)}
+          accessibilityLabel="Open filters and nav"
+          style={styles.edgeBar}
+          hitSlop={{ left: 0, right: 8, top: 0, bottom: 0 }}
+        />
       )}
 
       {inSelectMode && (
@@ -413,11 +418,12 @@ export default function LibraryScreen() {
             columnWrapperStyle={cols > 1 ? { gap: GRID_GAP } : undefined}
             ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
             ListHeaderComponent={
-              <FilterBar
+              <ActiveFilters
                 filters={filters}
                 onChange={setFilters}
                 totalCount={items.length}
                 filteredCount={visibleItems.length}
+                onOpenSidebar={() => setSidebarOpen(true)}
               />
             }
             ListEmptyComponent={
@@ -492,6 +498,26 @@ export default function LibraryScreen() {
           onClose={() => bulkSheetRef.current?.dismiss()}
         />
       </BottomSheetModal>
+
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        filters={filters}
+        onFiltersChange={setFilters}
+        userEmail={session?.user.email ?? null}
+        onUpload={() => {
+          setSidebarOpen(false);
+          void onPick();
+        }}
+        onLibrary={() => {
+          setSidebarOpen(false);
+          setFilters(emptyFilters());
+        }}
+        onSignOut={() => {
+          setSidebarOpen(false);
+          onSignOut();
+        }}
+      />
     </View>
   );
 }
@@ -535,12 +561,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fabText: { color: colors.parchment, fontSize: 28, lineHeight: 30 },
-  signOutBtn: {
+  edgeBar: {
     position: 'absolute',
-    top: 56,
-    right: 20,
-    zIndex: 10,
-    padding: 6,
+    left: 0,
+    top: '40%',
+    width: 4,
+    height: 60,
+    backgroundColor: colors.inkMuted,
+    opacity: 0.55,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+    zIndex: 5,
   },
   bulkBar: {
     position: 'absolute',
