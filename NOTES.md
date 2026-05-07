@@ -48,12 +48,10 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 
 **Single-column intent mode** — partial v1: when columns = 1, cards render in a vertical scroll feed at portrait 9:16 aspect (matches typical phone screenshots). Tap → existing detail bottom sheet (same as grid). Cells use `width: 100%, aspectRatio: 9/16`.
 
-**Spec deviations from intent mode (deferred):**
-- No swipe-from-right edit sidebar (the spec calls for a side panel that opens on edge swipe, shows tags read-only, long-press to edit). Complex animation work; deferred.
-- No tag pills overlaid at bottom of image. Tags still accessible via tap-to-open detail.
-- No long-press-to-enter-edit-mode-on-section in the side panel.
+**Spec evolution (2026-05-07):** the swipe-from-right edit sidebar was REMOVED from the spec. Tap → existing card-detail bottom sheet is now the canonical detail UX across grid + intent. One way to view detail across all modes. CLAUDE.md updated.
 
-These can come back as a polish pass post-sprint.
+**Remaining intent-mode polish (deferred to post-sprint):**
+- Tag pills overlaid at bottom of intent-mode image (currently no tags visible until tap → bottom sheet)
 
 ## Vercel function mounting (2026-05-07)
 

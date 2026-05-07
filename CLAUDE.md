@@ -381,21 +381,18 @@ Appears when Android FileObserver detects new screenshot.
 - Dashed-underline stats
 - Progress bar, can close app, pause button
 
-### 5. Single column intent mode (scroll + sidebar)
+### 5. Single column intent mode (scroll feed)
 - Entered by pinching to 1-column from grid
-- Vertical scroll feed of full-width images
+- Vertical scroll feed of full-width images at portrait 9:16 aspect (matches phone screenshots)
 - Edge bleed at top of each image
-- Category icon + resonance iris on image
-- Minimal tag pills at bottom of image
-- **Swipe from right edge** opens edit sidebar for current card
-- Sidebar opens in **read-only mode** — shows all tags and metadata but not editable
-- **Long press any section** to enter edit mode for that section
-- Edit mode: chips shake subtly, delete X appears on tags, fields become tappable
-- **Apply button** confirms changes, Cancel or close without applying reverts — no auto-save
-- Closing sidebar returns to feed
+- Category icon + resonance iris on image (same as grid card)
+- Minimal tag pills at bottom of image (optional polish — not blocking)
+- **Tap an image** → existing card-detail bottom sheet (same UX as grid). No separate side panel.
+
+(Earlier spec drafts had a swipe-from-right edit sidebar specifically for intent mode. Removed because the bottom sheet already provides a good detail UX in every mode — having two different ways to view detail adds complexity without value. One canonical detail view across grid, intent, and any future mode.)
 
 ### Delete access
-- Delete action available in **all viewing modes**: bottom sheet (grid), intent mode sidebar, triage swipe
+- Delete action available in **all viewing modes**: bottom sheet (grid + intent), triage swipe
 - Shown as trash icon or "Delete" button at bottom of detail view
 - Always triggers undo toast (5 seconds) then optional "Also delete from device?"
 
@@ -490,10 +487,10 @@ Appears when Android FileObserver detects new screenshot.
 ### Intent mode (1-column scroll)
 | Gesture | Action |
 |---------|--------|
-| Swipe from right edge | Open edit sidebar (read-only until long press) |
+| Tap image | Open card-detail bottom sheet (same as grid) |
+| Long press card | Enter multi-select mode |
 | Scroll | Browse feed vertically |
-| Long press (in sidebar) | Enter edit mode for a section |
-| Pinch out | Return to grid at previous column count |
+| Pinch in | Return to grid at previous column count |
 
 ### Bottom sheet
 | Gesture | Action |
@@ -532,7 +529,7 @@ Small upward arrow pulses gently twice near the drag handle. Text: "drag up for 
 Subtle tooltip near tag area: "long press to edit". Disappears on interaction.
 
 **Intent mode (first time in 1 column):**
-Ghost hand on right edge, slides left revealing edit sidebar ~30%, holds, releases. Text: "swipe to edit". Fades out.
+Subtle tooltip near top of feed: "tap to view detail • pinch in to return to grid". Fades out after 3 seconds or on first interaction.
 
 **Triage (first card):**
 Three ghost arrows appear simultaneously on the card: right arrow "save", left arrow "skip", up arrow "delete". All three fade out together after 2 seconds.
@@ -541,9 +538,7 @@ Three ghost arrows appear simultaneously on the card: right arrow "save", left a
 Ghost hand taps one thumbnail showing it dim with X overlay. Text: "tap to exclude". Fades out.
 
 #### Persistent affordances
-- **Subtle edge hint bars** — 4px wide, on swipeable edges, permanently visible at low opacity (0.6)
-- Left edge: filter sidebar hint (grid/home)
-- Right edge: edit sidebar hint (intent mode only)
+- **Subtle edge hint bar** — 4px wide on the left edge, permanently visible at low opacity (0.6), signaling the filter-sidebar swipe affordance.
 
 #### Haptic feedback
 - Vibration on every gesture activation — **toggleable in settings, off by default**
@@ -762,8 +757,8 @@ Valid tag types (display order): item, genre, cuisine, technique, style, materia
 ### Triage as expandable queues
 **Why:** Listing every missing field felt like homework. Three clean queues: Untagged, Incomplete (expands), AI Unreviewed.
 
-### Single column: scroll + sidebar
-**Why:** Swipe horizontal loses comparison. Scroll + tags breaks visual flow. Sidebar keeps feed clean with full editing one swipe away. **Tested all three.**
+### Single column: scroll feed (no separate sidebar)
+**Why:** Swipe horizontal loses comparison. Scroll + tags breaks visual flow. Originally added a swipe-from-right edit sidebar specifically for intent mode, but realized the existing card-detail bottom sheet (used in grid) already provides good detail UX — having two different ways to view detail across modes adds complexity without value. Tap-to-bottom-sheet is the single canonical detail view across grid + intent + any future mode. **Decided 2026-05-07.**
 
 ### Parchment over eggshell
 **Why:** Original `#F4F1EC` too yellow. Parchment `#EFEEEA` more muted, editorial. **Tested 6 variants.**
