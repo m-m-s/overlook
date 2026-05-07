@@ -31,6 +31,10 @@ const toggleSet = <T,>(s: Set<T>, v: T): Set<T> => {
 type Props = {
   filters: Filters;
   onChange: (f: Filters) => void;
+  /** Total items in the library (unfiltered). */
+  totalCount?: number;
+  /** Items remaining after filters applied. */
+  filteredCount?: number;
 };
 
 const Row = ({ children }: { children: React.ReactNode }) => (
@@ -43,13 +47,24 @@ const Label = ({ children }: { children: string }) => (
   <Text style={styles.label}>{children}</Text>
 );
 
-export const FilterBar = ({ filters, onChange }: Props) => {
+export const FilterBar = ({ filters, onChange, totalCount, filteredCount }: Props) => {
   const active = filtersActive(filters);
+  const showCount = typeof totalCount === 'number';
+  const isFiltered = showCount && active > 0 && filteredCount !== totalCount;
 
   return (
     <View style={styles.wrap}>
       <View style={styles.headRow}>
-        <Text style={styles.head}>filters</Text>
+        <View>
+          <Text style={styles.head}>filters</Text>
+          {showCount && (
+            <Text style={styles.count}>
+              {isFiltered
+                ? `showing ${filteredCount} of ${totalCount}`
+                : `${totalCount} screenshot${totalCount === 1 ? '' : 's'}`}
+            </Text>
+          )}
+        </View>
         {active > 0 && (
           <Chip
             label="clear all"
@@ -144,6 +159,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
     color: colors.ink,
+  },
+  count: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.inkMuted,
+    marginTop: 2,
   },
   label: {
     fontSize: 10,

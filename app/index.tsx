@@ -368,7 +368,14 @@ export default function LibraryScreen() {
             contentContainerStyle={{ paddingBottom: 96 }}
             columnWrapperStyle={cols > 1 ? { gap: GRID_GAP } : undefined}
             ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
-            ListHeaderComponent={<FilterBar filters={filters} onChange={setFilters} />}
+            ListHeaderComponent={
+              <FilterBar
+                filters={filters}
+                onChange={setFilters}
+                totalCount={items.length}
+                filteredCount={visibleItems.length}
+              />
+            }
             ListEmptyComponent={
               <View style={styles.empty}>
                 <Text style={styles.emptySub}>no screenshots match these filters</Text>
