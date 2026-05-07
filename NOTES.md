@@ -26,6 +26,14 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - (Vercel side, not in app) `ANTHROPIC_API_KEY`
 - (Vercel side) `SUPABASE_SERVICE_ROLE_KEY` if functions need server-side writes
 
+## How Maggie wants to collaborate (also in claude memory; copying here so it survives the account switch)
+
+- First mobile app, first time with most of this stack. Knows basic git + can run commands, may not understand them.
+- Explain plain English *before* running things.
+- Run git commands for her, don't hand them off.
+- For anything outside code (Supabase dashboard, Vercel UI, env vars, phone taps): step-by-step numbered instructions.
+- If she signals confusion, stop and explain — don't steamroll.
+
 ## Things to remember before the account switch
 
 - Move both `~/.claude/projects/.../memory/project_overlook*.md` files into project repo (paste relevant contents into CLAUDE.md or NOTES.md). Claude memory does not survive the account switch.

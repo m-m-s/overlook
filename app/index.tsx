@@ -1,17 +1,26 @@
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Card, type CardData } from '@/components/Card';
 import { SignIn } from '@/components/SignIn';
 import { useSession } from '@/lib/auth';
-import { colors } from '@/lib/colors';
+import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { fetchScreenshots } from '@/lib/screenshots';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
-import { fetchScreenshots } from '@/lib/screenshots';
 
 const GRID_COLUMNS = 3;
 const GRID_GAP = 3;
+
+const toCardData = (it: LocalScreenshot): CardData => ({
+  id: it.id,
+  uri: it.uri,
+  category: it.category ?? null,
+  status: (it.status as keyof typeof statusColors) ?? null,
+  urgency: (it.urgency as keyof typeof urgencyColors) ?? null,
+  resonance: it.resonance ?? null,
+});
 
 export default function LibraryScreen() {
   const { session, loading } = useSession();
@@ -84,7 +93,7 @@ export default function LibraryScreen() {
           ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
           renderItem={({ item }) => (
             <View style={styles.cell}>
-              <Image source={{ uri: item.uri }} style={styles.thumb} contentFit="cover" />
+              <Card data={toCardData(item)} />
             </View>
           )}
         />
@@ -130,7 +139,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cell: { flex: 1 / GRID_COLUMNS, aspectRatio: 1 },
-  thumb: { width: '100%', height: '100%', backgroundColor: colors.divider },
   fab: {
     position: 'absolute',
     right: 24,

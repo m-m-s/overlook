@@ -5,6 +5,11 @@ type Row = {
   id: string;
   storage_path: string;
   created_at: string;
+  category: string | null;
+  subject: string | null;
+  status: string | null;
+  urgency: string | null;
+  resonance: number | null;
 };
 
 /**
@@ -18,7 +23,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
 
   const { data, error } = await supabase
     .from('screenshots')
-    .select('id, storage_path, created_at')
+    .select('id, storage_path, created_at, category, subject, status, urgency, resonance')
     .order('created_at', { ascending: false })
     .limit(500);
 
@@ -48,5 +53,10 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     uri: signed[i]?.signedUrl ?? '',
     storagePath: r.storage_path,
     createdAt: r.created_at,
+    category: r.category,
+    subject: r.subject,
+    status: r.status,
+    urgency: r.urgency,
+    resonance: (r.resonance === 1 || r.resonance === 2 || r.resonance === 3 ? r.resonance : null),
   }));
 };

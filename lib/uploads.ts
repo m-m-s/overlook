@@ -7,6 +7,11 @@ export type LocalScreenshot = {
   uri: string;
   storagePath?: string;
   createdAt: string;
+  category?: string | null;
+  subject?: string | null;
+  status?: string | null;
+  urgency?: string | null;
+  resonance?: 1 | 2 | 3 | null;
 };
 
 const guessExt = (uri: string): string => {
