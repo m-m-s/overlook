@@ -3,16 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Iris } from '@/components/Iris';
 import { useToast } from '@/components/Toast';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { useSession } from '@/lib/auth';
@@ -28,7 +21,7 @@ import { fetchExistingFingerprints, uploadScreenshot } from '@/lib/uploads';
 
 type Phase = 'idle' | 'scanning' | 'review' | 'processing' | 'done';
 
-type ReviewState = 'include' | 'exclude' | 'duplicate';
+type ReviewState = 'include' | 'no-ai' | 'exclude' | 'duplicate';
 
 const BATCH_OPTIONS = [25, 50, 100, 250, 500] as const;
 const BATCH_KEY = 'overlook.upload_batch_size';
@@ -66,7 +59,10 @@ export default function UploadScreen() {
 
   const includedCount = useMemo(
     () =>
-      reviewBatch.filter((a) => (stateMap.get(a.id) ?? 'include') === 'include').length,
+      reviewBatch.filter((a) => {
+        const s = stateMap.get(a.id) ?? 'include';
+        return s === 'include' || s === 'no-ai';
+      }).length,
     [reviewBatch, stateMap],
   );
 
@@ -125,28 +121,37 @@ export default function UploadScreen() {
     setStateMap((prev) => {
       const next = new Map(prev);
       const cur = next.get(id) ?? 'include';
-      // include → exclude → include
-      next.set(id, cur === 'include' ? 'exclude' : 'include');
+      // include → no-ai → exclude → include  (per spec 3 review states)
+      const order: ReviewState[] = ['include', 'no-ai', 'exclude'];
+      const idx = order.indexOf(cur);
+      next.set(id, order[(idx + 1) % order.length]);
       return next;
     });
   };
 
-  const startProcessing = (analyze: boolean) => {
-    const toUpload = reviewBatch.filter((a) => (stateMap.get(a.id) ?? 'include') === 'include');
-    if (toUpload.length === 0) {
+  const startProcessing = (defaultAnalyze: boolean) => {
+    // Build the work queue: items with state 'include' run with defaultAnalyze;
+    // items with state 'no-ai' upload but skip AI regardless; 'exclude' is dropped.
+    const queue: { asset: ScannedAsset; analyze: boolean }[] = [];
+    for (const a of reviewBatch) {
+      const s = stateMap.get(a.id) ?? 'include';
+      if (s === 'exclude') continue;
+      queue.push({ asset: a, analyze: s === 'no-ai' ? false : defaultAnalyze });
+    }
+    if (queue.length === 0) {
       toast.info('nothing selected to process');
       return;
     }
-    setAnalyzeWithAI(analyze);
-    setTotalToProcess(toUpload.length);
+    setAnalyzeWithAI(defaultAnalyze);
+    setTotalToProcess(queue.length);
     setDoneCount(0);
     setFailCount(0);
     setPhase('processing');
-    void runProcessing(toUpload, analyze);
+    void runProcessing(queue);
   };
 
-  const runProcessing = async (assets: ScannedAsset[], analyze: boolean) => {
-    for (const asset of assets) {
+  const runProcessing = async (queue: { asset: ScannedAsset; analyze: boolean }[]) => {
+    for (const { asset, analyze } of queue) {
       try {
         const fp = fingerprintAsset(asset);
         const fileCreatedAt = new Date(asset.creationTime).toISOString();
@@ -182,8 +187,10 @@ export default function UploadScreen() {
     return (
       <View style={[styles.center, { flex: 1, padding: 32 }]}>
         <BackButton />
+        <View style={{ marginBottom: 16 }}>
+          <Iris level={3} size={56} color={colors.ink} spinning />
+        </View>
         <Text style={styles.h1}>scanning library</Text>
-        <ActivityIndicator color={colors.ink} size="small" style={{ marginTop: 16 }} />
         <View style={styles.statRow}>
           <Text style={styles.statLabel}>found</Text>
           <Text style={styles.statValue}>{scanProgress}</Text>
@@ -197,10 +204,19 @@ export default function UploadScreen() {
       <View style={{ flex: 1 }}>
         <View style={styles.reviewHeader}>
           <BackButton />
-          <Text style={styles.h2}>{newAssets.length} new of {allAssets.length}</Text>
-          <Text style={styles.subtle}>
-            {duplicates.size > 0 ? `${duplicates.size} already imported` : ''}
-          </Text>
+          <Text style={styles.h2}>review</Text>
+          <View style={styles.statRow}>
+            <Text style={styles.statLabel}>new</Text>
+            <Text style={styles.statValue}>{newAssets.length}</Text>
+          </View>
+          <View style={styles.statRow}>
+            <Text style={styles.statLabel}>already imported</Text>
+            <Text style={styles.statValue}>{duplicates.size}</Text>
+          </View>
+          <View style={styles.statRow}>
+            <Text style={styles.statLabel}>total in album</Text>
+            <Text style={styles.statValue}>{allAssets.length}</Text>
+          </View>
         </View>
 
         {/* Batch size picker — stepped per spec rather than free-slider */}
@@ -236,6 +252,11 @@ export default function UploadScreen() {
             return (
               <Pressable onPress={() => cycleState(item.id)} style={styles.reviewCell}>
                 <Image source={{ uri: item.uri }} style={styles.reviewImg} contentFit="cover" />
+                {state === 'no-ai' && (
+                  <View style={[styles.reviewOverlay, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
+                    <Ionicons name="pricetag-outline" size={26} color={colors.parchment} />
+                  </View>
+                )}
                 {state === 'exclude' && (
                   <View style={styles.reviewOverlay}>
                     <Ionicons name="close" size={28} color={colors.parchment} />
@@ -248,7 +269,9 @@ export default function UploadScreen() {
         />
 
         <View style={styles.reviewFooter}>
-          <Text style={styles.footerCount}>{includedCount} selected</Text>
+          <Text style={styles.footerCount}>
+            {includedCount} selected · tap a card to cycle: include → no AI → exclude
+          </Text>
           <View style={styles.footerBtnRow}>
             <Pressable
               onPress={() => startProcessing(false)}
@@ -270,17 +293,28 @@ export default function UploadScreen() {
   }
 
   if (phase === 'processing') {
+    const remaining = Math.max(0, totalToProcess - doneCount - failCount);
     const pct = totalToProcess > 0 ? ((doneCount + failCount) / totalToProcess) * 100 : 0;
     return (
       <View style={[styles.center, { flex: 1, padding: 32 }]}>
+        {/* Spinning iris per spec */}
+        <View style={{ marginBottom: 16 }}>
+          <Iris level={3} size={56} color={colors.ink} spinning />
+        </View>
         <Text style={styles.h2}>processing</Text>
         <Text style={styles.subtle}>{analyzeWithAI ? 'with AI tagging' : 'no AI tagging'}</Text>
 
         <View style={styles.statRow}>
+          <Text style={styles.statLabel}>total</Text>
+          <Text style={styles.statValue}>{totalToProcess}</Text>
+        </View>
+        <View style={styles.statRow}>
           <Text style={styles.statLabel}>processed</Text>
-          <Text style={styles.statValue}>
-            {doneCount + failCount} / {totalToProcess}
-          </Text>
+          <Text style={styles.statValue}>{doneCount}</Text>
+        </View>
+        <View style={styles.statRow}>
+          <Text style={styles.statLabel}>remaining</Text>
+          <Text style={styles.statValue}>{remaining}</Text>
         </View>
         {failCount > 0 && (
           <View style={styles.statRow}>

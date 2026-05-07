@@ -1,4 +1,5 @@
-import { View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Easing } from 'react-native';
 import { Circle, Line, Svg } from 'react-native-svg';
 
 import { colors } from '@/lib/colors';
@@ -7,6 +8,8 @@ type Props = {
   level: 1 | 2 | 3;
   size?: number;
   color?: string;
+  /** Spin the iris (used during processing). */
+  spinning?: boolean;
   /** Override the auto-generated accessibilityLabel. */
   accessibilityLabel?: string;
 };
@@ -23,9 +26,37 @@ const LEVEL_LABELS: Record<1 | 2 | 3, string> = {
  * Level 2: outer circle + filled center dot
  * Level 3: outer circle + middle circle + filled center dot
  */
-export const Iris = ({ level, size = 24, color = colors.parchment, accessibilityLabel }: Props) => {
+export const Iris = ({ level, size = 24, color = colors.parchment, spinning, accessibilityLabel }: Props) => {
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!spinning) return;
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 1800,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      spin.setValue(0);
+    };
+  }, [spinning, spin]);
+
+  const transform = spinning
+    ? [{ rotate: spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }]
+    : undefined;
+
   return (
-    <View accessible accessibilityLabel={accessibilityLabel ?? LEVEL_LABELS[level]} accessibilityRole="image">
+    <Animated.View
+      accessible
+      accessibilityLabel={accessibilityLabel ?? LEVEL_LABELS[level]}
+      accessibilityRole="image"
+      style={transform ? { transform } : undefined}
+    >
       <Svg width={size} height={size} viewBox="0 0 24 24">
         {level === 1 && <Line x1="4" y1="12" x2="20" y2="12" stroke={color} strokeWidth={2} strokeLinecap="round" />}
         {level === 2 && (
@@ -42,6 +73,6 @@ export const Iris = ({ level, size = 24, color = colors.parchment, accessibility
           </>
         )}
       </Svg>
-    </View>
+    </Animated.View>
   );
 };
