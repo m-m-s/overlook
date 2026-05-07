@@ -8,6 +8,7 @@ import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { useToast } from './Toast';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
+import { enqueueAnalysis } from '@/lib/analysisQueue';
 import { colors, urgencyColors } from '@/lib/colors';
 import { fingerprintAsset } from '@/lib/mediaLibrary';
 import { RESONANCE_LEVELS, URGENCIES } from '@/lib/options';
@@ -97,8 +98,10 @@ export const PostScreenshotPopup = () => {
       }
 
       if (mode === 'analyze' && isAnalyzeConfigured) {
-        // Fire and forget — popup closes; AI tags appear when user later opens detail.
-        void analyzeAndPersist(next.uri, local.id);
+        // Fire-and-forget; if it fails, queue for offline retry.
+        void analyzeAndPersist(next.uri, local.id).then((patch) => {
+          if (!patch) void enqueueAnalysis(local.id, next.uri);
+        });
       }
 
       toast.show(mode === 'analyze' ? 'added — analyzing' : 'added');

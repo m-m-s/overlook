@@ -40,9 +40,10 @@ const isMissingUrgency = (it: LocalScreenshot): boolean =>
   Boolean(it.category) && !it.urgency;
 const isMissingStatus = (it: LocalScreenshot): boolean =>
   Boolean(it.category) && !it.status;
-// AI-unreviewed: AI populated tags but user hasn't confirmed yet.
+// AI-unreviewed: AI populated tags but user hasn't viewed/confirmed yet.
+// Now uses the schema's ai_reviewed flag (toggled true when user opens detail).
 const isAiUnreviewed = (it: LocalScreenshot): boolean =>
-  ((it.aiTags?.length ?? 0) > 0) && !it.resonance;
+  ((it.aiTags?.length ?? 0) > 0) && it.aiReviewed === false;
 
 export default function TriageScreen() {
   const { session } = useSession();

@@ -198,7 +198,14 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
       setAiSubjects(meta.ai_suggested_subjects);
       setServerNotes(meta.notes ?? '');
     });
-  }, [item.id, session]);
+
+    // Mark AI-tagged items as reviewed on first open. The next triage
+    // 'AI unreviewed' queue won't show them again.
+    if ((item.aiTags?.length ?? 0) > 0 && item.aiReviewed === false) {
+      void updateScreenshot(item.id, { ai_reviewed: true });
+      onChange({ aiReviewed: true });
+    }
+  }, [item.id, session, item.aiTags, item.aiReviewed, onChange]);
 
   // Persist tag-array changes immediately (auto-save for tags is intentional in v1).
   // Surface failures via toast so silent server errors don't go unnoticed.

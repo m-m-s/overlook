@@ -24,6 +24,7 @@ import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { fetchScreenshots } from '@/lib/screenshots';
 import { animDuration, useReduceMotion } from '@/lib/a11y';
+import { enqueueAnalysis } from '@/lib/analysisQueue';
 import { heavyHaptic, warnHaptic } from '@/lib/haptics';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -236,13 +237,19 @@ export default function LibraryScreen() {
 
     let failures = 0;
     const successPatches: { id: string; patch: NonNullable<Awaited<ReturnType<typeof analyzeAndPersist>>> }[] = [];
-    for (const r of results) {
+    const failedIds: { id: string; uri: string }[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const upload = uploads[i];
       if (r.status === 'fulfilled' && r.value.patch) {
         successPatches.push({ id: r.value.id, patch: r.value.patch });
       } else {
         failures++;
+        failedIds.push({ id: upload.id, uri: upload.uri });
       }
     }
+    // Enqueue failed analyses for offline retry on next app foreground.
+    for (const f of failedIds) await enqueueAnalysis(f.id, f.uri);
 
     setAnalyzingIds((prev) => {
       const next = new Set(prev);
@@ -258,8 +265,9 @@ export default function LibraryScreen() {
       );
     }
     if (failures > 0) {
-      toast.error(
-        `${failures} of ${uploads.length} couldn't be AI-tagged — open the card to set tags manually`,
+      toast.show(
+        `${failures} of ${uploads.length} couldn't be AI-tagged — queued for retry when online`,
+        { kind: 'error' },
       );
     }
   };

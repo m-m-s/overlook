@@ -3,7 +3,7 @@ import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { ActivityIndicator, Platform, UIManager, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, UIManager, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import 'react-native-url-polyfill/auto';
@@ -11,6 +11,7 @@ import 'react-native-url-polyfill/auto';
 import { PostScreenshotPopup } from '@/components/PostScreenshotPopup';
 import { SignIn } from '@/components/SignIn';
 import { ToastProvider } from '@/components/Toast';
+import { drainAnalysisQueue } from '@/lib/analysisQueue';
 import { handleAuthDeepLink, useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 import { FilterProvider } from '@/lib/filtersContext';
@@ -51,6 +52,15 @@ export default function RootLayout() {
     });
     const sub = Linking.addEventListener('url', ({ url }) => {
       handleAuthDeepLink(url);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Drain offline analysis queue on startup + each app foreground.
+  useEffect(() => {
+    void drainAnalysisQueue();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void drainAnalysisQueue();
     });
     return () => sub.remove();
   }, []);

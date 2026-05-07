@@ -25,6 +25,8 @@ export type LocalScreenshot = {
   manualTags?: TypedTag[];
   aiTags?: TypedTag[];
   notes?: string | null;
+  aiReviewed?: boolean;
+  localOnly?: boolean;
 };
 
 const guessExt = (uri: string): string => {

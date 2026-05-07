@@ -12,6 +12,8 @@ export type ScreenshotPatch = Partial<{
   time_to_complete: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
   source_url_manual: string | null;
   notes: string | null;
+  ai_reviewed: boolean;
+  local_only: boolean;
   manual_typed_tags: { type?: string; value: string }[];
 }>;
 
@@ -34,6 +36,8 @@ type Row = {
   manual_typed_tags: TypedTag[] | null;
   ai_typed_tags: TypedTag[] | null;
   notes: string | null;
+  ai_reviewed: boolean | null;
+  local_only: boolean | null;
 };
 
 /**
@@ -48,7 +52,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   const { data, error } = await supabase
     .from('screenshots')
     .select(
-      'id, storage_path, created_at, device_asset_id, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, manual_typed_tags, ai_typed_tags, notes',
+      'id, storage_path, created_at, device_asset_id, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, manual_typed_tags, ai_typed_tags, notes, ai_reviewed, local_only',
     )
     .order('created_at', { ascending: false })
     .limit(500);
@@ -94,6 +98,8 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     manualTags: r.manual_typed_tags ?? [],
     aiTags: r.ai_typed_tags ?? [],
     notes: r.notes,
+    aiReviewed: r.ai_reviewed ?? false,
+    localOnly: r.local_only ?? false,
   }));
 };
 

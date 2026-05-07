@@ -8,6 +8,7 @@ import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native
 import { Iris } from '@/components/Iris';
 import { useToast } from '@/components/Toast';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
+import { enqueueAnalysis } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 import {
@@ -161,7 +162,11 @@ export default function UploadScreen() {
           deviceAssetId: asset.id,
         });
         if (analyze && isAnalyzeConfigured) {
-          await analyzeAndPersist(asset.uri, local.id);
+          const patch = await analyzeAndPersist(asset.uri, local.id);
+          if (!patch) {
+            // Queue for offline retry; row exists already so no data lost.
+            await enqueueAnalysis(local.id, asset.uri);
+          }
         }
         setDoneCount((c) => c + 1);
       } catch (err) {
