@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -30,6 +31,7 @@ type Phase = 'idle' | 'scanning' | 'review' | 'processing' | 'done';
 type ReviewState = 'include' | 'exclude' | 'duplicate';
 
 const BATCH_OPTIONS = [25, 50, 100, 250, 500] as const;
+const BATCH_KEY = 'overlook.upload_batch_size';
 
 export default function UploadScreen() {
   const { session } = useSession();
@@ -40,7 +42,11 @@ export default function UploadScreen() {
   const [allAssets, setAllAssets] = useState<ScannedAsset[]>([]);
   const [duplicates, setDuplicates] = useState<Set<string>>(new Set()); // asset IDs already uploaded
   const [stateMap, setStateMap] = useState<Map<string, ReviewState>>(new Map());
-  const [batchSize, setBatchSize] = useState<number>(50);
+  const [batchSize, setBatchSizeState] = useState<number>(50);
+  const setBatchSize = (n: number) => {
+    setBatchSizeState(n);
+    AsyncStorage.setItem(BATCH_KEY, String(n)).catch(() => {});
+  };
   const [analyzeWithAI, setAnalyzeWithAI] = useState(false);
 
   // Processing state
@@ -63,6 +69,15 @@ export default function UploadScreen() {
       reviewBatch.filter((a) => (stateMap.get(a.id) ?? 'include') === 'include').length,
     [reviewBatch, stateMap],
   );
+
+  // Restore last-used batch size
+  useEffect(() => {
+    AsyncStorage.getItem(BATCH_KEY).then((v) => {
+      if (!v) return;
+      const n = parseInt(v, 10);
+      if ((BATCH_OPTIONS as readonly number[]).includes(n)) setBatchSizeState(n);
+    });
+  }, []);
 
   // Auto-trigger scan on entry if signed in.
   useEffect(() => {

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,7 @@ import {
 import { Chip } from '@/components/Chip';
 import { Iris } from '@/components/Iris';
 import { useToast } from '@/components/Toast';
+import { animDuration, useReduceMotion } from '@/lib/a11y';
 import { useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
@@ -40,6 +42,9 @@ export default function TriageScreen() {
   const [activeQueue, setActiveQueue] = useState<QueueKey | null>(null);
   const [cursor, setCursor] = useState(0);
   const { remove: undoableRemove } = useUndoableDelete(setItems);
+  const reduceMotion = useReduceMotion();
+  const cardOpacity = useRef(new Animated.Value(1)).current;
+  const cardSlide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!session) return;
@@ -79,12 +84,27 @@ export default function TriageScreen() {
   };
 
   const advance = () => {
-    if (cursor + 1 >= total) {
-      toast.show(`done with ${activeQueue} ✓`);
-      exitQueue();
-    } else {
+    // Slide-out + fade, then change cursor + slide-in + fade. Smoother than
+    // an instant jump between cards.
+    const dur = animDuration(160, reduceMotion);
+    Animated.parallel([
+      Animated.timing(cardOpacity, { toValue: 0, duration: dur, useNativeDriver: true }),
+      Animated.timing(cardSlide, { toValue: -40, duration: dur, useNativeDriver: true }),
+    ]).start(() => {
+      if (cursor + 1 >= total) {
+        toast.show(`done with ${activeQueue} ✓`);
+        exitQueue();
+        cardOpacity.setValue(1);
+        cardSlide.setValue(0);
+        return;
+      }
       setCursor((c) => c + 1);
-    }
+      cardSlide.setValue(40);
+      Animated.parallel([
+        Animated.timing(cardOpacity, { toValue: 1, duration: dur, useNativeDriver: true }),
+        Animated.timing(cardSlide, { toValue: 0, duration: dur, useNativeDriver: true }),
+      ]).start();
+    });
   };
 
   const patchCurrent = (patch: Partial<LocalScreenshot>) => {
@@ -183,7 +203,8 @@ export default function TriageScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        <Image source={{ uri: current.uri }} style={styles.image} contentFit="contain" />
+        <Animated.View style={{ opacity: cardOpacity, transform: [{ translateX: cardSlide }] }}>
+          <Image source={{ uri: current.uri }} style={styles.image} contentFit="contain" />
 
         {/* Show only the fields that need attention for this queue */}
         {activeQueue === 'untagged' && (
@@ -244,6 +265,7 @@ export default function TriageScreen() {
             ))}
           </FieldRow>
         )}
+        </Animated.View>
       </ScrollView>
 
       {/* Action bar */}
