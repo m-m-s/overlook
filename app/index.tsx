@@ -15,6 +15,7 @@ import { useToast } from '@/components/Toast';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { deleteScreenshots, fetchScreenshots } from '@/lib/screenshots';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
@@ -59,6 +60,21 @@ export default function LibraryScreen() {
     AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
   }, [cols]);
 
+  // First-card hint: when items first appear, drop a one-time toast pointing
+  // at the gestures users wouldn't discover otherwise.
+  const prevItemsCount = useRef(items.length);
+  useEffect(() => {
+    if (prevItemsCount.current === 0 && items.length > 0) {
+      void (async () => {
+        if (!(await wasHintSeen('first-card-gestures'))) {
+          toast.show('tap a card to view • pinch to zoom • long-press to select');
+          await markHintSeen('first-card-gestures');
+        }
+      })();
+    }
+    prevItemsCount.current = items.length;
+  }, [items.length, toast]);
+
   // Pinch gesture: pinch out (scale > 1.3) -> zoom in (fewer cols).
   // Pinch in (scale < 0.7) -> zoom out (more cols).
   const pinchGesture = useMemo(
@@ -74,6 +90,17 @@ export default function LibraryScreen() {
         }),
     [],
   );
+
+  // Show a hint once when user enters intent mode (1 col) for the first time.
+  useEffect(() => {
+    if (cols !== 1) return;
+    void (async () => {
+      if (!(await wasHintSeen('intent-mode'))) {
+        toast.show('intent mode — pinch in to return to grid');
+        await markHintSeen('intent-mode');
+      }
+    })();
+  }, [cols, toast]);
 
   const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
 
