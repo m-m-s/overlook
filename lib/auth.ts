@@ -49,6 +49,26 @@ export const sendMagicLink = async (email: string): Promise<{ error: string | nu
 };
 
 /**
+ * Verify the 6-digit code from the magic-link email. Use this when the deep
+ * link redirect (link tap) doesn't bounce back into Expo Go — the email also
+ * includes a {{ .Token }} the user can type in manually.
+ */
+export const verifyEmailOtp = async (
+  email: string,
+  token: string,
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured) {
+    return { error: 'Supabase env not configured.' };
+  }
+  const { error } = await supabase.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: token.trim(),
+    type: 'email',
+  });
+  return { error: error?.message ?? null };
+};
+
+/**
  * Handle an incoming deep link URL from the magic-link email.
  * Supabase emits URLs like `<scheme>://#access_token=...&refresh_token=...` (implicit flow)
  * or `<scheme>://?code=...` (PKCE). We try both shapes.

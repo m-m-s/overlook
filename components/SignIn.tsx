@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { sendMagicLink } from '@/lib/auth';
+import { sendMagicLink, verifyEmailOtp } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 
-type Status = 'idle' | 'sending' | 'sent' | 'error';
+type Status = 'idle' | 'sending' | 'sent' | 'verifying' | 'error';
 
 export const SignIn = () => {
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -28,6 +29,21 @@ export const SignIn = () => {
     }
   };
 
+  const onVerify = async () => {
+    if (code.trim().length < 6) {
+      setErrorMsg('Enter the 6-digit code from the email');
+      return;
+    }
+    setStatus('verifying');
+    setErrorMsg(null);
+    const { error } = await verifyEmailOtp(email, code);
+    if (error) {
+      setErrorMsg(error);
+      setStatus('sent'); // back to sent so they can retry
+    }
+    // success: useSession picks up the new session; this component unmounts
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -37,13 +53,39 @@ export const SignIn = () => {
         <Text style={styles.title}>Overlook</Text>
         <Text style={styles.sub}>your screenshot library</Text>
 
-        {status === 'sent' ? (
+        {status === 'sent' || status === 'verifying' ? (
           <View style={styles.sentBox}>
             <Text style={styles.sentTitle}>check your email</Text>
             <Text style={styles.sentBody}>
-              we sent a sign-in link to {email}. tap it from this device to come back.
+              we sent a 6-digit code + a link to {email}. enter the code below, or tap the link from this device.
             </Text>
-            <Pressable onPress={() => setStatus('idle')} style={styles.linkBtn}>
+
+            <TextInput
+              value={code}
+              onChangeText={setCode}
+              placeholder="000000"
+              placeholderTextColor={colors.inkMuted}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+              editable={status !== 'verifying'}
+              style={[styles.input, styles.codeInput]}
+            />
+            <Pressable
+              onPress={onVerify}
+              disabled={status === 'verifying'}
+              style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
+            >
+              {status === 'verifying' ? (
+                <ActivityIndicator color={colors.parchment} />
+              ) : (
+                <Text style={styles.btnText}>sign in</Text>
+              )}
+            </Pressable>
+
+            {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+
+            <Pressable onPress={() => { setStatus('idle'); setCode(''); setErrorMsg(null); }} style={styles.linkBtn}>
               <Text style={styles.linkBtnText}>use a different email</Text>
             </Pressable>
           </View>
@@ -117,7 +159,14 @@ const styles = StyleSheet.create({
   error: { color: '#C0392B', marginTop: 16, fontSize: 14 },
   sentBox: { paddingVertical: 12 },
   sentTitle: { fontFamily: 'Georgia', fontSize: 22, color: colors.ink, marginBottom: 12 },
-  sentBody: { color: colors.ink, fontSize: 15, lineHeight: 22 },
+  sentBody: { color: colors.ink, fontSize: 15, lineHeight: 22, marginBottom: 24 },
+  codeInput: {
+    fontFamily: 'Georgia',
+    fontSize: 28,
+    letterSpacing: 8,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
   linkBtn: { marginTop: 24 },
   linkBtnText: {
     color: colors.inkMuted,
