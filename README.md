@@ -94,6 +94,21 @@ If `EXPO_PUBLIC_SUPABASE_URL` is missing the app falls back to local-only mode: 
 
 The repo is the source of truth. On any machine: clone, `npm install`, drop in your `.env`, run. The `.env` is intentionally not committed — copy it manually between machines (or use a secret manager if you set one up).
 
-## Production APK
+## Production APK (when ready to ship)
 
-Coming at the end of sprint — uses EAS Build. Will document in NOTES.md when run.
+EAS Build runs in the cloud and produces a sideloadable `.apk` you transfer to your phone.
+
+```bash
+# One-time: log into Expo
+npx eas-cli@latest login
+
+# One-time per project: link this folder to an EAS project
+npx eas-cli@latest init
+
+# Build the production APK
+npx eas-cli@latest build -p android --profile production
+```
+
+After it finishes, EAS gives you a download link. Open it on your phone, tap to install (you'll need to allow "Install unknown apps" once).
+
+`eas.json` defines three profiles: `development` (with dev client, for FileObserver work later), `preview` (signed APK for testing), `production` (current shipping target). Change `production.channel` if you set up OTA updates later.
