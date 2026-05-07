@@ -509,6 +509,10 @@ export default function LibraryScreen() {
           setSidebarOpen(false);
           router.push('/triage');
         }}
+        onSettings={() => {
+          setSidebarOpen(false);
+          router.push('/settings');
+        }}
         onSignOut={() => {
           setSidebarOpen(false);
           onSignOut();

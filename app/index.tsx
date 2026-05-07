@@ -385,6 +385,10 @@ const SidebarRender = ({
       onClose();
       router.push('/triage');
     }}
+    onSettings={() => {
+      onClose();
+      router.push('/settings');
+    }}
     onSignOut={() => {
       onClose();
       void signOut();

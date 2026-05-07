@@ -21,6 +21,7 @@ type Props = {
   onLibrary: () => void;
   onTriage?: () => void;
   onSavedFilters?: () => void;
+  onSettings?: () => void;
   onSignOut?: () => void;
   userEmail?: string | null;
 };
@@ -46,6 +47,7 @@ export const Sidebar = ({
   onLibrary,
   onTriage,
   onSavedFilters,
+  onSettings,
   onSignOut,
   userEmail,
 }: Props) => {
@@ -215,6 +217,12 @@ export const Sidebar = ({
             <Text style={styles.secondaryBtnText}>view full library</Text>
           </Pressable>
 
+          {onSettings && (
+            <Pressable onPress={onSettings} style={styles.signOutRow} hitSlop={8}>
+              <Ionicons name="settings-outline" size={16} color={colors.inkMuted} />
+              <Text style={styles.signOutText}>settings</Text>
+            </Pressable>
+          )}
           {onSignOut && (
             <Pressable onPress={onSignOut} style={styles.signOutRow} hitSlop={8}>
               <Ionicons name="log-out-outline" size={16} color={colors.inkMuted} />
