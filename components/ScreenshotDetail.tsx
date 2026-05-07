@@ -26,6 +26,27 @@ type Props = {
   onDelete: () => void;
 };
 
+/**
+ * Pending-changes model per spec: "Apply to confirm edits, Cancel to revert
+ * — no auto-save."
+ *
+ * Sprint v1 basic: scalar fields (category, subject, urgency, status,
+ * resonance, notes) write to a `pending` patch instead of persisting on every
+ * tap. The Apply/Cancel bar appears at the top of the sheet whenever pending
+ * has any keys. Tags stay auto-saved for now (defer to v2).
+ *
+ * v2 will add: long-press a section to enter edit mode, shake animation on
+ * chips, X on tags. (Per Maggie's call: ship basic Apply/Cancel for v1.)
+ */
+type Pending = Partial<{
+  category: string | null;
+  subject: string | null;
+  urgency: string | null;
+  status: string | null;
+  resonance: 1 | 2 | 3 | null;
+  notes: string | null;
+}>;
+
 const SectionLabel = ({ children }: { children: string }) => (
   <Text style={styles.sectionLabel}>{children}</Text>
 );
@@ -64,10 +85,21 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const { session } = useSession();
   const [manualTags, setManualTags] = useState<TypedTag[]>([]);
   const [aiTags, setAiTags] = useState<TypedTag[]>([]);
-  const [notes, setNotes] = useState('');
-  const [subject, setSubject] = useState(item.subject ?? '');
+  const [serverNotes, setServerNotes] = useState('');
   const [newTag, setNewTag] = useState('');
   const [pendingAmbiguous, setPendingAmbiguous] = useState<{ value: string; candidates: string[] } | null>(null);
+  const [pending, setPending] = useState<Pending>({});
+
+  // The "view" model = item + pending. UI reads from this; persist only on Apply.
+  const view = {
+    category: 'category' in pending ? pending.category : item.category,
+    subject: 'subject' in pending ? pending.subject : item.subject,
+    urgency: 'urgency' in pending ? pending.urgency : item.urgency,
+    status: 'status' in pending ? pending.status : item.status,
+    resonance: 'resonance' in pending ? pending.resonance : item.resonance,
+    notes: 'notes' in pending ? pending.notes : serverNotes,
+  };
+  const pendingCount = Object.keys(pending).length;
 
   // Hydrate tags + notes from server when sheet opens.
   useEffect(() => {
@@ -76,29 +108,41 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       if (!meta) return;
       setManualTags(meta.manual_typed_tags);
       setAiTags(meta.ai_typed_tags);
-      setNotes(meta.notes ?? '');
+      setServerNotes(meta.notes ?? '');
     });
   }, [item.id, session]);
 
-  const persist = (patch: Parameters<typeof updateScreenshot>[1]) => {
+  // Persist tag-array changes immediately (auto-save for tags is intentional in v1).
+  const persistNow = (patch: Parameters<typeof updateScreenshot>[1]) => {
     updateScreenshot(item.id, patch);
   };
 
+  // Stage scalar changes into `pending`; commit on Apply.
+  const stage = (patch: Pending) => setPending((prev) => ({ ...prev, ...patch }));
+
   const setCategory = (cat: Category | null) => {
-    onChange({ category: cat });
-    persist({ category: cat });
+    stage({ category: view.category === cat ? null : cat });
   };
   const setStatus = (s: string | null) => {
-    onChange({ status: s });
-    persist({ status: s });
+    stage({ status: view.status === s ? null : s });
   };
   const setUrgency = (u: string | null) => {
-    onChange({ urgency: u });
-    persist({ urgency: u });
+    stage({ urgency: view.urgency === u ? null : u });
   };
   const setResonance = (r: 1 | 2 | 3 | null) => {
-    onChange({ resonance: r });
-    persist({ resonance: r });
+    stage({ resonance: view.resonance === r ? null : r });
+  };
+
+  const onApply = async () => {
+    const patch = pending;
+    setPending({});
+    onChange(patch as Partial<LocalScreenshot>);
+    await updateScreenshot(item.id, patch as Parameters<typeof updateScreenshot>[1]);
+    if ('notes' in patch) setServerNotes(patch.notes ?? '');
+  };
+
+  const onCancel = () => {
+    setPending({});
   };
 
   const commitTag = (tag: TypedTag) => {
@@ -106,7 +150,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
     setManualTags(updated);
     setNewTag('');
     setPendingAmbiguous(null);
-    persist({ manual_typed_tags: updated });
+    persistNow({ manual_typed_tags: updated });
   };
 
   const addTag = async () => {
@@ -132,13 +176,13 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const removeTag = (idx: number) => {
     const updated = manualTags.filter((_, i) => i !== idx);
     setManualTags(updated);
-    persist({ manual_typed_tags: updated });
+    persistNow({ manual_typed_tags: updated });
   };
 
   const setTagType = (idx: number, type: string | undefined) => {
     const updated = manualTags.map((t, i) => (i === idx ? { ...t, type } : t));
     setManualTags(updated);
-    persist({ manual_typed_tags: updated });
+    persistNow({ manual_typed_tags: updated });
     // Remember user's manual type assignment so future tags with this value auto-type.
     if (type) void rememberTagType(manualTags[idx].value, type);
   };
@@ -166,9 +210,9 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
     }
   };
 
-  // Compute edge gradient colors for the preview (same logic as Card).
-  const statusColor = item.status ? statusColors[item.status] : undefined;
-  const urgencyColor = item.urgency ? urgencyColors[item.urgency] : undefined;
+  // Compute edge gradient colors for the preview (uses staged values via `view`).
+  const statusColor = view.status ? statusColors[view.status] : undefined;
+  const urgencyColor = view.urgency ? urgencyColors[view.urgency] : undefined;
   const showEdge =
     Boolean(statusColor && statusColor !== 'transparent') || Boolean(urgencyColor);
   const edgeColors: [string, string, string, string] = [
@@ -193,17 +237,34 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
             pointerEvents="none"
           />
         )}
-        {item.category && (
+        {view.category && (
           <View style={styles.previewCat}>
-            <CategoryIcon category={item.category} size={26} />
+            <CategoryIcon category={view.category} size={26} />
           </View>
         )}
-        {item.resonance && (
+        {view.resonance && (
           <View style={styles.previewIris}>
-            <Iris level={item.resonance} size={26} />
+            <Iris level={view.resonance} size={26} />
           </View>
         )}
       </View>
+
+      {/* Pending-changes bar (only when scalar edits are staged) */}
+      {pendingCount > 0 && (
+        <View style={styles.pendingBar}>
+          <Text style={styles.pendingText}>
+            {pendingCount} {pendingCount === 1 ? 'change' : 'changes'} pending
+          </Text>
+          <View style={styles.pendingBtns}>
+            <Pressable onPress={onCancel} style={styles.pendingCancel}>
+              <Text style={styles.pendingCancelText}>cancel</Text>
+            </Pressable>
+            <Pressable onPress={onApply} style={styles.pendingApply}>
+              <Text style={styles.pendingApplyText}>apply</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Category */}
       <SectionLabel>category</SectionLabel>
@@ -212,10 +273,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
           <Chip
             key={cat}
             label={cat}
-            selected={item.category === cat}
-            variant={item.category === cat ? 'meta' : 'meta'}
-            onPress={() => setCategory(item.category === cat ? null : cat)}
-            color={item.category === cat ? colors.ink : colors.inkMuted}
+            selected={view.category === cat}
+            variant="meta"
+            onPress={() => setCategory(cat)}
+            color={view.category === cat ? colors.ink : colors.inkMuted}
           />
         ))}
       </ScrollView>
@@ -223,13 +284,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       {/* Subject */}
       <SectionLabel>subject</SectionLabel>
       <BottomSheetTextInput
-        value={subject}
-        onChangeText={setSubject}
-        onBlur={() => {
-          const v = subject.trim() || null;
-          onChange({ subject: v });
-          persist({ subject: v });
-        }}
+        value={view.subject ?? ''}
+        onChangeText={(t) => stage({ subject: t || null })}
         placeholder="specific thing — Crochet, React hook, Italian restaurant…"
         placeholderTextColor={colors.inkMuted}
         style={styles.subjectInput}
@@ -239,11 +295,11 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       <SectionLabel>resonance</SectionLabel>
       <View style={styles.row}>
         {RESONANCE_LEVELS.map((r) => {
-          const active = item.resonance === r;
+          const active = view.resonance === r;
           return (
             <Pressable
               key={r}
-              onPress={() => setResonance(active ? null : r)}
+              onPress={() => setResonance(r)}
               style={[styles.irisBtn, active && styles.irisBtnActive]}
             >
               <Iris level={r} size={22} color={active ? colors.parchment : colors.ink} />
@@ -256,7 +312,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       <SectionLabel>urgency</SectionLabel>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {URGENCIES.map((u) => {
-          const active = item.urgency === u.key;
+          const active = view.urgency === u.key;
           return (
             <Chip
               key={u.key}
@@ -264,7 +320,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
               variant="meta"
               selected={active}
               color={active ? urgencyColors[u.key] : colors.inkMuted}
-              onPress={() => setUrgency(active ? null : u.key)}
+              onPress={() => setUrgency(u.key)}
             />
           );
         })}
@@ -274,7 +330,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       <SectionLabel>status</SectionLabel>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {STATUSES.map((s) => {
-          const active = item.status === s.key;
+          const active = view.status === s.key;
           return (
             <Chip
               key={s.key}
@@ -282,7 +338,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
               variant="meta"
               selected={active}
               color={active ? statusColors[s.key] : colors.inkMuted}
-              onPress={() => setStatus(active ? null : s.key)}
+              onPress={() => setStatus(s.key)}
             />
           );
         })}
@@ -357,9 +413,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
       {/* Notes */}
       <SectionLabel>notes</SectionLabel>
       <BottomSheetTextInput
-        value={notes}
-        onChangeText={setNotes}
-        onBlur={() => persist({ notes: notes.trim() || null })}
+        value={view.notes ?? ''}
+        onChangeText={(t) => stage({ notes: t })}
         multiline
         placeholder="quick thought, link, anything…"
         placeholderTextColor={colors.inkMuted}
@@ -450,6 +505,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.ink,
     fontStyle: 'italic',
+  },
+  pendingBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.ink,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  pendingText: {
+    color: colors.parchment,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  pendingBtns: { flexDirection: 'row', gap: 6 },
+  pendingCancel: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.parchment,
+    borderRadius: 3,
+  },
+  pendingCancelText: {
+    color: colors.parchment,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  pendingApply: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.parchment,
+    borderRadius: 3,
+  },
+  pendingApplyText: {
+    color: colors.ink,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   tagInput: {
     fontSize: 13,
