@@ -11,18 +11,26 @@ type FilterContextValue = {
    */
   applyFilters: (f: Filters) => void;
   clearFilters: () => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
 };
 
 const FilterContext = createContext<FilterContextValue | null>(null);
 
 export const FilterProvider = ({ children }: { children: ReactNode }) => {
   const [filters, setFilters] = useState<Filters>(emptyFilters());
+  const [searchQuery, setSearchQuery] = useState('');
 
   const value: FilterContextValue = {
     filters,
     setFilters,
     applyFilters: setFilters,
-    clearFilters: () => setFilters(emptyFilters()),
+    clearFilters: () => {
+      setFilters(emptyFilters());
+      setSearchQuery('');
+    },
+    searchQuery,
+    setSearchQuery,
   };
 
   return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;

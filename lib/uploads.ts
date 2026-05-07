@@ -2,6 +2,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { isSupabaseConfigured, supabase } from './supabase';
 
+type TypedTag = { type?: string; value: string };
+
 export type LocalScreenshot = {
   id: string;
   uri: string;
@@ -18,6 +20,9 @@ export type LocalScreenshot = {
   sourceUrlManual?: string | null; // user-set
   actionUrl?: string | null;
   actionUrlType?: string | null;
+  manualTags?: TypedTag[];
+  aiTags?: TypedTag[];
+  notes?: string | null;
 };
 
 const guessExt = (uri: string): string => {

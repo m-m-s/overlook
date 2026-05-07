@@ -17,6 +17,7 @@ import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
 import { applyFilters, filtersActive } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
+import { searchItems } from '@/lib/search';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
@@ -46,7 +47,7 @@ export default function LibraryScreen() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { filters, setFilters, clearFilters } = useFilters();
+  const { filters, setFilters, clearFilters, searchQuery } = useFilters();
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
   const [cols, setCols] = useState<ColCount>(3);
@@ -130,7 +131,10 @@ export default function LibraryScreen() {
     })();
   }, [cols, toast]);
 
-  const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
+  const visibleItems = useMemo(() => {
+    const filtered = applyFilters(items, filters);
+    return searchQuery.trim() ? searchItems(filtered, searchQuery) : filtered;
+  }, [items, filters, searchQuery]);
   const { remove: undoableRemove, removeMany: undoableRemoveMany } = useUndoableDelete(setItems);
 
   const onRefresh = useCallback(async () => {

@@ -30,6 +30,9 @@ type Row = {
   source_url_manual: string | null;
   action_url: string | null;
   action_url_type: string | null;
+  manual_typed_tags: TypedTag[] | null;
+  ai_typed_tags: TypedTag[] | null;
+  notes: string | null;
 };
 
 /**
@@ -44,7 +47,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   const { data, error } = await supabase
     .from('screenshots')
     .select(
-      'id, storage_path, created_at, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type',
+      'id, storage_path, created_at, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, manual_typed_tags, ai_typed_tags, notes',
     )
     .order('created_at', { ascending: false })
     .limit(500);
@@ -86,6 +89,9 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     sourceUrlManual: r.source_url_manual,
     actionUrl: r.action_url,
     actionUrlType: r.action_url_type,
+    manualTags: r.manual_typed_tags ?? [],
+    aiTags: r.ai_typed_tags ?? [],
+    notes: r.notes,
   }));
 };
 

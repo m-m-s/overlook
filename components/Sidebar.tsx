@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { Animated, Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { emptyFilters, filtersActive, type Filters } from '@/lib/filters';
+import { useFilters } from '@/lib/filtersContext';
 import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
 
 const SCREEN = Dimensions.get('window');
@@ -48,6 +49,7 @@ export const Sidebar = ({
   onSignOut,
   userEmail,
 }: Props) => {
+  const { searchQuery, setSearchQuery } = useFilters();
   const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
@@ -85,6 +87,25 @@ export const Sidebar = ({
             <Text style={styles.title}>Overlook</Text>
           </View>
           {userEmail && <Text style={styles.email}>{userEmail}</Text>}
+
+          {/* Search bar — fuzzy across subject, tags, category, status, notes */}
+          <View style={styles.searchRow}>
+            <Ionicons name="search-outline" size={16} color={colors.inkMuted} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="search…"
+              placeholderTextColor={colors.inkMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.searchInput}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={colors.inkMuted} />
+              </Pressable>
+            )}
+          </View>
 
           {/* Filter status */}
           <View style={styles.statusRow}>
@@ -224,6 +245,19 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   title: { fontFamily: 'Georgia', fontSize: 28, color: colors.ink, letterSpacing: -0.4 },
   email: { fontSize: 11, color: colors.inkMuted, marginTop: 4 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.inkMuted,
+    borderRadius: 4,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.ink, padding: 0 },
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
