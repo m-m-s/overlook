@@ -42,6 +42,19 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - **Keep deepening.** When something has ranged data (dictionary entries, prompt content, options lists), don't ship the minimum-viable and call it done. Expand iteratively as time allows. Maggie will notice if something feels shallow at the end.
 - **Don't ask, just go.** Make reasonable choices and document them here in NOTES.md. Only pause for genuine blockers (undoable actions, truly missing info you can't reasonably guess). When a body of work is complete, run a final check (type-check, lint, expo doctor) and report a status summary.
 
+## Pinch-zoom + intent mode — partial spec (2026-05-07)
+
+**Pinch-to-zoom 4/3/2/1 columns** — implemented per spec. Pinch out (zoom in) reduces column count, pinch in (zoom out) increases it. Stepped, not fluid. Persisted to AsyncStorage as `overlook.grid_cols`. FlatList re-mounts on column change via `key={cols}`.
+
+**Single-column intent mode** — partial v1: when columns = 1, cards render in a vertical scroll feed at portrait 9:16 aspect (matches typical phone screenshots). Tap → existing detail bottom sheet (same as grid). Cells use `width: 100%, aspectRatio: 9/16`.
+
+**Spec deviations from intent mode (deferred):**
+- No swipe-from-right edit sidebar (the spec calls for a side panel that opens on edge swipe, shows tags read-only, long-press to edit). Complex animation work; deferred.
+- No tag pills overlaid at bottom of image. Tags still accessible via tap-to-open detail.
+- No long-press-to-enter-edit-mode-on-section in the side panel.
+
+These can come back as a polish pass post-sprint.
+
 ## Vercel function mounting (2026-05-07)
 
 Originally placed the function in `server/api/analyze.ts` with the intent that Maggie would set Root Directory = `server` in Vercel. She couldn't find that setting in the UI, so I restructured: function is now at `api/analyze.ts` at the repo root, with deps (`@anthropic-ai/sdk`, `@vercel/node`) added to the root `package.json`. Vercel auto-detects `api/*` files at root with zero config. `vercel.json` at root sets `maxDuration: 60`. `tsconfig.json` excludes `api/` from app's tsc since the function uses `@vercel/node` types not present at runtime in the RN bundle.

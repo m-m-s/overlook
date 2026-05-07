@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BulkTagSheet } from '@/components/BulkTagSheet';
 import { Card, type CardData } from '@/components/Card';
@@ -17,7 +19,8 @@ import { deleteScreenshots, fetchScreenshots } from '@/lib/screenshots';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
 
-const GRID_COLUMNS = 3;
+type ColCount = 1 | 2 | 3 | 4;
+const COLS_KEY = 'overlook.grid_cols';
 const GRID_GAP = 3;
 
 const toCardData = (it: LocalScreenshot): CardData => ({
@@ -39,7 +42,38 @@ export default function LibraryScreen() {
   const [filters, setFilters] = useState<Filters>(emptyFilters());
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
+  const [cols, setCols] = useState<ColCount>(3);
   const inSelectMode = multiSelectIds.size > 0;
+  const isIntentMode = cols === 1;
+
+  // Load persisted column count
+  useEffect(() => {
+    AsyncStorage.getItem(COLS_KEY).then((v) => {
+      const n = v ? parseInt(v, 10) : 3;
+      if (n === 1 || n === 2 || n === 3 || n === 4) setCols(n);
+    });
+  }, []);
+
+  // Persist on change
+  useEffect(() => {
+    AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
+  }, [cols]);
+
+  // Pinch gesture: pinch out (scale > 1.3) -> zoom in (fewer cols).
+  // Pinch in (scale < 0.7) -> zoom out (more cols).
+  const pinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .runOnJS(true)
+        .onEnd((e) => {
+          if (e.scale > 1.3) {
+            setCols((prev) => (prev > 1 ? ((prev - 1) as ColCount) : 1));
+          } else if (e.scale < 0.7) {
+            setCols((prev) => (prev < 4 ? ((prev + 1) as ColCount) : 4));
+          }
+        }),
+    [],
+  );
 
   const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
 
@@ -297,40 +331,45 @@ export default function LibraryScreen() {
           </Pressable>
         </View>
       ) : (
-        <FlatList
-          data={visibleItems}
-          keyExtractor={(it) => it.id}
-          numColumns={GRID_COLUMNS}
-          contentContainerStyle={{ paddingBottom: 96 }}
-          columnWrapperStyle={{ gap: GRID_GAP }}
-          ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
-          ListHeaderComponent={<FilterBar filters={filters} onChange={setFilters} />}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptySub}>no screenshots match these filters</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.cell}>
-              <Card
-                data={toCardData(item)}
-                analyzing={analyzingIds.has(item.id)}
-                inSelectMode={inSelectMode}
-                selected={multiSelectIds.has(item.id)}
-                onPress={() => onCardPress(item)}
-                onLongPress={() => onCardLongPress(item)}
+        <GestureDetector gesture={pinchGesture}>
+          <FlatList
+            // key on cols forces FlatList to remount when numColumns changes.
+            key={`grid-${cols}`}
+            data={visibleItems}
+            keyExtractor={(it) => it.id}
+            numColumns={cols}
+            contentContainerStyle={{ paddingBottom: 96 }}
+            columnWrapperStyle={cols > 1 ? { gap: GRID_GAP } : undefined}
+            ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
+            ListHeaderComponent={<FilterBar filters={filters} onChange={setFilters} />}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Text style={styles.emptySub}>no screenshots match these filters</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={isIntentMode ? styles.cellIntent : { flex: 1 / cols, aspectRatio: 1 }}>
+                <Card
+                  data={toCardData(item)}
+                  analyzing={analyzingIds.has(item.id)}
+                  inSelectMode={inSelectMode}
+                  selected={multiSelectIds.has(item.id)}
+                  mode={isIntentMode ? 'intent' : 'grid'}
+                  onPress={() => onCardPress(item)}
+                  onLongPress={() => onCardLongPress(item)}
+                />
+              </View>
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.ink}
+                colors={[colors.ink]}
               />
-            </View>
-          )}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.ink}
-              colors={[colors.ink]}
-            />
-          }
-        />
+            }
+          />
+        </GestureDetector>
       )}
       {items.length > 0 && (
         <Pressable
@@ -399,7 +438,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     fontWeight: '600',
   },
-  cell: { flex: 1 / GRID_COLUMNS, aspectRatio: 1 },
+  cellIntent: { width: '100%', aspectRatio: 9 / 16 },
   fab: {
     position: 'absolute',
     right: 24,

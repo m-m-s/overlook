@@ -25,6 +25,11 @@ type Props = {
   inSelectMode?: boolean;
   /** Whether this card is currently part of the selection. */
   selected?: boolean;
+  /**
+   * Layout mode. 'grid' = square 1:1 (default for 2/3/4-column grid).
+   * 'intent' = portrait 9:16 (single-column intent feed per spec).
+   */
+  mode?: 'grid' | 'intent';
   onPress?: () => void;
   onLongPress?: () => void;
 };
@@ -39,7 +44,7 @@ type Props = {
  * Sprint note: vertical fade on the gradient band is omitted for v1 — it's a
  * sharp horizontal band ~22% of card height. Soften pass deferred (NOTES.md).
  */
-export const Card = ({ data, analyzing, inSelectMode, selected, onPress, onLongPress }: Props) => {
+export const Card = ({ data, analyzing, inSelectMode, selected, mode = 'grid', onPress, onLongPress }: Props) => {
   const statusColor = data.status ? statusColors[data.status] : undefined;
   const urgencyColor = data.urgency ? urgencyColors[data.urgency] : undefined;
   const showEdge = Boolean(statusColor && statusColor !== 'transparent') || Boolean(urgencyColor);
@@ -55,7 +60,11 @@ export const Card = ({ data, analyzing, inSelectMode, selected, onPress, onLongP
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}
+      style={({ pressed }) => [
+        styles.card,
+        mode === 'intent' && styles.cardIntent,
+        pressed && { opacity: 0.92 },
+      ]}
     >
       <Image source={{ uri: data.uri }} style={styles.image} contentFit="cover" />
 
@@ -113,6 +122,10 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     backgroundColor: colors.divider,
     overflow: 'hidden',
+  },
+  cardIntent: {
+    // Cell wrapper sets aspectRatio in intent mode; Card itself stretches.
+    aspectRatio: undefined,
   },
   image: { width: '100%', height: '100%' },
   edgeBand: {
