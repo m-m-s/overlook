@@ -20,7 +20,8 @@ import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
-import { deleteScreenshots, fetchScreenshots } from '@/lib/screenshots';
+import { fetchScreenshots } from '@/lib/screenshots';
+import { useUndoableDelete } from '@/lib/useUndoableDelete';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
 
@@ -129,6 +130,7 @@ export default function LibraryScreen() {
   }, [cols, toast]);
 
   const visibleItems = useMemo(() => applyFilters(items, filters), [items, filters]);
+  const { remove: undoableRemove, removeMany: undoableRemoveMany } = useUndoableDelete(setItems);
 
   const onRefresh = useCallback(async () => {
     if (!session) return;
@@ -296,27 +298,10 @@ export default function LibraryScreen() {
   };
 
   const onBulkDelete = () => {
-    const count = multiSelectIds.size;
-    if (count === 0) return;
-    Alert.alert(
-      `Delete ${count} screenshot${count === 1 ? '' : 's'}?`,
-      'This removes them from your library.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const targets = items
-              .filter((it) => multiSelectIds.has(it.id))
-              .map((it) => ({ id: it.id, storagePath: it.storagePath }));
-            await deleteScreenshots(targets);
-            setItems((prev) => prev.filter((it) => !multiSelectIds.has(it.id)));
-            exitMultiSelect();
-          },
-        },
-      ],
-    );
+    const targets = items.filter((it) => multiSelectIds.has(it.id));
+    if (targets.length === 0) return;
+    undoableRemoveMany(targets);
+    exitMultiSelect();
   };
 
   const onItemChange = (patch: Partial<LocalScreenshot>) => {
@@ -326,8 +311,9 @@ export default function LibraryScreen() {
 
   const onItemDelete = () => {
     if (!selectedId) return;
-    setItems((prev) => prev.filter((it) => it.id !== selectedId));
+    const item = items.find((it) => it.id === selectedId);
     sheetRef.current?.dismiss();
+    if (item) undoableRemove(item);
   };
 
   const renderBackdrop = useCallback(

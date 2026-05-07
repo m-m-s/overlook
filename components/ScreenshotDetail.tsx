@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
@@ -21,7 +21,6 @@ import {
   URGENCIES,
 } from '@/lib/options';
 import {
-  deleteScreenshot,
   fetchScreenshotMeta,
   updateScreenshot,
   type TypedTag,
@@ -269,17 +268,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   };
 
   const onTrash = () => {
-    Alert.alert('Delete screenshot?', 'This removes it from your library.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteScreenshot(item.id, item.storagePath);
-          onDelete();
-        },
-      },
-    ]);
+    // Parent handles optimistic remove + 5-sec undo toast + commit (per spec).
+    onDelete();
   };
 
   const onShare = async () => {

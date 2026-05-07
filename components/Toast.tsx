@@ -1,13 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Animated, Pressable, StyleSheet, Text } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/lib/colors';
 
 type ToastKind = 'info' | 'error';
-type ToastEntry = { id: number; message: string; kind: ToastKind };
+type ToastAction = { label: string; onPress: () => void };
+type ToastEntry = { id: number; message: string; kind: ToastKind; action?: ToastAction; durationMs: number };
 
 type ToastApi = {
-  show: (message: string, kind?: ToastKind) => void;
+  show: (message: string, opts?: { kind?: ToastKind; action?: ToastAction; durationMs?: number }) => void;
   error: (message: string) => void;
   info: (message: string) => void;
 };
@@ -38,11 +39,12 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   }, [opacity]);
 
   const show = useCallback(
-    (message: string, kind: ToastKind = 'info') => {
+    (message: string, opts: { kind?: ToastKind; action?: ToastAction; durationMs?: number } = {}) => {
       if (timer.current) clearTimeout(timer.current);
-      setToast({ id: ++nextId, message, kind });
+      const durationMs = opts.durationMs ?? 4000;
+      setToast({ id: ++nextId, message, kind: opts.kind ?? 'info', action: opts.action, durationMs });
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
-      timer.current = setTimeout(() => dismiss(), 4000);
+      timer.current = setTimeout(() => dismiss(), durationMs);
     },
     [dismiss, opacity],
   );
@@ -55,8 +57,8 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
 
   const api: ToastApi = {
     show,
-    info: (m) => show(m, 'info'),
-    error: (m) => show(m, 'error'),
+    info: (m) => show(m, { kind: 'info' }),
+    error: (m) => show(m, { kind: 'error' }),
   };
 
   return (
@@ -65,19 +67,26 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       {toast && (
         <Animated.View
           pointerEvents="box-none"
-          style={[
-            styles.wrap,
-            { opacity },
-          ]}
+          style={[styles.wrap, { opacity }]}
         >
-          <Pressable
-            onPress={dismiss}
-            style={[styles.toast, toast.kind === 'error' && styles.toastError]}
-          >
-            <Text style={[styles.text, toast.kind === 'error' && styles.textError]}>
-              {toast.message}
-            </Text>
-          </Pressable>
+          <View style={[styles.toast, toast.kind === 'error' && styles.toastError]}>
+            <Pressable onPress={dismiss} style={styles.toastTextRow}>
+              <Text style={[styles.text, toast.kind === 'error' && styles.textError]}>
+                {toast.message}
+              </Text>
+            </Pressable>
+            {toast.action && (
+              <Pressable
+                onPress={() => {
+                  toast.action?.onPress();
+                  dismiss();
+                }}
+                style={styles.actionBtn}
+              >
+                <Text style={styles.actionText}>{toast.action.label}</Text>
+              </Pressable>
+            )}
+          </View>
         </Animated.View>
       )}
     </ToastContext.Provider>
@@ -94,12 +103,16 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
   toast: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.ink,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 4,
     maxWidth: 600,
+    minHeight: 44,
   },
+  toastTextRow: { flex: 1, flexShrink: 1 },
   toastError: {
     backgroundColor: '#C0392B',
   },
@@ -110,5 +123,20 @@ const styles = StyleSheet.create({
   },
   textError: {
     color: colors.parchment,
+  },
+  actionBtn: {
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: colors.parchment,
+  },
+  actionText: {
+    color: colors.parchment,
+    fontSize: 12,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
 });

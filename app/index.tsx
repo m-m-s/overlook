@@ -14,6 +14,7 @@ import { useFilters } from '@/lib/filtersContext';
 import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
 import { fetchScreenshots } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
+import { useUndoableDelete } from '@/lib/useUndoableDelete';
 
 const URGENT_KEYS = new Set(['today', 'expires_soon', 'this_week']);
 
@@ -39,6 +40,7 @@ export default function HomeScreen() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { filters, setFilters, applyFilters: applyFilterCtx } = useFilters();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { remove: undoableRemove } = useUndoableDelete(setItems);
   const [sheetIndex, setSheetIndex] = useState(0);
   const sheetRef = useRef<BottomSheetModal>(null);
   const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
@@ -72,8 +74,9 @@ export default function HomeScreen() {
 
   const onItemDelete = () => {
     if (!selectedId) return;
-    setItems((prev) => prev.filter((it) => it.id !== selectedId));
+    const item = items.find((it) => it.id === selectedId);
     sheetRef.current?.dismiss();
+    if (item) undoableRemove(item);
   };
 
   const onItemChange = (patch: Partial<LocalScreenshot>) => {
