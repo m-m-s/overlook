@@ -138,6 +138,7 @@ export default function LibraryScreen() {
   // 3 snap points lets user drag from 60% (compact) -> 85% -> 100% (full detail per spec).
   const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
   const bulkSnapPoints = useMemo(() => ['85%'], []);
+  const [sheetIndex, setSheetIndex] = useState(0);
 
   useEffect(() => {
     if (!session) return;
@@ -466,9 +467,15 @@ export default function LibraryScreen() {
         backgroundStyle={{ backgroundColor: colors.parchment }}
         handleIndicatorStyle={{ backgroundColor: colors.inkMuted }}
         onDismiss={() => setSelectedId(null)}
+        onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
       >
         {selected && (
-          <ScreenshotDetail item={selected} onChange={onItemChange} onDelete={onItemDelete} />
+          <ScreenshotDetail
+            item={selected}
+            onChange={onItemChange}
+            onDelete={onItemDelete}
+            snapIndex={sheetIndex}
+          />
         )}
       </BottomSheetModal>
 

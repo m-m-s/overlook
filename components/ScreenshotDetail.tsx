@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
@@ -26,6 +26,8 @@ type Props = {
   item: LocalScreenshot;
   onChange: (patch: Partial<LocalScreenshot>) => void;
   onDelete: () => void;
+  /** 0 = compact (60%), 1 = mid (85%), 2 = full (100%). Drives image size. */
+  snapIndex?: number;
 };
 
 /**
@@ -83,10 +85,25 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
   });
 };
 
-export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
+export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Props) => {
   const { session } = useSession();
   const toast = useToast();
   const [reanalyzing, setReanalyzing] = useState(false);
+  const [reanalyzeStatus, setReanalyzeStatus] = useState<string | null>(null);
+
+  // Image preview height grows with the snap index per spec ("Drag up for full
+  // detail view"). At compact snap, preview is a portrait thumbnail. At full,
+  // it's nearly the full screen height with the image rendered uncropped.
+  const previewStyle = useMemo(() => {
+    if (snapIndex >= 2) {
+      // Full snap: occupy most of the screen height, contain the image
+      return { width: '100%' as const, height: 560, marginBottom: 16, backgroundColor: colors.divider };
+    }
+    if (snapIndex === 1) {
+      return { width: '100%' as const, height: 380, marginBottom: 16, backgroundColor: colors.divider };
+    }
+    return { width: '100%' as const, height: 240, marginBottom: 16, backgroundColor: colors.divider };
+  }, [snapIndex]);
   const [manualTags, setManualTags] = useState<TypedTag[]>([]);
   const [aiTags, setAiTags] = useState<TypedTag[]>([]);
   const [aiSubjects, setAiSubjects] = useState<string[]>([]);
@@ -219,21 +236,36 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const onReanalyze = async () => {
     if (reanalyzing) return;
     setReanalyzing(true);
-    toast.info('analyzing with AI…');
+    setReanalyzeStatus('reading image…');
     try {
+      setReanalyzeStatus('sending to Claude…');
       const patch = await analyzeAndPersist(item.uri, item.id);
       if (!patch) {
-        toast.error('AI tagging failed. try again?');
+        setReanalyzeStatus(null);
+        toast.error('AI analysis failed — check Vercel function logs');
         return;
       }
+      setReanalyzeStatus('saving tags…');
       onChange(patch as Partial<LocalScreenshot>);
       // refresh local tag state so AI tags appear in the sheet
       const meta = await fetchScreenshotMeta(item.id);
       if (meta) {
         setAiTags(meta.ai_typed_tags);
         setAiSubjects(meta.ai_suggested_subjects);
+        const tagsAdded = meta.ai_typed_tags.length;
+        toast.show(
+          tagsAdded > 0
+            ? `tagged ✓ — ${tagsAdded} tag${tagsAdded === 1 ? '' : 's'}, category: ${patch.category ?? 'none'}`
+            : `tagged but AI returned no tags (category: ${patch.category ?? 'none'})`,
+        );
+      } else {
+        toast.error('analyzed but couldn\'t reload tags from server');
       }
-      toast.show('tagged ✓');
+      setReanalyzeStatus(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setReanalyzeStatus(null);
+      toast.error(`AI analyze threw: ${msg.slice(0, 100)}`);
     } finally {
       setReanalyzing(false);
     }
@@ -253,9 +285,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.scroll}>
-      {/* Image preview */}
-      <View style={styles.preview}>
-        <Image source={{ uri: item.uri }} style={styles.previewImg} contentFit="cover" />
+      {/* Image preview — grows with sheet snap index. Uses contentFit="contain"
+          so the entire image is visible (no cropping) at full snap. */}
+      <View style={previewStyle}>
+        <Image source={{ uri: item.uri }} style={styles.previewImg} contentFit="contain" />
         {showEdge && (
           <LinearGradient
             colors={edgeColors}
@@ -463,6 +496,13 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
         style={styles.notesInput}
       />
 
+      {/* Re-analyze status banner — visible inside the sheet so failures are debuggable */}
+      {reanalyzeStatus && (
+        <View style={styles.statusBanner}>
+          <Text style={styles.statusText}>{reanalyzeStatus}</Text>
+        </View>
+      )}
+
       {/* Footer actions: re-analyze + share + delete */}
       <View style={styles.footer}>
         {isAnalyzeConfigured && (
@@ -491,7 +531,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
 
 const styles = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 80, gap: 4 },
-  preview: { width: '100%', aspectRatio: 1.6, marginBottom: 16, backgroundColor: colors.divider },
   previewImg: { width: '100%', height: '100%' },
   previewEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: '18%' },
   previewCat: {
@@ -622,6 +661,19 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  statusBanner: {
+    marginTop: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: colors.ink,
+    borderRadius: 4,
+  },
+  statusText: {
+    color: colors.parchment,
+    fontSize: 12,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   footer: {
     flexDirection: 'row',
