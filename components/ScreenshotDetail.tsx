@@ -28,6 +28,36 @@ const SectionLabel = ({ children }: { children: string }) => (
   <Text style={styles.sectionLabel}>{children}</Text>
 );
 
+type DisplayTag =
+  | { tag: TypedTag; source: 'manual'; manualIndex: number; aiIndex?: undefined }
+  | { tag: TypedTag; source: 'ai'; aiIndex: number; manualIndex?: undefined };
+
+/**
+ * Merge manual + AI tags and order them per CLAUDE.md:
+ * "Typed tags first (in type hierarchy order) → untyped tags after.
+ *  Within the same type, alphabetical."
+ *
+ * Manual/AI distinction is purely visual (filled vs outlined) — they share
+ * the same sort space.
+ */
+const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => {
+  const all: DisplayTag[] = [
+    ...manual.map((tag, manualIndex): DisplayTag => ({ tag, source: 'manual', manualIndex })),
+    ...ai.map((tag, aiIndex): DisplayTag => ({ tag, source: 'ai', aiIndex })),
+  ];
+  const typeRank = (t?: string): number => {
+    if (!t) return TAG_TYPES.length; // untyped → last
+    const idx = (TAG_TYPES as readonly string[]).indexOf(t);
+    return idx === -1 ? TAG_TYPES.length : idx;
+  };
+  return all.sort((a, b) => {
+    const ra = typeRank(a.tag.type);
+    const rb = typeRank(b.tag.type);
+    if (ra !== rb) return ra - rb;
+    return a.tag.value.localeCompare(b.tag.value);
+  });
+};
+
 export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const { session } = useSession();
   const [manualTags, setManualTags] = useState<TypedTag[]>([]);
@@ -225,31 +255,35 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
         })}
       </ScrollView>
 
-      {/* Tags */}
+      {/* Tags — manual + AI mixed, sorted by spec hierarchy: typed first (in TAG_TYPES order), alphabetical within type, untyped last. */}
       <SectionLabel>tags</SectionLabel>
       <View style={[styles.row, styles.wrap]}>
-        {manualTags.map((tag, idx) => (
-          <Chip
-            key={`${tag.value}-${idx}`}
-            label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
-            variant="manual"
-            onPress={() => {
-              // Cycle the tag type on tap (untyped -> first type -> next -> ... -> untyped)
-              const types = [undefined, ...TAG_TYPES] as (string | undefined)[];
-              const cur = types.indexOf(tag.type);
-              const next = types[(cur + 1) % types.length];
-              setTagType(idx, next);
-            }}
-            onRemove={() => removeTag(idx)}
-          />
-        ))}
-        {aiTags.map((tag, idx) => (
-          <Chip
-            key={`ai-${tag.value}-${idx}`}
-            label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
-            variant="ai"
-          />
-        ))}
+        {sortedDisplayTags(manualTags, aiTags).map((entry) => {
+          const { tag, source, manualIndex } = entry;
+          if (source === 'manual') {
+            return (
+              <Chip
+                key={`m-${tag.value}-${manualIndex}`}
+                label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
+                variant="manual"
+                onPress={() => {
+                  const types = [undefined, ...TAG_TYPES] as (string | undefined)[];
+                  const cur = types.indexOf(tag.type);
+                  const next = types[(cur + 1) % types.length];
+                  setTagType(manualIndex, next);
+                }}
+                onRemove={() => removeTag(manualIndex)}
+              />
+            );
+          }
+          return (
+            <Chip
+              key={`a-${tag.value}-${entry.aiIndex}`}
+              label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
+              variant="ai"
+            />
+          );
+        })}
       </View>
       <View style={styles.addTagRow}>
         <BottomSheetTextInput
