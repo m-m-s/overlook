@@ -38,6 +38,7 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - If she signals confusion, stop and explain — don't steamroll.
 - **Teach as you go.** After non-trivial code/config changes, briefly explain what the new code does and why this approach over alternatives. 2-4 sentences max.
 - **Follow the spec.** Default to spec compliance (CLAUDE.md, SPRINT.md, mockups). Deviations need a real reason (technical constraint, sprint cut). Don't quietly take "sprint speed" shortcuts that aren't justified.
+- **Keep building.** Less than 48h on the sprint clock (minus sleep + commute). Bias toward action — only stop to ask when undoing would be harder than building. Add things, run the type-check, commit, push, move on.
 
 ## Things to remember before the account switch
 
