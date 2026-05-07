@@ -41,6 +41,16 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - **Keep building.** Less than 48h on the sprint clock (minus sleep + commute). Bias toward action — only stop to ask when undoing would be harder than building. Add things, run the type-check, commit, push, move on.
 - **Keep deepening.** When something has ranged data (dictionary entries, prompt content, options lists), don't ship the minimum-viable and call it done. Expand iteratively as time allows. Maggie will notice if something feels shallow at the end.
 
+## Phone-test debugging tips
+
+- **Magic link "dimmed screen" / "site can't be reached":** the link redirected to `localhost:3000` because Supabase's default Site URL is set there AND our `exp://*` allowlist wildcard didn't match the specific dev URL. Two fixes:
+  - Use the 6-digit OTP code instead — requires updating Supabase email template to include `{{ .Token }}` in body.
+  - OR set Site URL to `overlook://` in Supabase URL config (only helps if redirect already worked, which on Expo Go it might not).
+- **Reload app code on phone:** Shake the phone (literally — accelerometer trigger) → tap **Reload**, OR press `r` in the `npx expo start` terminal.
+- **First bundling takes ~1-2 min in Expo Go.** Subsequent reloads are faster (Metro caches).
+- **Phone needs same WiFi as Mac** running `npx expo start`. If on different networks, use `npx expo start --tunnel` (slower, more reliable).
+- **No background work between Claude turns:** Claude only runs during a message-response cycle. When the user is offline (sleep, commute), no code is being written. Plan sprint time accordingly.
+
 ## Shallow-implementation watchlist (deepen iteratively)
 
 - **AI vision prompt** in `server/api/analyze.ts` is a baseline I wrote, NOT Maggie's tested prompt. Swap when she pastes it.
