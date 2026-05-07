@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { sendMagicLink, verifyEmailOtp } from '@/lib/auth';
+import { sendMagicLink, signInWithPassword, signUpWithPassword, verifyEmailOtp } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 
-type Status = 'idle' | 'sending' | 'sent' | 'verifying' | 'error';
+type Mode = 'magic' | 'password';
+type Status = 'idle' | 'sending' | 'sent' | 'verifying' | 'pwd-loading' | 'error';
 
 export const SignIn = () => {
+  const [mode, setMode] = useState<Mode>('magic');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -44,6 +47,36 @@ export const SignIn = () => {
     // success: useSession picks up the new session; this component unmounts
   };
 
+  const onPasswordAuth = async (action: 'signin' | 'signup') => {
+    if (!email.includes('@')) {
+      setErrorMsg('Enter a valid email');
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters');
+      return;
+    }
+    setStatus('pwd-loading');
+    setErrorMsg(null);
+    const { error } =
+      action === 'signin'
+        ? await signInWithPassword(email, password)
+        : await signUpWithPassword(email, password);
+    if (error) {
+      setErrorMsg(error);
+      setStatus('idle');
+    }
+    // success: useSession picks up the new session; this component unmounts
+  };
+
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setStatus('idle');
+    setErrorMsg(null);
+    setCode('');
+    setPassword('');
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -53,7 +86,58 @@ export const SignIn = () => {
         <Text style={styles.title}>Overlook</Text>
         <Text style={styles.sub}>your screenshot library</Text>
 
-        {status === 'sent' || status === 'verifying' ? (
+        {mode === 'password' ? (
+          <View>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="email"
+              placeholderTextColor={colors.inkMuted}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              editable={status !== 'pwd-loading'}
+              style={styles.input}
+            />
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="password"
+              placeholderTextColor={colors.inkMuted}
+              autoCapitalize="none"
+              secureTextEntry
+              editable={status !== 'pwd-loading'}
+              style={styles.input}
+            />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable
+                onPress={() => onPasswordAuth('signin')}
+                disabled={status === 'pwd-loading'}
+                style={({ pressed }) => [styles.btn, { flex: 1 }, pressed && { opacity: 0.7 }]}
+              >
+                {status === 'pwd-loading' ? (
+                  <ActivityIndicator color={colors.parchment} />
+                ) : (
+                  <Text style={styles.btnText}>sign in</Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => onPasswordAuth('signup')}
+                disabled={status === 'pwd-loading'}
+                style={({ pressed }) => [styles.btnOutlined, { flex: 1 }, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.btnOutlinedText}>sign up</Text>
+              </Pressable>
+            </View>
+            {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+            <Pressable onPress={() => switchMode('magic')} style={styles.linkBtn}>
+              <Text style={styles.linkBtnText}>← back to magic link</Text>
+            </Pressable>
+            <Text style={styles.devNote}>
+              dev fallback. magic link is the primary path. requires &quot;confirm email&quot; turned OFF in supabase auth settings for sign-up to work without sending email.
+            </Text>
+          </View>
+        ) : status === 'sent' || status === 'verifying' ? (
           <View style={styles.sentBox}>
             <Text style={styles.sentTitle}>check your email</Text>
             <Text style={styles.sentBody}>
@@ -114,6 +198,9 @@ export const SignIn = () => {
               )}
             </Pressable>
             {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
+            <Pressable onPress={() => switchMode('password')} style={styles.linkBtn}>
+              <Text style={styles.linkBtnText}>use password instead (dev)</Text>
+            </Pressable>
           </>
         )}
       </View>
@@ -174,5 +261,26 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     textDecorationLine: 'underline',
+  },
+  btnOutlined: {
+    borderWidth: 1,
+    borderColor: colors.ink,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 4,
+  },
+  btnOutlinedText: {
+    color: colors.ink,
+    fontSize: 13,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  devNote: {
+    marginTop: 24,
+    fontSize: 11,
+    color: colors.inkMuted,
+    fontStyle: 'italic',
+    lineHeight: 16,
   },
 });

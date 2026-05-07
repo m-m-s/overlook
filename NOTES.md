@@ -2,6 +2,20 @@
 
 Running scratchpad of decisions, gotchas, prompt versions, and anything else not in CLAUDE.md / SPRINT.md. Survives the Max → Pro account switch; chat history does not.
 
+## Open TODOs (post-sprint decisions)
+
+- **Email/password auth.** Added 2026-05-07 as a dev fallback while magic-link email delivery was rate-limited. Magic link is primary per spec. **Decide post-sprint:** keep password as a permanent fallback option (good UX for users who lose access to email or can't get the link to bounce back), or remove it (simpler, fewer auth paths to secure). If keeping, gate the "use password" link behind a settings flag so it's not on the main sign-in screen.
+
+## Auth email rate-limit reality (2026-05-07)
+
+Supabase free-tier auth email rate limit is **project-wide ~3-4/hour**, NOT per recipient. The `+alias` trick (`maggie+test@miplata.com`) does NOT bypass it because the limit applies to the project, not the recipient address. Hit during initial phone testing.
+
+**Implications:**
+- Cannot rely on email-only auth (magic link, email confirm) for development testing or for any production flow with non-trivial user load.
+- For dev: use email/password auth with "Confirm email" toggled OFF in Supabase project settings (Auth → Providers → Email).
+- For production: configure custom SMTP. Options: Resend ($0/month for 3k emails, recommended), SendGrid (free tier 100/day), AWS SES, Postmark. Set up via Supabase → Auth → Email → SMTP settings.
+- Long-term auth flow design needs to assume low email throughput on free tier — a 100-user product hitting the rate limit during a launch spike is a real failure mode.
+
 ## Decisions
 
 - **2026-05-07** Initialized via `create-expo-app@latest --template default` → Expo SDK 54, Expo Router 6, RN 0.81, React 19. Template default ships with `(tabs)` layout — we'll flatten it for sprint since spec calls for no nav bar.

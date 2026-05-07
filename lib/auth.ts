@@ -106,3 +106,41 @@ export const signOut = async (): Promise<void> => {
   if (!isSupabaseConfigured) return;
   await supabase.auth.signOut();
 };
+
+/**
+ * Email + password sign-in. Used as a dev fallback when magic-link email
+ * delivery is rate-limited or unreliable. Magic link remains primary auth
+ * per spec; this is a development-time alternate path.
+ *
+ * TODO post-sprint: decide whether to keep password as a fallback option in
+ * production or remove. (Tracked in NOTES.md.)
+ */
+export const signInWithPassword = async (
+  email: string,
+  password: string,
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured) return { error: 'Supabase not configured' };
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  return { error: error?.message ?? null };
+};
+
+/**
+ * Email + password sign-up. Requires Supabase project to have "Confirm
+ * email" toggled OFF (Authentication → Providers → Email) — otherwise this
+ * will queue a confirmation email and hit the same rate limit we're trying
+ * to avoid.
+ */
+export const signUpWithPassword = async (
+  email: string,
+  password: string,
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured) return { error: 'Supabase not configured' };
+  const { error } = await supabase.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  return { error: error?.message ?? null };
+};
