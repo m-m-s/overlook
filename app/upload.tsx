@@ -135,7 +135,11 @@ export default function UploadScreen() {
       try {
         const fp = fingerprintAsset(asset);
         const fileCreatedAt = new Date(asset.creationTime).toISOString();
-        const local = await uploadScreenshot(asset.uri, { fileHash: fp, fileCreatedAt });
+        const local = await uploadScreenshot(asset.uri, {
+          fileHash: fp,
+          fileCreatedAt,
+          deviceAssetId: asset.id,
+        });
         if (analyze && isAnalyzeConfigured) {
           await analyzeAndPersist(asset.uri, local.id);
         }

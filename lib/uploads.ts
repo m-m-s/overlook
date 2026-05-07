@@ -9,6 +9,8 @@ export type LocalScreenshot = {
   uri: string;
   storagePath?: string;
   createdAt: string;
+  /** expo-media-library asset id, when the screenshot was imported from the device. */
+  deviceAssetId?: string | null;
   category?: string | null;
   subject?: string | null;
   status?: string | null;
@@ -51,7 +53,7 @@ const uriToBytes = async (uri: string): Promise<ArrayBuffer> => {
  */
 export const uploadScreenshot = async (
   uri: string,
-  opts: { fileHash?: string; fileCreatedAt?: string } = {},
+  opts: { fileHash?: string; fileCreatedAt?: string; deviceAssetId?: string } = {},
 ): Promise<LocalScreenshot> => {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const createdAt = new Date().toISOString();
@@ -83,13 +85,14 @@ export const uploadScreenshot = async (
     storage_path: storagePath,
     file_hash: opts.fileHash ?? null,
     file_created_at: opts.fileCreatedAt ?? null,
+    device_asset_id: opts.deviceAssetId ?? null,
   });
   if (insertErr) {
     // eslint-disable-next-line no-console
     console.warn('[uploadScreenshot] row insert failed', insertErr);
   }
 
-  return { id, uri, storagePath, createdAt };
+  return { id, uri, storagePath, createdAt, deviceAssetId: opts.deviceAssetId ?? null };
 };
 
 /** Get the set of file_hash values already stored for the current user. */

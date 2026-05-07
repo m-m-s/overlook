@@ -19,6 +19,7 @@ type Row = {
   id: string;
   storage_path: string;
   created_at: string;
+  device_asset_id: string | null;
   category: string | null;
   subject: string | null;
   status: string | null;
@@ -47,7 +48,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   const { data, error } = await supabase
     .from('screenshots')
     .select(
-      'id, storage_path, created_at, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, manual_typed_tags, ai_typed_tags, notes',
+      'id, storage_path, created_at, device_asset_id, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, manual_typed_tags, ai_typed_tags, notes',
     )
     .order('created_at', { ascending: false })
     .limit(500);
@@ -78,6 +79,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     uri: signed[i]?.signedUrl ?? '',
     storagePath: r.storage_path,
     createdAt: r.created_at,
+    deviceAssetId: r.device_asset_id,
     category: r.category,
     subject: r.subject,
     status: r.status,

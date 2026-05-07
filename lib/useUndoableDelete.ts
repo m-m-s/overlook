@@ -1,6 +1,38 @@
+import * as MediaLibrary from 'expo-media-library';
+import { Alert } from 'react-native';
+
 import { useToast } from '@/components/Toast';
 import { deleteScreenshot, deleteScreenshots } from './screenshots';
 import type { LocalScreenshot } from './uploads';
+
+/** After commit, ask user if they want to delete the original from device. */
+const offerDeleteFromDevice = async (assetIds: string[]): Promise<void> => {
+  if (assetIds.length === 0) return;
+  Alert.alert(
+    `Also delete from device?`,
+    assetIds.length === 1
+      ? "Removes the original from your phone's gallery. The Overlook copy is already gone."
+      : `Removes ${assetIds.length} originals from your phone's gallery. Overlook copies are already gone.`,
+    [
+      { text: 'Keep on device', style: 'cancel' },
+      {
+        text: 'Delete from device',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const perm = await MediaLibrary.requestPermissionsAsync(true);
+            if (!perm.granted) {
+              return;
+            }
+            await MediaLibrary.deleteAssetsAsync(assetIds);
+          } catch (err) {
+            console.warn('[delete from device] failed', err);
+          }
+        },
+      },
+    ],
+  );
+};
 
 /**
  * Soft-delete with a 5-second undo window per CLAUDE.md.
@@ -40,10 +72,13 @@ export const useUndoableDelete = (
       },
     });
 
-    // 3. Commit after 5s if not undone
+    // 3. Commit after 5s if not undone, then offer device-delete
     setTimeout(async () => {
       if (undone) return;
       await deleteScreenshot(item.id, item.storagePath);
+      if (item.deviceAssetId) {
+        await offerDeleteFromDevice([item.deviceAssetId]);
+      }
     }, 5000);
   };
 
@@ -75,6 +110,12 @@ export const useUndoableDelete = (
     setTimeout(async () => {
       if (undone) return;
       await deleteScreenshots(items.map((i) => ({ id: i.id, storagePath: i.storagePath })));
+      const assetIds = items
+        .map((i) => i.deviceAssetId)
+        .filter((x): x is string => Boolean(x));
+      if (assetIds.length > 0) {
+        await offerDeleteFromDevice(assetIds);
+      }
     }, 5000);
   };
 
