@@ -1,6 +1,7 @@
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import * as Linking from 'expo-linking';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
@@ -11,7 +12,6 @@ import { colors } from '@/lib/colors';
 
 export default function RootLayout() {
   useEffect(() => {
-    // Handle the magic-link redirect that opens the app from the email.
     Linking.getInitialURL().then((url) => {
       if (url) handleAuthDeepLink(url);
     });
@@ -23,8 +23,10 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.parchment }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.parchment } }} />
-      <StatusBar style="dark" />
+      <BottomSheetModalProvider>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.parchment } }} />
+        <StatusBar style="dark" />
+      </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }

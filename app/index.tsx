@@ -1,8 +1,10 @@
+import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, type CardData } from '@/components/Card';
+import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { SignIn } from '@/components/SignIn';
 import { useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
@@ -26,8 +28,11 @@ export default function LibraryScreen() {
   const { session, loading } = useSession();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Hydrate from Supabase when signed in.
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['70%', '95%'], []);
+
   useEffect(() => {
     if (!session) return;
     fetchScreenshots().then((rows) => setItems(rows));
@@ -54,6 +59,31 @@ export default function LibraryScreen() {
     }
   };
 
+  const openDetail = (it: LocalScreenshot) => {
+    setSelectedId(it.id);
+    sheetRef.current?.present();
+  };
+
+  const onItemChange = (patch: Partial<LocalScreenshot>) => {
+    if (!selectedId) return;
+    setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
+  };
+
+  const onItemDelete = () => {
+    if (!selectedId) return;
+    setItems((prev) => prev.filter((it) => it.id !== selectedId));
+    sheetRef.current?.dismiss();
+  };
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.4} />
+    ),
+    [],
+  );
+
+  const selected = items.find((it) => it.id === selectedId) ?? null;
+
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -62,8 +92,6 @@ export default function LibraryScreen() {
     );
   }
 
-  // Show sign-in only when supabase is configured but the user isn't signed in.
-  // In local-only mode (no env), we allow browsing without auth.
   if (isSupabaseConfigured && !session) {
     return <SignIn />;
   }
@@ -93,7 +121,7 @@ export default function LibraryScreen() {
           ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
           renderItem={({ item }) => (
             <View style={styles.cell}>
-              <Card data={toCardData(item)} />
+              <Card data={toCardData(item)} onPress={() => openDetail(item)} />
             </View>
           )}
         />
@@ -108,6 +136,19 @@ export default function LibraryScreen() {
           <Text style={styles.fabText}>{busy ? '…' : '+'}</Text>
         </Pressable>
       )}
+
+      <BottomSheetModal
+        ref={sheetRef}
+        snapPoints={snapPoints}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: colors.parchment }}
+        handleIndicatorStyle={{ backgroundColor: colors.inkMuted }}
+        onDismiss={() => setSelectedId(null)}
+      >
+        {selected && (
+          <ScreenshotDetail item={selected} onChange={onItemChange} onDelete={onItemDelete} />
+        )}
+      </BottomSheetModal>
     </View>
   );
 }

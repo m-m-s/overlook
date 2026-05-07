@@ -1,6 +1,17 @@
 import { isSupabaseConfigured, supabase } from './supabase';
 import type { LocalScreenshot } from './uploads';
 
+export type ScreenshotPatch = Partial<{
+  category: string | null;
+  subject: string | null;
+  status: string | null;
+  urgency: string | null;
+  urgency_date: string | null;
+  resonance: 1 | 2 | 3 | null;
+  notes: string | null;
+  manual_typed_tags: { type?: string; value: string }[];
+}>;
+
 type Row = {
   id: string;
   storage_path: string;
@@ -59,4 +70,45 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     urgency: r.urgency,
     resonance: (r.resonance === 1 || r.resonance === 2 || r.resonance === 3 ? r.resonance : null),
   }));
+};
+
+export const updateScreenshot = async (id: string, patch: ScreenshotPatch): Promise<void> => {
+  if (!isSupabaseConfigured) return;
+  const { error } = await supabase.from('screenshots').update(patch).eq('id', id);
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[screenshots] update failed', error);
+  }
+};
+
+export const deleteScreenshot = async (id: string, storagePath?: string): Promise<void> => {
+  if (!isSupabaseConfigured) return;
+  if (storagePath) {
+    await supabase.storage.from('screenshots').remove([storagePath]);
+  }
+  const { error } = await supabase.from('screenshots').delete().eq('id', id);
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[screenshots] delete failed', error);
+  }
+};
+
+export type TypedTag = { type?: string; value: string };
+
+/** Fetch a single screenshot's manual tags + notes (not preloaded in list query). */
+export const fetchScreenshotMeta = async (
+  id: string,
+): Promise<{ manual_typed_tags: TypedTag[]; ai_typed_tags: TypedTag[]; notes: string | null } | null> => {
+  if (!isSupabaseConfigured) return null;
+  const { data, error } = await supabase
+    .from('screenshots')
+    .select('manual_typed_tags, ai_typed_tags, notes')
+    .eq('id', id)
+    .single();
+  if (error || !data) return null;
+  return {
+    manual_typed_tags: (data.manual_typed_tags ?? []) as TypedTag[],
+    ai_typed_tags: (data.ai_typed_tags ?? []) as TypedTag[],
+    notes: data.notes,
+  };
 };

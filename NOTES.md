@@ -13,7 +13,8 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 
 ## Gotchas to capture as we hit them
 
-(empty — will fill in)
+- **2026-05-07** Card component edge bleed: spec shows a vertical fade-to-transparent on the top color band, but expo-linear-gradient is single-axis. Sprint v1 ships a sharp ~22% band; vertical fade can be added later via stacked gradients or react-native-skia.
+- **2026-05-07** Category icons use @expo/vector-icons (Material/Ionicons) for sprint speed instead of hand-drawn 24x24 silhouettes per spec. Visual fidelity gap; swap for polish.
 
 ## Prompt versions (Claude vision)
 
