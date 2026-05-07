@@ -3,12 +3,12 @@ import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BulkTagSheet } from '@/components/BulkTagSheet';
 import { Card, type CardData } from '@/components/Card';
-import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
+import { applyFilters, emptyFilters, FilterBar, filtersActive, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
@@ -59,6 +59,24 @@ export default function LibraryScreen() {
   useEffect(() => {
     AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
   }, [cols]);
+
+  // Android hardware back: in multi-select mode, clear the selection instead
+  // of exiting the app. With active filters, clear filters first. Otherwise
+  // fall through to default behavior.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (inSelectMode) {
+        exitMultiSelect();
+        return true; // consumed
+      }
+      if (filtersActive(filters) > 0) {
+        setFilters(emptyFilters());
+        return true;
+      }
+      return false; // let OS handle (exit app)
+    });
+    return () => sub.remove();
+  }, [inSelectMode, filters]);
 
   // First-card hint: when items first appear, drop a one-time toast pointing
   // at the gestures users wouldn't discover otherwise.
@@ -126,6 +144,42 @@ export default function LibraryScreen() {
     fetchScreenshots().then((rows) => setItems(rows));
   }, [session]);
 
+  // Two-step upload per spec privacy model: pick first, then user explicitly
+  // chooses to analyze with AI or add without AI. "Nothing auto-sends ever."
+  const runUpload = async (assets: ImagePicker.ImagePickerAsset[], analyze: boolean) => {
+    const uploads = await Promise.all(assets.map((a) => uploadScreenshot(a.uri)));
+
+    // Show cards immediately
+    setItems((prev) => [...uploads, ...prev]);
+
+    if (!analyze || !isAnalyzeConfigured) return;
+
+    // Mark as analyzing
+    setAnalyzingIds((prev) => {
+      const next = new Set(prev);
+      for (const u of uploads) next.add(u.id);
+      return next;
+    });
+
+    let failures = 0;
+    for (const u of uploads) {
+      void (async () => {
+        const patch = await analyzeAndPersist(u.uri, u.id);
+        setAnalyzingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(u.id);
+          return next;
+        });
+        if (!patch) {
+          failures++;
+          if (failures === 1) toast.error('AI tagging failed for some images — retry from card detail');
+          return;
+        }
+        setItems((prev) => prev.map((it) => (it.id === u.id ? { ...it, ...patch } : it)));
+      })();
+    }
+  };
+
   const onPick = async () => {
     setBusy(true);
     try {
@@ -141,44 +195,33 @@ export default function LibraryScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
-        // Sprint v1: cap at 10 so 10 simultaneous base64 reads + AI calls don't
-        // crash the phone process. Bulk import (per CLAUDE.md) is a separate flow.
         selectionLimit: 10,
         quality: 0.9,
       });
-      if (result.canceled) return;
+      if (result.canceled || result.assets.length === 0) return;
 
-      const uploads = await Promise.all(result.assets.map((a) => uploadScreenshot(a.uri)));
+      const count = result.assets.length;
+      const assets = result.assets;
 
-      // 1) Show the cards immediately (no AI tags yet).
-      setItems((prev) => [...uploads, ...prev]);
-
-      // 2) Mark them as analyzing only if AI is configured.
+      // Per spec privacy model: "Nothing auto-sends ever. Post-screenshot popup
+      // requires explicit tap to analyze." Confirm before AI analysis.
       if (isAnalyzeConfigured) {
-        setAnalyzingIds((prev) => {
-          const next = new Set(prev);
-          for (const u of uploads) next.add(u.id);
-          return next;
-        });
-
-        let failures = 0;
-        // 3) Fire analyses after setItems so the cards exist before patches arrive.
-        for (const u of uploads) {
-          void (async () => {
-            const patch = await analyzeAndPersist(u.uri, u.id);
-            setAnalyzingIds((prev) => {
-              const next = new Set(prev);
-              next.delete(u.id);
-              return next;
-            });
-            if (!patch) {
-              failures++;
-              if (failures === 1) toast.error('AI tagging failed for some images — try retry from card detail');
-              return;
-            }
-            setItems((prev) => prev.map((it) => (it.id === u.id ? { ...it, ...patch } : it)));
-          })();
-        }
+        Alert.alert(
+          `Add ${count} screenshot${count === 1 ? '' : 's'}?`,
+          'Choose how to add them. AI tagging sends each image to Claude for analysis (~$0.003/image). "Add without AI" keeps them local-only — you can tag manually or analyze later from the card detail view.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Add without AI', onPress: () => void runUpload(assets, false) },
+            {
+              text: 'Analyze with AI',
+              style: 'default',
+              onPress: () => void runUpload(assets, true),
+            },
+          ],
+        );
+      } else {
+        // No AI configured — just add them
+        await runUpload(assets, false);
       }
     } finally {
       setBusy(false);
