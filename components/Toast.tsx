@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { animDuration, useReduceMotion } from '@/lib/a11y';
 import { colors } from '@/lib/colors';
 
 type ToastKind = 'info' | 'error';
@@ -31,22 +32,31 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const [toast, setToast] = useState<ToastEntry | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reduceMotion = useReduceMotion();
 
   const dismiss = useCallback(() => {
-    Animated.timing(opacity, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
+    Animated.timing(opacity, {
+      toValue: 0,
+      duration: animDuration(180, reduceMotion),
+      useNativeDriver: true,
+    }).start(() => {
       setToast(null);
     });
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
 
   const show = useCallback(
     (message: string, opts: { kind?: ToastKind; action?: ToastAction; durationMs?: number } = {}) => {
       if (timer.current) clearTimeout(timer.current);
       const durationMs = opts.durationMs ?? 4000;
       setToast({ id: ++nextId, message, kind: opts.kind ?? 'info', action: opts.action, durationMs });
-      Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: animDuration(180, reduceMotion),
+        useNativeDriver: true,
+      }).start();
       timer.current = setTimeout(() => dismiss(), durationMs);
     },
-    [dismiss, opacity],
+    [dismiss, opacity, reduceMotion],
   );
 
   useEffect(() => {

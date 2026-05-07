@@ -4,6 +4,7 @@ import { Animated, Dimensions, Pressable, ScrollView, StyleSheet, Text, TextInpu
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
+import { animDuration, useReduceMotion } from '@/lib/a11y';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
@@ -52,23 +53,25 @@ export const Sidebar = ({
   userEmail,
 }: Props) => {
   const { searchQuery, setSearchQuery } = useFilters();
+  const reduceMotion = useReduceMotion();
   const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    const dur = animDuration(240, reduceMotion);
     Animated.parallel([
       Animated.timing(translateX, {
         toValue: open ? 0 : -SIDEBAR_WIDTH,
-        duration: 240,
+        duration: dur,
         useNativeDriver: true,
       }),
       Animated.timing(backdropOpacity, {
         toValue: open ? 0.45 : 0,
-        duration: 240,
+        duration: dur,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [open, translateX, backdropOpacity]);
+  }, [open, translateX, backdropOpacity, reduceMotion]);
 
   const active = filtersActive(filters);
 
