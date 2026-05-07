@@ -23,6 +23,7 @@ type Props = {
   category: Category | string | null | undefined;
   size?: number;
   color?: string;
+  accessibilityLabel?: string;
 };
 
 /**
@@ -50,9 +51,16 @@ const ICON_NAME: Record<Category, React.ComponentProps<typeof Ionicons>['name']>
   documents: 'document',
 };
 
-export const CategoryIcon = ({ category, size = 22, color = colors.parchment }: Props) => {
+export const CategoryIcon = ({ category, size = 22, color = colors.parchment, accessibilityLabel }: Props) => {
   if (!category) return null;
   const name = ICON_NAME[category as Category];
   if (!name) return null;
-  return <Ionicons name={name} size={size} color={color} />;
+  return (
+    <Ionicons
+      name={name}
+      size={size}
+      color={color}
+      accessibilityLabel={accessibilityLabel ?? `Category: ${category}`}
+    />
+  );
 };

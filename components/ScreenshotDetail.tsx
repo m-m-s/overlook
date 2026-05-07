@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
@@ -155,14 +155,19 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   const [editingSections, setEditingSections] = useState<Set<string>>(new Set());
 
   const isEditing = (key: string) => editingSections.has(key);
-  const toggleEditing = (key: string) =>
+  const toggleEditing = (key: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setEditingSections((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  const closeAllEditing = () => setEditingSections(new Set());
+  };
+  const closeAllEditing = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setEditingSections(new Set());
+  };
 
   // The "view" model = item + pending. UI reads from this; persist only on Apply.
   const view = {

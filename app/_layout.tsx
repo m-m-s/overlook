@@ -3,7 +3,7 @@ import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, UIManager, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import 'react-native-url-polyfill/auto';
@@ -16,6 +16,11 @@ import { colors } from '@/lib/colors';
 import { FilterProvider } from '@/lib/filtersContext';
 import { ScreenshotWatcherProvider } from '@/lib/screenshotWatcher';
 import { isSupabaseConfigured } from '@/lib/supabase';
+
+// Enable Android LayoutAnimation so add/remove transitions are smooth.
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const RootGate = () => {
   const { session, loading } = useSession();

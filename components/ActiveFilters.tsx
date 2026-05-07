@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { SaveFilterButton } from './SaveFilterButton';
@@ -20,6 +20,10 @@ const removeFromSet = <T,>(s: Set<T>, v: T): Set<T> => {
   const next = new Set(s);
   next.delete(v);
   return next;
+};
+
+const animateNext = () => {
+  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 };
 
 /**
@@ -73,7 +77,10 @@ export const ActiveFilters = ({
               variant="meta"
               selected
               color={urgencyColors[u] ?? colors.ink}
-              onRemove={() => onChange({ ...filters, urgencies: removeFromSet(filters.urgencies, u) })}
+              onRemove={() => {
+                animateNext();
+                onChange({ ...filters, urgencies: removeFromSet(filters.urgencies, u) });
+              }}
             />
           ))}
           {Array.from(filters.statuses).map((s) => (
@@ -83,7 +90,10 @@ export const ActiveFilters = ({
               variant="meta"
               selected
               color={statusColors[s] ?? colors.ink}
-              onRemove={() => onChange({ ...filters, statuses: removeFromSet(filters.statuses, s) })}
+              onRemove={() => {
+                animateNext();
+                onChange({ ...filters, statuses: removeFromSet(filters.statuses, s) });
+              }}
             />
           ))}
           {Array.from(filters.categories).map((c) => (
@@ -93,7 +103,10 @@ export const ActiveFilters = ({
               variant="meta"
               selected
               color={colors.ink}
-              onRemove={() => onChange({ ...filters, categories: removeFromSet(filters.categories, c) })}
+              onRemove={() => {
+                animateNext();
+                onChange({ ...filters, categories: removeFromSet(filters.categories, c) });
+              }}
             />
           ))}
           {Array.from(filters.resonances).map((r) => (
@@ -103,7 +116,10 @@ export const ActiveFilters = ({
               variant="meta"
               selected
               color={colors.ink}
-              onRemove={() => onChange({ ...filters, resonances: removeFromSet(filters.resonances, r) })}
+              onRemove={() => {
+                animateNext();
+                onChange({ ...filters, resonances: removeFromSet(filters.resonances, r) });
+              }}
             />
           ))}
         </ScrollView>

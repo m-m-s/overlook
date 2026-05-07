@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { ActiveFilters } from '@/components/ActiveFilters';
@@ -23,6 +23,7 @@ import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { fetchScreenshots } from '@/lib/screenshots';
+import { animDuration, useReduceMotion } from '@/lib/a11y';
 import { heavyHaptic, warnHaptic } from '@/lib/haptics';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -40,6 +41,52 @@ const toCardData = (it: LocalScreenshot): CardData => ({
   urgency: (it.urgency as keyof typeof urgencyColors) ?? null,
   resonance: it.resonance ?? null,
 });
+
+/** Multi-select top bar: slides down from above when active, slides up when not. */
+const BulkBar = ({
+  visible,
+  count,
+  onCancel,
+  onTag,
+  onDelete,
+}: {
+  visible: boolean;
+  count: number;
+  onCancel: () => void;
+  onTag: () => void;
+  onDelete: () => void;
+}) => {
+  const reduceMotion = useReduceMotion();
+  const translateY = useRef(new Animated.Value(-110)).current;
+
+  useEffect(() => {
+    Animated.timing(translateY, {
+      toValue: visible ? 0 : -110,
+      duration: animDuration(220, reduceMotion),
+      useNativeDriver: true,
+    }).start();
+  }, [visible, translateY, reduceMotion]);
+
+  return (
+    <Animated.View
+      pointerEvents={visible ? 'auto' : 'none'}
+      style={[styles.bulkBar, { transform: [{ translateY }] }]}
+    >
+      <Pressable onPress={onCancel} hitSlop={12} style={styles.bulkIconBtn} accessibilityLabel="Cancel selection">
+        <Ionicons name="close" size={22} color={colors.parchment} />
+      </Pressable>
+      <Text style={styles.bulkCount}>{count} selected</Text>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Pressable onPress={onTag} hitSlop={12} style={styles.bulkIconBtn} accessibilityLabel="Bulk tag">
+          <Ionicons name="pricetag-outline" size={20} color={colors.parchment} />
+        </Pressable>
+        <Pressable onPress={onDelete} hitSlop={12} style={styles.bulkIconBtn} accessibilityLabel="Bulk delete">
+          <Ionicons name="trash-outline" size={20} color={colors.parchment} />
+        </Pressable>
+      </View>
+    </Animated.View>
+  );
+};
 
 export default function LibraryScreen() {
   const { session, loading } = useSession();
@@ -171,29 +218,49 @@ export default function LibraryScreen() {
 
     if (!analyze || !isAnalyzeConfigured) return;
 
-    // Mark as analyzing
     setAnalyzingIds((prev) => {
       const next = new Set(prev);
       for (const u of uploads) next.add(u.id);
       return next;
     });
 
+    // Run analyses concurrently, then update state once with the aggregated
+    // result so we don't race the failures counter or leak fire-and-forget
+    // promises.
+    const results = await Promise.allSettled(
+      uploads.map(async (u) => ({
+        id: u.id,
+        patch: await analyzeAndPersist(u.uri, u.id),
+      })),
+    );
+
     let failures = 0;
-    for (const u of uploads) {
-      void (async () => {
-        const patch = await analyzeAndPersist(u.uri, u.id);
-        setAnalyzingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(u.id);
-          return next;
-        });
-        if (!patch) {
-          failures++;
-          if (failures === 1) toast.error('AI tagging failed for some images — retry from card detail');
-          return;
-        }
-        setItems((prev) => prev.map((it) => (it.id === u.id ? { ...it, ...patch } : it)));
-      })();
+    const successPatches: { id: string; patch: NonNullable<Awaited<ReturnType<typeof analyzeAndPersist>>> }[] = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value.patch) {
+        successPatches.push({ id: r.value.id, patch: r.value.patch });
+      } else {
+        failures++;
+      }
+    }
+
+    setAnalyzingIds((prev) => {
+      const next = new Set(prev);
+      for (const u of uploads) next.delete(u.id);
+      return next;
+    });
+    if (successPatches.length > 0) {
+      setItems((prev) =>
+        prev.map((it) => {
+          const found = successPatches.find((s) => s.id === it.id);
+          return found ? { ...it, ...found.patch } : it;
+        }),
+      );
+    }
+    if (failures > 0) {
+      toast.error(
+        `${failures} of ${uploads.length} couldn't be AI-tagged — open the card to set tags manually`,
+      );
     }
   };
 
@@ -363,24 +430,13 @@ export default function LibraryScreen() {
       {/* Persistent edge hint bar + swipe (per spec) */}
       {!inSelectMode && session && <EdgeSwipe onOpen={() => setSidebarOpen(true)} />}
 
-      {inSelectMode && (
-        <View style={styles.bulkBar}>
-          <Pressable onPress={exitMultiSelect} hitSlop={12} style={styles.bulkIconBtn}>
-            <Ionicons name="close" size={22} color={colors.parchment} />
-          </Pressable>
-          <Text style={styles.bulkCount}>
-            {multiSelectIds.size} selected
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Pressable onPress={onBulkTag} hitSlop={12} style={styles.bulkIconBtn}>
-              <Ionicons name="pricetag-outline" size={20} color={colors.parchment} />
-            </Pressable>
-            <Pressable onPress={onBulkDelete} hitSlop={12} style={styles.bulkIconBtn}>
-              <Ionicons name="trash-outline" size={20} color={colors.parchment} />
-            </Pressable>
-          </View>
-        </View>
-      )}
+      <BulkBar
+        visible={inSelectMode}
+        count={multiSelectIds.size}
+        onCancel={exitMultiSelect}
+        onTag={onBulkTag}
+        onDelete={onBulkDelete}
+      />
       {items.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Overlook</Text>
