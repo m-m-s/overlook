@@ -61,8 +61,29 @@ type Pending = Partial<{
   notes: string | null;
 }>;
 
-const SectionLabel = ({ children }: { children: string }) => (
-  <Text style={styles.sectionLabel}>{children}</Text>
+/**
+ * Tappable section header. Long-press to enter/exit edit mode for that
+ * section (per spec: "Long press any section → edit mode"). Read mode shows
+ * just the assigned value; edit mode reveals the chip pickers.
+ */
+const SectionHeader = ({
+  label,
+  editing,
+  onToggle,
+}: {
+  label: string;
+  editing: boolean;
+  onToggle: () => void;
+}) => (
+  <Pressable onLongPress={onToggle} hitSlop={8}>
+    <View style={styles.sectionHead}>
+      <Text style={styles.sectionLabel}>
+        {label}
+        {editing && <Text style={styles.sectionLabelEditing}>  · editing</Text>}
+      </Text>
+      <Text style={styles.sectionEditHint}>{editing ? 'tap a chip · long-press done' : 'long-press to edit'}</Text>
+    </View>
+  </Pressable>
 );
 
 type DisplayTag =
@@ -118,6 +139,17 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   const [newTag, setNewTag] = useState('');
   const [pendingAmbiguous, setPendingAmbiguous] = useState<{ value: string; candidates: string[] } | null>(null);
   const [pending, setPending] = useState<Pending>({});
+  const [editingSections, setEditingSections] = useState<Set<string>>(new Set());
+
+  const isEditing = (key: string) => editingSections.has(key);
+  const toggleEditing = (key: string) =>
+    setEditingSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const closeAllEditing = () => setEditingSections(new Set());
 
   // The "view" model = item + pending. UI reads from this; persist only on Apply.
   const view = {
@@ -186,10 +218,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     onChange(patch as Partial<LocalScreenshot>);
     await updateScreenshot(item.id, dbPatch as Parameters<typeof updateScreenshot>[1]);
     if ('notes' in patch) setServerNotes(patch.notes ?? '');
+    closeAllEditing();
   };
 
   const onCancel = () => {
     setPending({});
+    closeAllEditing();
   };
 
   const commitTag = (tag: TypedTag) => {
@@ -316,210 +350,306 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
       )}
 
       {/* Category */}
-      <SectionLabel>category</SectionLabel>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {CATEGORIES.map((cat) => (
-          <Chip
-            key={cat}
-            label={cat}
-            selected={view.category === cat}
-            variant="meta"
-            onPress={() => setCategory(cat)}
-            color={view.category === cat ? colors.ink : colors.inkMuted}
-          />
-        ))}
-      </ScrollView>
-
-      {/* Subject */}
-      <SectionLabel>subject</SectionLabel>
-      {aiSubjects.length > 0 && !view.subject && (
-        <View style={[styles.row, styles.wrap, { marginBottom: 8 }]}>
-          {aiSubjects.map((s) => (
+      <SectionHeader label="category" editing={isEditing('category')} onToggle={() => toggleEditing('category')} />
+      {isEditing('category') ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {CATEGORIES.map((cat) => (
             <Chip
-              key={s}
-              label={s}
-              variant="ai"
-              color={colors.inkMuted}
-              onPress={() => stage({ subject: s })}
+              key={cat}
+              label={cat}
+              selected={view.category === cat}
+              variant="meta"
+              onPress={() => setCategory(cat)}
+              color={view.category === cat ? colors.ink : colors.inkMuted}
             />
           ))}
+        </ScrollView>
+      ) : view.category ? (
+        <View style={styles.row}>
+          <Chip label={view.category} variant="meta" selected color={colors.ink} />
         </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
       )}
-      <BottomSheetTextInput
-        value={view.subject ?? ''}
-        onChangeText={(t) => stage({ subject: t || null })}
-        placeholder="specific thing — Crochet, React hook, Italian restaurant…"
-        placeholderTextColor={colors.inkMuted}
-        style={styles.subjectInput}
-      />
+
+      {/* Subject */}
+      <SectionHeader label="subject" editing={isEditing('subject')} onToggle={() => toggleEditing('subject')} />
+      {isEditing('subject') ? (
+        <>
+          {aiSubjects.length > 0 && !view.subject && (
+            <View style={[styles.row, styles.wrap, { marginBottom: 8 }]}>
+              {aiSubjects.map((s) => (
+                <Chip key={s} label={s} variant="ai" color={colors.inkMuted} onPress={() => stage({ subject: s })} />
+              ))}
+            </View>
+          )}
+          <BottomSheetTextInput
+            value={view.subject ?? ''}
+            onChangeText={(t) => stage({ subject: t || null })}
+            placeholder="specific thing — Crochet, React hook, Italian restaurant…"
+            placeholderTextColor={colors.inkMuted}
+            style={styles.subjectInput}
+          />
+        </>
+      ) : view.subject ? (
+        <Text style={styles.subjectReadOnly}>{view.subject}</Text>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
 
       {/* Resonance */}
-      <SectionLabel>resonance</SectionLabel>
-      <View style={styles.row}>
-        {RESONANCE_LEVELS.map((r) => {
-          const active = view.resonance === r;
-          return (
-            <Pressable
-              key={r}
-              onPress={() => setResonance(r)}
-              style={[styles.irisBtn, active && styles.irisBtnActive]}
-            >
-              <Iris level={r} size={22} color={active ? colors.parchment : colors.ink} />
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Urgency */}
-      <SectionLabel>urgency</SectionLabel>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {URGENCIES.map((u) => {
-          const active = view.urgency === u.key;
-          return (
-            <Chip
-              key={u.key}
-              label={u.label}
-              variant="meta"
-              selected={active}
-              color={active ? urgencyColors[u.key] : colors.inkMuted}
-              onPress={() => setUrgency(u.key)}
-            />
-          );
-        })}
-      </ScrollView>
-
-      {/* Status */}
-      <SectionLabel>status</SectionLabel>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {STATUSES.map((s) => {
-          const active = view.status === s.key;
-          return (
-            <Chip
-              key={s.key}
-              label={s.label}
-              variant="meta"
-              selected={active}
-              color={active ? statusColors[s.key] : colors.inkMuted}
-              onPress={() => setStatus(s.key)}
-            />
-          );
-        })}
-      </ScrollView>
-
-      {/* Difficulty */}
-      <SectionLabel>difficulty</SectionLabel>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {DIFFICULTIES.map((d) => {
-          const active = view.difficulty === d.key;
-          return (
-            <Chip
-              key={d.key}
-              label={d.label}
-              variant="meta"
-              selected={active}
-              color={active ? colors.ink : colors.inkMuted}
-              onPress={() =>
-                stage({ difficulty: view.difficulty === d.key ? null : (d.key as 'beginner' | 'intermediate' | 'advanced') })
-              }
-            />
-          );
-        })}
-      </ScrollView>
-
-      {/* Time to complete */}
-      <SectionLabel>time to complete</SectionLabel>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-        {TIMES_TO_COMPLETE.map((t) => {
-          const active = view.timeToComplete === t.key;
-          return (
-            <Chip
-              key={t.key}
-              label={t.label}
-              variant="meta"
-              selected={active}
-              color={active ? colors.ink : colors.inkMuted}
-              onPress={() =>
-                stage({
-                  timeToComplete:
-                    view.timeToComplete === t.key
-                      ? null
-                      : (t.key as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term'),
-                })
-              }
-            />
-          );
-        })}
-      </ScrollView>
-
-      {/* Tags — manual + AI mixed, sorted by spec hierarchy: typed first (in TAG_TYPES order), alphabetical within type, untyped last. */}
-      <SectionLabel>tags</SectionLabel>
-      <View style={[styles.row, styles.wrap]}>
-        {sortedDisplayTags(manualTags, aiTags).map((entry) => {
-          const { tag, source, manualIndex } = entry;
-          if (source === 'manual') {
+      <SectionHeader label="resonance" editing={isEditing('resonance')} onToggle={() => toggleEditing('resonance')} />
+      {isEditing('resonance') ? (
+        <View style={styles.row}>
+          {RESONANCE_LEVELS.map((r) => {
+            const active = view.resonance === r;
             return (
-              <Chip
-                key={`m-${tag.value}-${manualIndex}`}
-                label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
-                variant="manual"
-                onPress={() => {
-                  const types = [undefined, ...TAG_TYPES] as (string | undefined)[];
-                  const cur = types.indexOf(tag.type);
-                  const next = types[(cur + 1) % types.length];
-                  setTagType(manualIndex, next);
-                }}
-                onRemove={() => removeTag(manualIndex)}
-              />
+              <Pressable
+                key={r}
+                onPress={() => setResonance(r)}
+                style={[styles.irisBtn, active && styles.irisBtnActive]}
+              >
+                <Iris level={r} size={22} color={active ? colors.parchment : colors.ink} />
+              </Pressable>
             );
-          }
-          return (
-            <Chip
-              key={`a-${tag.value}-${entry.aiIndex}`}
-              label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
-              variant="ai"
-            />
-          );
-        })}
-      </View>
-      <View style={styles.addTagRow}>
-        <BottomSheetTextInput
-          value={newTag}
-          onChangeText={setNewTag}
-          onSubmitEditing={addTag}
-          placeholder="+ add tag"
-          placeholderTextColor={colors.inkMuted}
-          autoCapitalize="none"
-          style={styles.tagInput}
-        />
-      </View>
-      {pendingAmbiguous && (
-        <View style={styles.ambiguousRow}>
-          <Text style={styles.ambiguousLabel}>
-            is &quot;{pendingAmbiguous.value}&quot; a…
-          </Text>
-          <View style={[styles.row, styles.wrap]}>
-            {pendingAmbiguous.candidates.map((cand) => (
-              <Chip
-                key={cand}
-                label={cand}
-                variant="meta"
-                color={colors.ink}
-                onPress={() => resolveAmbiguous(cand)}
-              />
-            ))}
-            <Chip
-              label="neither — keep untyped"
-              variant="add"
-              color={colors.inkMuted}
-              onPress={() => resolveAmbiguous(null)}
-            />
-          </View>
+          })}
         </View>
+      ) : view.resonance ? (
+        <View style={styles.irisBtn}>
+          <Iris level={view.resonance} size={22} color={colors.ink} />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
       )}
 
-      {/* Source URL — AI extracted or manually entered. Tappable link icon. */}
-      <SectionLabel>source url</SectionLabel>
-      {effectiveSourceUrl ? (
+      {/* Urgency */}
+      <SectionHeader label="urgency" editing={isEditing('urgency')} onToggle={() => toggleEditing('urgency')} />
+      {isEditing('urgency') ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {URGENCIES.map((u) => {
+            const active = view.urgency === u.key;
+            return (
+              <Chip
+                key={u.key}
+                label={u.label}
+                variant="meta"
+                selected={active}
+                color={active ? urgencyColors[u.key] : colors.inkMuted}
+                onPress={() => setUrgency(u.key)}
+              />
+            );
+          })}
+        </ScrollView>
+      ) : view.urgency ? (
+        <View style={styles.row}>
+          <Chip
+            label={URGENCIES.find((u) => u.key === view.urgency)?.label ?? view.urgency}
+            variant="meta"
+            selected
+            color={urgencyColors[view.urgency] ?? colors.ink}
+          />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
+
+      {/* Status */}
+      <SectionHeader label="status" editing={isEditing('status')} onToggle={() => toggleEditing('status')} />
+      {isEditing('status') ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {STATUSES.map((s) => {
+            const active = view.status === s.key;
+            return (
+              <Chip
+                key={s.key}
+                label={s.label}
+                variant="meta"
+                selected={active}
+                color={active ? statusColors[s.key] : colors.inkMuted}
+                onPress={() => setStatus(s.key)}
+              />
+            );
+          })}
+        </ScrollView>
+      ) : view.status ? (
+        <View style={styles.row}>
+          <Chip
+            label={STATUSES.find((s) => s.key === view.status)?.label ?? view.status}
+            variant="meta"
+            selected
+            color={statusColors[view.status] ?? colors.ink}
+          />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
+
+      {/* Difficulty */}
+      <SectionHeader label="difficulty" editing={isEditing('difficulty')} onToggle={() => toggleEditing('difficulty')} />
+      {isEditing('difficulty') ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {DIFFICULTIES.map((d) => {
+            const active = view.difficulty === d.key;
+            return (
+              <Chip
+                key={d.key}
+                label={d.label}
+                variant="meta"
+                selected={active}
+                color={active ? colors.ink : colors.inkMuted}
+                onPress={() =>
+                  stage({
+                    difficulty:
+                      view.difficulty === d.key ? null : (d.key as 'beginner' | 'intermediate' | 'advanced'),
+                  })
+                }
+              />
+            );
+          })}
+        </ScrollView>
+      ) : view.difficulty ? (
+        <View style={styles.row}>
+          <Chip label={view.difficulty} variant="meta" selected color={colors.ink} />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
+
+      {/* Time to complete */}
+      <SectionHeader label="time to complete" editing={isEditing('time')} onToggle={() => toggleEditing('time')} />
+      {isEditing('time') ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+          {TIMES_TO_COMPLETE.map((t) => {
+            const active = view.timeToComplete === t.key;
+            return (
+              <Chip
+                key={t.key}
+                label={t.label}
+                variant="meta"
+                selected={active}
+                color={active ? colors.ink : colors.inkMuted}
+                onPress={() =>
+                  stage({
+                    timeToComplete:
+                      view.timeToComplete === t.key
+                        ? null
+                        : (t.key as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term'),
+                  })
+                }
+              />
+            );
+          })}
+        </ScrollView>
+      ) : view.timeToComplete ? (
+        <View style={styles.row}>
+          <Chip
+            label={TIMES_TO_COMPLETE.find((t) => t.key === view.timeToComplete)?.label ?? view.timeToComplete}
+            variant="meta"
+            selected
+            color={colors.ink}
+          />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
+
+      {/* Tags — read mode shows tag chips (no remove X); edit mode adds X + the input + tag-type cycle on tap */}
+      <SectionHeader label="tags" editing={isEditing('tags')} onToggle={() => toggleEditing('tags')} />
+      {(() => {
+        const sorted = sortedDisplayTags(manualTags, aiTags);
+        if (sorted.length === 0 && !isEditing('tags')) {
+          return <Text style={styles.emptyHint}>not set</Text>;
+        }
+        return (
+          <>
+            <View style={[styles.row, styles.wrap]}>
+              {sorted.map((entry) => {
+                const { tag, source, manualIndex } = entry;
+                if (source === 'manual') {
+                  return (
+                    <Chip
+                      key={`m-${tag.value}-${manualIndex}`}
+                      label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
+                      variant="manual"
+                      onPress={
+                        isEditing('tags')
+                          ? () => {
+                              const types = [undefined, ...TAG_TYPES] as (string | undefined)[];
+                              const cur = types.indexOf(tag.type);
+                              const next = types[(cur + 1) % types.length];
+                              setTagType(manualIndex, next);
+                            }
+                          : undefined
+                      }
+                      onRemove={isEditing('tags') ? () => removeTag(manualIndex) : undefined}
+                    />
+                  );
+                }
+                return (
+                  <Chip
+                    key={`a-${tag.value}-${entry.aiIndex}`}
+                    label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
+                    variant="ai"
+                  />
+                );
+              })}
+            </View>
+            {isEditing('tags') && (
+              <>
+                <View style={styles.addTagRow}>
+                  <BottomSheetTextInput
+                    value={newTag}
+                    onChangeText={setNewTag}
+                    onSubmitEditing={addTag}
+                    placeholder="+ add tag"
+                    placeholderTextColor={colors.inkMuted}
+                    autoCapitalize="none"
+                    style={styles.tagInput}
+                  />
+                </View>
+                {pendingAmbiguous && (
+                  <View style={styles.ambiguousRow}>
+                    <Text style={styles.ambiguousLabel}>
+                      is &quot;{pendingAmbiguous.value}&quot; a…
+                    </Text>
+                    <View style={[styles.row, styles.wrap]}>
+                      {pendingAmbiguous.candidates.map((cand) => (
+                        <Chip
+                          key={cand}
+                          label={cand}
+                          variant="meta"
+                          color={colors.ink}
+                          onPress={() => resolveAmbiguous(cand)}
+                        />
+                      ))}
+                      <Chip
+                        label="neither — keep untyped"
+                        variant="add"
+                        color={colors.inkMuted}
+                        onPress={() => resolveAmbiguous(null)}
+                      />
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Source URL — read mode shows tappable link; edit mode shows input */}
+      <SectionHeader label="source url" editing={isEditing('source')} onToggle={() => toggleEditing('source')} />
+      {isEditing('source') ? (
+        <BottomSheetTextInput
+          value={view.sourceUrlManual ?? ''}
+          onChangeText={(t) => stage({ sourceUrlManual: t.trim() || null })}
+          placeholder={effectiveSourceUrl ? 'override or paste a URL' : 'paste a URL'}
+          placeholderTextColor={colors.inkMuted}
+          autoCapitalize="none"
+          keyboardType="url"
+          style={styles.urlInput}
+        />
+      ) : effectiveSourceUrl ? (
         <Pressable
           onPress={() => Linking.openURL(effectiveSourceUrl).catch(() => {})}
           style={styles.urlRow}
@@ -529,27 +659,26 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
             {effectiveSourceUrl}
           </Text>
         </Pressable>
-      ) : null}
-      <BottomSheetTextInput
-        value={view.sourceUrlManual ?? ''}
-        onChangeText={(t) => stage({ sourceUrlManual: t.trim() || null })}
-        placeholder={effectiveSourceUrl ? 'override or paste a URL' : 'paste a URL'}
-        placeholderTextColor={colors.inkMuted}
-        autoCapitalize="none"
-        keyboardType="url"
-        style={styles.urlInput}
-      />
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
 
-      {/* Notes */}
-      <SectionLabel>notes</SectionLabel>
-      <BottomSheetTextInput
-        value={view.notes ?? ''}
-        onChangeText={(t) => stage({ notes: t })}
-        multiline
-        placeholder="quick thought, link, anything…"
-        placeholderTextColor={colors.inkMuted}
-        style={styles.notesInput}
-      />
+      {/* Notes — read mode shows text; edit mode shows multi-line input */}
+      <SectionHeader label="notes" editing={isEditing('notes')} onToggle={() => toggleEditing('notes')} />
+      {isEditing('notes') ? (
+        <BottomSheetTextInput
+          value={view.notes ?? ''}
+          onChangeText={(t) => stage({ notes: t })}
+          multiline
+          placeholder="quick thought, link, anything…"
+          placeholderTextColor={colors.inkMuted}
+          style={styles.notesInput}
+        />
+      ) : view.notes ? (
+        <Text style={styles.notesReadOnly}>{view.notes}</Text>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
 
       {/* Footer actions: share + delete (per spec — no AI re-analyze button) */}
       <View style={styles.footer}>
@@ -597,6 +726,32 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     marginTop: 22,
     marginBottom: 10,
+  },
+  sectionHead: { marginTop: 22, marginBottom: 10 },
+  sectionLabelEditing: { color: colors.ink, fontWeight: '700' },
+  sectionEditHint: {
+    fontSize: 9,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: colors.divider,
+    marginTop: 2,
+  },
+  emptyHint: {
+    fontSize: 12,
+    color: colors.inkMuted,
+    fontStyle: 'italic',
+  },
+  subjectReadOnly: {
+    fontSize: 18,
+    fontFamily: 'Georgia',
+    color: colors.ink,
+    paddingVertical: 4,
+  },
+  notesReadOnly: {
+    fontSize: 14,
+    color: colors.ink,
+    paddingVertical: 6,
+    lineHeight: 20,
   },
   row: { flexDirection: 'row', gap: 6 },
   wrap: { flexWrap: 'wrap', rowGap: 8 },
