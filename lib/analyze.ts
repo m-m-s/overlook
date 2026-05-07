@@ -10,6 +10,9 @@ export type AnalyzeResult = {
   suggested_subjects: string[];
   urgency: string | null;
   urgency_date: string | null;
+  source_url?: string | null;
+  action_url?: string | null;
+  action_url_type?: string | null;
 };
 
 const VERCEL_URL = process.env.EXPO_PUBLIC_VERCEL_URL;
@@ -92,6 +95,9 @@ export const persistAnalyzeResult = async (
       subject: result.subject,
       urgency: result.urgency,
       urgency_date: result.urgency_date,
+      source_url: result.source_url ?? null,
+      action_url: result.action_url ?? null,
+      action_url_type: result.action_url_type ?? null,
     })
     .eq('id', screenshotId);
   if (error) {

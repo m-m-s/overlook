@@ -85,6 +85,20 @@ const SectionHeader = ({
   </Pressable>
 );
 
+const actionUrlIcon = (type: string | null | undefined): React.ComponentProps<typeof Ionicons>['name'] => {
+  switch (type) {
+    case 'tickets': return 'ticket-outline';
+    case 'directions': return 'navigate-outline';
+    case 'buy': return 'bag-outline';
+    case 'recipe': return 'restaurant-outline';
+    case 'listen': return 'musical-notes-outline';
+    case 'watch': return 'play-outline';
+    case 'read': return 'book-outline';
+    case 'search': return 'search-outline';
+    default: return 'open-outline';
+  }
+};
+
 type DisplayTag =
   | { tag: TypedTag; source: 'manual'; manualIndex: number; aiIndex?: undefined }
   | { tag: TypedTag; source: 'ai'; aiIndex: number; manualIndex?: undefined };
@@ -648,6 +662,19 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         );
       })()}
 
+      {/* Action URL — AI-suggested action button (tickets/buy/recipe/etc.) */}
+      {item.actionUrl && (
+        <Pressable
+          onPress={() => Linking.openURL(item.actionUrl!).catch(() => {})}
+          style={styles.actionUrlBtn}
+        >
+          <Ionicons name={actionUrlIcon(item.actionUrlType)} size={18} color={colors.parchment} />
+          <Text style={styles.actionUrlText}>
+            {item.actionUrlType ?? 'open'}
+          </Text>
+        </Pressable>
+      )}
+
       {/* Source URL — read mode shows tappable link; edit mode shows input */}
       <SectionHeader label="source url" editing={isEditing('source')} onToggle={() => toggleEditing('source')} />
       {isEditing('source') ? (
@@ -866,6 +893,23 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.inkMuted,
     borderRadius: 3,
+  },
+  actionUrlBtn: {
+    marginTop: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    backgroundColor: colors.ink,
+    borderRadius: 4,
+  },
+  actionUrlText: {
+    color: colors.parchment,
+    fontSize: 13,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
   urlRow: {
     flexDirection: 'row',

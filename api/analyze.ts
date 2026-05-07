@@ -17,7 +17,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
-const SYSTEM_PROMPT = `You analyze screenshots someone saved for personal reference. Your job is to tag each one so the user can later find it by category, vibe, or specific attribute.
+const SYSTEM_PROMPT = `You analyze screenshots someone saved for personal reference. Your job is to tag each one so the user can later find it by category, vibe, or specific attribute, and surface a useful action link when one applies.
 
 Always reply with a single tool call to \`analyze_screenshot\`. Never reply with prose.
 
@@ -73,7 +73,22 @@ GENERAL RULES
 - Memes win over their content category. A meme about food → category=meme, NOT food.
 - Don't add a "color" tag for natural photos with mixed colors. Only when a palette is the point.
 
-SUGGESTED_SUBJECTS — up to 3 alternative phrasings of the subject. These give the user a quick pick list. If subject is null, leave this empty.`;
+SUGGESTED_SUBJECTS — up to 3 alternative phrasings of the subject. These give the user a quick pick list. If subject is null, leave this empty.
+
+SOURCE_URL — a URL visible in the screenshot itself (browser URL bar, page footer, watermark) that points to where the content lives. ONLY include if a URL is clearly readable in the image. Otherwise null.
+
+ACTION_URL + ACTION_URL_TYPE — when the screenshot represents a clear actionable thing the user might want to do later, construct a useful link. Pick one type from: tickets, directions, buy, recipe, listen, watch, read, search.
+
+Examples:
+- A concert poster with date/venue → action_url_type "tickets", action_url is a search like "https://www.google.com/search?q=<artist>+<city>+tickets".
+- A restaurant menu / address → action_url_type "directions", action_url is "https://www.google.com/maps/search/?api=1&query=<restaurant+name+city>".
+- A product photo with a brand logo → action_url_type "buy", action_url is a search.
+- A recipe → action_url_type "recipe", action_url is a search for the recipe.
+- A book cover → action_url_type "read", a Goodreads or store search URL.
+- A song / album → action_url_type "listen", a search URL.
+- A movie / show poster → action_url_type "watch", a search URL.
+
+Be conservative: prefer null over a guess that won't help. Don't fabricate URLs to specific domains the user didn't see — generic search links are fine and safe.`;
 
 const TOOL = {
   name: 'analyze_screenshot',
@@ -120,8 +135,14 @@ const TOOL = {
         enum: ['today', 'expires_soon', 'this_week', 'this_month', 'this_season', 'this_year', 'someday', null],
       },
       urgency_date: { type: ['string', 'null'], description: 'ISO 8601 date (YYYY-MM-DD).' },
+      source_url: { type: ['string', 'null'], description: 'URL visible in the screenshot (browser bar, footer, etc.). null if none clearly readable.' },
+      action_url: { type: ['string', 'null'], description: 'A useful action link constructed for this screenshot, or null if no clear action.' },
+      action_url_type: {
+        type: ['string', 'null'],
+        enum: ['tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search', null],
+      },
     },
-    required: ['category', 'subject', 'typed_tags', 'suggested_subjects', 'urgency', 'urgency_date'],
+    required: ['category', 'subject', 'typed_tags', 'suggested_subjects', 'urgency', 'urgency_date', 'source_url', 'action_url', 'action_url_type'],
     additionalProperties: false,
   },
 } as const;
