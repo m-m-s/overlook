@@ -1,13 +1,14 @@
+import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, type CardData } from '@/components/Card';
 import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { SignIn } from '@/components/SignIn';
-import { useSession } from '@/lib/auth';
+import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { fetchScreenshots } from '@/lib/screenshots';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -94,6 +95,20 @@ export default function LibraryScreen() {
 
   const selected = items.find((it) => it.id === selectedId) ?? null;
 
+  const onSignOut = () => {
+    Alert.alert('Sign out?', `You'll be signed out of ${session?.user.email ?? 'your account'}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          setItems([]);
+        },
+      },
+    ]);
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -108,6 +123,16 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
+      {session && (
+        <Pressable
+          onPress={onSignOut}
+          accessibilityLabel="Sign out"
+          hitSlop={12}
+          style={styles.signOutBtn}
+        >
+          <Ionicons name="log-out-outline" size={20} color={colors.inkMuted} />
+        </Pressable>
+      )}
       {items.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Overlook</Text>
@@ -208,4 +233,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   fabText: { color: colors.parchment, fontSize: 28, lineHeight: 30 },
+  signOutBtn: {
+    position: 'absolute',
+    top: 56,
+    right: 20,
+    zIndex: 10,
+    padding: 6,
+  },
 });
