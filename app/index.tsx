@@ -10,7 +10,7 @@ import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import { applyFilters as applyFiltersToItems, type Filters } from '@/lib/filters';
+import { applyFilters as applyFiltersToItems, emptyFilters, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
 import { fetchScreenshots } from '@/lib/screenshots';
@@ -72,6 +72,23 @@ export default function HomeScreen() {
   );
   const recent = useMemo(() => items.slice(0, 24), [items]);
   const untagged = useMemo(() => items.filter((it) => !it.category), [items]);
+
+  // Auto-surfaced category rows: most populous categories first (top 5).
+  // Spec also mentions user-reorderable; deferred — natural order by count for now.
+  const categoryRows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of items) {
+      if (!it.category) continue;
+      counts.set(it.category, (counts.get(it.category) ?? 0) + 1);
+    }
+    const sorted = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    return sorted.map(([cat]) => ({
+      category: cat,
+      items: items.filter((it) => it.category === cat),
+    }));
+  }, [items]);
 
   const onItemDelete = () => {
     if (!selectedId) return;
@@ -165,6 +182,35 @@ export default function HomeScreen() {
             />
           </Row>
         )}
+
+        {/* Auto-surfaced category rows (top 5 by count) */}
+        {categoryRows.map((row) => (
+          <Row
+            key={`cat-${row.category}`}
+            title={row.category}
+            count={row.items.length}
+            onSeeAll={() => {
+              const next = emptyFilters();
+              next.categories.add(row.category);
+              applyFilterCtx(next);
+              router.push('/library');
+            }}
+          >
+            <FlatList
+              horizontal
+              data={row.items.slice(0, 30)}
+              keyExtractor={(it) => it.id}
+              showsHorizontalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
+              contentContainerStyle={styles.rowList}
+              renderItem={({ item }) => (
+                <View style={styles.rowCell}>
+                  <Card data={toCardData(item)} onPress={() => open(item)} />
+                </View>
+              )}
+            />
+          </Row>
+        ))}
 
         {/* Pinned saved-filter rows — auto-update as items change */}
         {pinnedFilters.map((pf) => {
