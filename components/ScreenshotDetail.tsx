@@ -11,6 +11,7 @@ import { Iris } from './Iris';
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { useToast } from './Toast';
 import { useSession } from '@/lib/auth';
+import { successHaptic, warnHaptic } from '@/lib/haptics';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import {
   CATEGORIES,
@@ -223,6 +224,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   };
 
   const onApply = async () => {
+    void successHaptic();
     const patch = pending;
     // Map local camelCase keys to DB snake_case for the supabase update.
     const dbPatch: Record<string, unknown> = {};
@@ -303,6 +305,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   };
 
   const onTrash = () => {
+    void warnHaptic();
     // Parent handles optimistic remove + 5-sec undo toast + commit (per spec).
     onDelete();
   };

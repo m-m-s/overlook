@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '@/lib/colors';
+import { tapHaptic } from '@/lib/haptics';
 
 export type ChipVariant = 'manual' | 'ai' | 'meta' | 'add';
 
@@ -27,7 +28,7 @@ export const Chip = ({ label, selected, variant = 'manual', onPress, onRemove, c
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={onPress ? () => { void tapHaptic(); onPress(); } : undefined}
       style={({ pressed }) => [
         styles.chip,
         baseStyle,

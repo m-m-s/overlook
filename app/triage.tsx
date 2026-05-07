@@ -23,14 +23,24 @@ import { fetchScreenshots, updateScreenshot } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
 
-type QueueKey = 'untagged' | 'incomplete' | 'ai-unreviewed';
+type QueueKey =
+  | 'untagged'
+  | 'incomplete'
+  | 'incomplete-resonance'
+  | 'incomplete-urgency'
+  | 'incomplete-status'
+  | 'ai-unreviewed';
 
 const isUntagged = (it: LocalScreenshot): boolean => !it.category;
 const isIncomplete = (it: LocalScreenshot): boolean =>
   Boolean(it.category) && (!it.resonance || !it.status || !it.urgency);
-// AI-unreviewed: AI populated tags but user hasn't confirmed yet. We don't
-// currently fetch ai_reviewed on the row, so use a heuristic: has AI tags
-// AND no manual category override (user hasn't touched it).
+const isMissingResonance = (it: LocalScreenshot): boolean =>
+  Boolean(it.category) && !it.resonance;
+const isMissingUrgency = (it: LocalScreenshot): boolean =>
+  Boolean(it.category) && !it.urgency;
+const isMissingStatus = (it: LocalScreenshot): boolean =>
+  Boolean(it.category) && !it.status;
+// AI-unreviewed: AI populated tags but user hasn't confirmed yet.
 const isAiUnreviewed = (it: LocalScreenshot): boolean =>
   ((it.aiTags?.length ?? 0) > 0) && !it.resonance;
 
@@ -40,6 +50,7 @@ export default function TriageScreen() {
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeQueue, setActiveQueue] = useState<QueueKey | null>(null);
+  const [incompleteExpanded, setIncompleteExpanded] = useState(false);
   const [cursor, setCursor] = useState(0);
   const { remove: undoableRemove } = useUndoableDelete(setItems);
   const reduceMotion = useReduceMotion();
@@ -58,6 +69,9 @@ export default function TriageScreen() {
     () => ({
       untagged: items.filter(isUntagged).length,
       incomplete: items.filter(isIncomplete).length,
+      'incomplete-resonance': items.filter(isMissingResonance).length,
+      'incomplete-urgency': items.filter(isMissingUrgency).length,
+      'incomplete-status': items.filter(isMissingStatus).length,
       'ai-unreviewed': items.filter(isAiUnreviewed).length,
     }),
     [items],
@@ -67,6 +81,9 @@ export default function TriageScreen() {
     if (!activeQueue) return [];
     if (activeQueue === 'untagged') return items.filter(isUntagged);
     if (activeQueue === 'incomplete') return items.filter(isIncomplete);
+    if (activeQueue === 'incomplete-resonance') return items.filter(isMissingResonance);
+    if (activeQueue === 'incomplete-urgency') return items.filter(isMissingUrgency);
+    if (activeQueue === 'incomplete-status') return items.filter(isMissingStatus);
     return items.filter(isAiUnreviewed);
   }, [activeQueue, items]);
 
@@ -164,11 +181,40 @@ export default function TriageScreen() {
           />
           <QueueRow
             label="incomplete"
-            hint="missing resonance, urgency, or status"
+            hint={incompleteExpanded ? 'pick a sub-queue' : 'missing resonance, urgency, or status'}
             count={counts.incomplete}
             disabled={counts.incomplete === 0}
-            onPress={() => enterQueue('incomplete')}
+            chevron={incompleteExpanded ? 'chevron-down' : 'chevron-forward'}
+            onPress={() => setIncompleteExpanded((v) => !v)}
           />
+          {incompleteExpanded && (
+            <View style={styles.subQueues}>
+              <QueueRow
+                label="no resonance"
+                hint="iris not set"
+                count={counts['incomplete-resonance']}
+                disabled={counts['incomplete-resonance'] === 0}
+                onPress={() => enterQueue('incomplete-resonance')}
+                indent
+              />
+              <QueueRow
+                label="no urgency"
+                hint="when-to-act not set"
+                count={counts['incomplete-urgency']}
+                disabled={counts['incomplete-urgency'] === 0}
+                onPress={() => enterQueue('incomplete-urgency')}
+                indent
+              />
+              <QueueRow
+                label="no status"
+                hint="ready / supplies / done not set"
+                count={counts['incomplete-status']}
+                disabled={counts['incomplete-status'] === 0}
+                onPress={() => enterQueue('incomplete-status')}
+                indent
+              />
+            </View>
+          )}
           <QueueRow
             label="AI unreviewed"
             hint="AI tagged but you haven't confirmed"
@@ -296,23 +342,27 @@ const QueueRow = ({
   count,
   disabled,
   onPress,
+  indent,
+  chevron = 'chevron-forward',
 }: {
   label: string;
   hint: string;
   count: number;
   disabled?: boolean;
   onPress: () => void;
+  indent?: boolean;
+  chevron?: React.ComponentProps<typeof Ionicons>['name'];
 }) => (
   <Pressable
     onPress={disabled ? undefined : onPress}
-    style={[styles.queueRow, disabled && { opacity: 0.4 }]}
+    style={[styles.queueRow, indent && styles.queueRowIndent, disabled && { opacity: 0.4 }]}
   >
     <View style={{ flex: 1 }}>
-      <Text style={styles.queueLabel}>{label}</Text>
+      <Text style={[styles.queueLabel, indent && styles.queueLabelIndent]}>{label}</Text>
       <Text style={styles.queueHint}>{hint}</Text>
     </View>
-    <Text style={styles.queueCount}>{count}</Text>
-    <Ionicons name="chevron-forward" size={18} color={colors.inkMuted} />
+    <Text style={[styles.queueCount, indent && { fontSize: 22 }]}>{count}</Text>
+    <Ionicons name={chevron} size={18} color={colors.inkMuted} />
   </Pressable>
 );
 
@@ -361,6 +411,9 @@ const styles = StyleSheet.create({
     borderColor: colors.divider,
     gap: 12,
   },
+  queueRowIndent: { paddingLeft: 16, paddingVertical: 12 },
+  queueLabelIndent: { fontSize: 16 },
+  subQueues: { marginLeft: 4 },
   queueLabel: { fontFamily: 'Georgia', fontSize: 18, color: colors.ink },
   queueHint: { fontSize: 11, color: colors.inkMuted, marginTop: 4 },
   queueCount: { fontFamily: 'Georgia', fontSize: 28, color: colors.ink },
