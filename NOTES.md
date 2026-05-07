@@ -40,12 +40,12 @@ Running scratchpad of decisions, gotchas, prompt versions, and anything else not
 - **Follow the spec.** Default to spec compliance (CLAUDE.md, SPRINT.md, mockups). Deviations need a real reason (technical constraint, sprint cut). Don't quietly take "sprint speed" shortcuts that aren't justified.
 - **Keep building.** Less than 48h on the sprint clock (minus sleep + commute). Bias toward action — only stop to ask when undoing would be harder than building. Add things, run the type-check, commit, push, move on.
 - **Keep deepening.** When something has ranged data (dictionary entries, prompt content, options lists), don't ship the minimum-viable and call it done. Expand iteratively as time allows. Maggie will notice if something feels shallow at the end.
+- **Don't ask, just go.** Make reasonable choices and document them here in NOTES.md. Only pause for genuine blockers (undoable actions, truly missing info you can't reasonably guess). When a body of work is complete, run a final check (type-check, lint, expo doctor) and report a status summary.
 
 ## Phone-test debugging tips
 
-- **Magic link "dimmed screen" / "site can't be reached":** the link redirected to `localhost:3000` because Supabase's default Site URL is set there AND our `exp://*` allowlist wildcard didn't match the specific dev URL. Two fixes:
-  - Use the 6-digit OTP code instead — requires updating Supabase email template to include `{{ .Token }}` in body.
-  - OR set Site URL to `overlook://` in Supabase URL config (only helps if redirect already worked, which on Expo Go it might not).
+- **Magic link "dimmed screen" / "site can't be reached":** the link redirected to `localhost:3000` because Supabase's default Site URL is set there AND our `exp://*` allowlist wildcard didn't actually match. Per Supabase wildcard rules, `*` matches one segment only (no `/`), so `exp://*` doesn't match `exp://192.168.1.5:8081/--/...`. Use `exp://**` (double asterisk) to match across slashes. Or — preferred — use the 6-digit OTP code path so deep linking is irrelevant.
+- **OTP code path requires `{{ .Token }}` in Supabase email template:** Auth → Email Templates → Magic Link. Default template only has the link, not the code.
 - **Reload app code on phone:** Shake the phone (literally — accelerometer trigger) → tap **Reload**, OR press `r` in the `npx expo start` terminal.
 - **First bundling takes ~1-2 min in Expo Go.** Subsequent reloads are faster (Metro caches).
 - **Phone needs same WiFi as Mac** running `npx expo start`. If on different networks, use `npx expo start --tunnel` (slower, more reliable).
