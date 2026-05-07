@@ -25,11 +25,29 @@ const guessMime = (uri: string): 'image/jpeg' | 'image/png' | 'image/webp' | 'im
   return 'image/jpeg';
 };
 
+/** Read URI as base64. Supports file:// (local picker URIs) and https:// (signed URLs from Supabase). */
+const readAsBase64 = async (uri: string): Promise<string> => {
+  if (uri.startsWith('http://') || uri.startsWith('https://')) {
+    // Download to a temp file, then read as base64. Keeps memory low.
+    const tmp = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ''}analyze-${Date.now()}.bin`;
+    const { uri: localUri } = await FileSystem.downloadAsync(uri, tmp);
+    const data = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+    // Best-effort cleanup; ignore errors.
+    try {
+      await FileSystem.deleteAsync(localUri, { idempotent: true });
+    } catch {
+      // ignore
+    }
+    return data;
+  }
+  return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+};
+
 /** Send an image to the Vercel function for vision analysis. */
 export const analyzeImage = async (uri: string): Promise<AnalyzeResult | null> => {
   if (!VERCEL_URL) return null;
 
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+  const base64 = await readAsBase64(uri);
   const mime = guessMime(uri);
 
   try {

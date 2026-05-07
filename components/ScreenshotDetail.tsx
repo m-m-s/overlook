@@ -8,6 +8,8 @@ import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'rea
 import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { CategoryIcon, type Category } from './CategoryIcon';
+import { useToast } from './Toast';
+import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES, TAG_TYPES } from '@/lib/options';
@@ -83,6 +85,8 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
 
 export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
   const { session } = useSession();
+  const toast = useToast();
+  const [reanalyzing, setReanalyzing] = useState(false);
   const [manualTags, setManualTags] = useState<TypedTag[]>([]);
   const [aiTags, setAiTags] = useState<TypedTag[]>([]);
   const [aiSubjects, setAiSubjects] = useState<string[]>([]);
@@ -207,8 +211,31 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
     try {
       await Share.share({ url: item.uri, message: item.subject ?? '' });
     } catch (err) {
-       
+
       console.warn('[share] failed', err);
+    }
+  };
+
+  const onReanalyze = async () => {
+    if (reanalyzing) return;
+    setReanalyzing(true);
+    toast.info('analyzing with AI…');
+    try {
+      const patch = await analyzeAndPersist(item.uri, item.id);
+      if (!patch) {
+        toast.error('AI tagging failed. try again?');
+        return;
+      }
+      onChange(patch as Partial<LocalScreenshot>);
+      // refresh local tag state so AI tags appear in the sheet
+      const meta = await fetchScreenshotMeta(item.id);
+      if (meta) {
+        setAiTags(meta.ai_typed_tags);
+        setAiSubjects(meta.ai_suggested_subjects);
+      }
+      toast.show('tagged ✓');
+    } finally {
+      setReanalyzing(false);
     }
   };
 
@@ -436,8 +463,19 @@ export const ScreenshotDetail = ({ item, onChange, onDelete }: Props) => {
         style={styles.notesInput}
       />
 
-      {/* Footer actions: share + delete (spec: "Share button (Android native share sheet)") */}
+      {/* Footer actions: re-analyze + share + delete */}
       <View style={styles.footer}>
+        {isAnalyzeConfigured && (
+          <Pressable
+            onPress={onReanalyze}
+            disabled={reanalyzing}
+            style={styles.footerBtn}
+            accessibilityLabel="Analyze with AI"
+          >
+            <Ionicons name="sparkles-outline" size={18} color={colors.ink} />
+            <Text style={styles.footerText}>{reanalyzing ? '…' : 'AI tag'}</Text>
+          </Pressable>
+        )}
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
           <Ionicons name="share-outline" size={18} color={colors.ink} />
           <Text style={styles.footerText}>share</Text>
