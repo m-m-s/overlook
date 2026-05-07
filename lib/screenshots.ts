@@ -97,32 +97,40 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   }));
 };
 
-export const updateScreenshot = async (id: string, patch: ScreenshotPatch): Promise<void> => {
-  if (!isSupabaseConfigured) return;
+export const updateScreenshot = async (
+  id: string,
+  patch: ScreenshotPatch,
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured) return { error: null };
   const { error } = await supabase.from('screenshots').update(patch).eq('id', id);
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[screenshots] update failed', error);
+    return { error: error.message };
   }
+  return { error: null };
 };
 
-export const deleteScreenshot = async (id: string, storagePath?: string): Promise<void> => {
-  if (!isSupabaseConfigured) return;
+export const deleteScreenshot = async (
+  id: string,
+  storagePath?: string,
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured) return { error: null };
   if (storagePath) {
     await supabase.storage.from('screenshots').remove([storagePath]);
   }
   const { error } = await supabase.from('screenshots').delete().eq('id', id);
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[screenshots] delete failed', error);
+    return { error: error.message };
   }
+  return { error: null };
 };
 
 /** Bulk delete: remove rows + best-effort remove storage objects. */
 export const deleteScreenshots = async (
   items: { id: string; storagePath?: string }[],
-): Promise<void> => {
-  if (!isSupabaseConfigured || items.length === 0) return;
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured || items.length === 0) return { error: null };
   const paths = items.map((i) => i.storagePath).filter((p): p is string => Boolean(p));
   if (paths.length > 0) {
     await supabase.storage.from('screenshots').remove(paths);
@@ -132,22 +140,24 @@ export const deleteScreenshots = async (
     .delete()
     .in('id', items.map((i) => i.id));
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[screenshots] bulk delete failed', error);
+    return { error: error.message };
   }
+  return { error: null };
 };
 
 /** Bulk update — apply same patch to many screenshots. */
 export const updateScreenshots = async (
   ids: string[],
   patch: ScreenshotPatch,
-): Promise<void> => {
-  if (!isSupabaseConfigured || ids.length === 0) return;
+): Promise<{ error: string | null }> => {
+  if (!isSupabaseConfigured || ids.length === 0) return { error: null };
   const { error } = await supabase.from('screenshots').update(patch).in('id', ids);
   if (error) {
-    // eslint-disable-next-line no-console
     console.warn('[screenshots] bulk update failed', error);
+    return { error: error.message };
   }
+  return { error: null };
 };
 
 export type TypedTag = { type?: string; value: string };

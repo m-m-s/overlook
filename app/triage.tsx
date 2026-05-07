@@ -107,17 +107,20 @@ export default function TriageScreen() {
     });
   };
 
-  const patchCurrent = (patch: Partial<LocalScreenshot>) => {
+  const patchCurrent = async (patch: Partial<LocalScreenshot>) => {
     if (!current) return;
     const id = current.id;
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
-    // Map to DB column names
     const dbPatch: Record<string, unknown> = {};
     if ('category' in patch) dbPatch.category = patch.category;
     if ('urgency' in patch) dbPatch.urgency = patch.urgency;
     if ('status' in patch) dbPatch.status = patch.status;
     if ('resonance' in patch) dbPatch.resonance = patch.resonance;
-    void updateScreenshot(id, dbPatch as Parameters<typeof updateScreenshot>[1]);
+    const { error } = await updateScreenshot(
+      id,
+      dbPatch as Parameters<typeof updateScreenshot>[1],
+    );
+    if (error) toast.error(`save failed: ${error.slice(0, 80)}`);
   };
 
   const onDelete = () => {

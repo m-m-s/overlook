@@ -9,6 +9,7 @@ import { LayoutAnimation, Pressable, ScrollView, Share, StyleSheet, Text, View }
 import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { CategoryIcon, type Category } from './CategoryIcon';
+import { useToast } from './Toast';
 import { useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import {
@@ -131,6 +132,7 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
 
 export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Props) => {
   const { session } = useSession();
+  const toast = useToast();
 
   // Image preview height grows with the snap index per spec ("Drag up for full
   // detail view"). At compact snap, preview is a portrait thumbnail. At full,
@@ -198,8 +200,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   }, [item.id, session]);
 
   // Persist tag-array changes immediately (auto-save for tags is intentional in v1).
-  const persistNow = (patch: Parameters<typeof updateScreenshot>[1]) => {
-    updateScreenshot(item.id, patch);
+  // Surface failures via toast so silent server errors don't go unnoticed.
+  const persistNow = async (patch: Parameters<typeof updateScreenshot>[1]) => {
+    const { error } = await updateScreenshot(item.id, patch);
+    if (error) toast.error(`save failed: ${error.slice(0, 80)}`);
   };
 
   // Stage scalar changes into `pending`; commit on Apply.
@@ -220,7 +224,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
 
   const onApply = async () => {
     const patch = pending;
-    setPending({});
     // Map local camelCase keys to DB snake_case for the supabase update.
     const dbPatch: Record<string, unknown> = {};
     if ('category' in patch) dbPatch.category = patch.category;
@@ -233,10 +236,23 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     if ('sourceUrlManual' in patch) dbPatch.source_url_manual = patch.sourceUrlManual;
     if ('notes' in patch) dbPatch.notes = patch.notes;
 
+    // Optimistic UI: update parent + close edit mode immediately. If the
+    // server rejects, restore the pending patch and toast the error so the
+    // user can retry without losing what they typed.
     onChange(patch as Partial<LocalScreenshot>);
-    await updateScreenshot(item.id, dbPatch as Parameters<typeof updateScreenshot>[1]);
     if ('notes' in patch) setServerNotes(patch.notes ?? '');
+    setPending({});
     closeAllEditing();
+
+    const { error } = await updateScreenshot(
+      item.id,
+      dbPatch as Parameters<typeof updateScreenshot>[1],
+    );
+    if (error) {
+      // Restore the pending state so the user can fix and re-apply.
+      setPending(patch);
+      toast.error(`save failed: ${error.slice(0, 80)}`);
+    }
   };
 
   const onCancel = () => {

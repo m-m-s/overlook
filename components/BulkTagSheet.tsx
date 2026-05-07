@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
+import { useToast } from './Toast';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
 import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -45,6 +46,7 @@ const SectionLabel = ({ children }: { children: string }) => (
 );
 
 export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
+  const toast = useToast();
   const [patch, setPatch] = useState<Patch>({});
   const [tagText, setTagText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -77,7 +79,13 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
 
       // Apply scalar patch in one query.
       const scalarPatch: ScreenshotPatch = patch as ScreenshotPatch;
-      if (fieldsCount > 0) await updateScreenshots(selectedIds, scalarPatch);
+      if (fieldsCount > 0) {
+        const { error } = await updateScreenshots(selectedIds, scalarPatch);
+        if (error) {
+          toast.error(`bulk save failed: ${error.slice(0, 80)}`);
+          return;
+        }
+      }
 
       // Append tag per row.
       if (appendedTag) await appendTagToAll(selectedIds, appendedTag);
@@ -99,7 +107,13 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
     setBusy(true);
     try {
       const scalarPatch: ScreenshotPatch = patch as ScreenshotPatch;
-      if (fieldsCount > 0) await updateScreenshots(selectedIds, scalarPatch);
+      if (fieldsCount > 0) {
+        const { error } = await updateScreenshots(selectedIds, scalarPatch);
+        if (error) {
+          toast.error(`bulk save failed: ${error.slice(0, 80)}`);
+          return;
+        }
+      }
       await appendTagToAll(selectedIds, tag);
       onApplied(patch as Partial<LocalScreenshot>, tag);
       onClose();
