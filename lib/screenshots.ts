@@ -8,6 +8,9 @@ export type ScreenshotPatch = Partial<{
   urgency: string | null;
   urgency_date: string | null;
   resonance: 1 | 2 | 3 | null;
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
+  time_to_complete: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
+  source_url_manual: string | null;
   notes: string | null;
   manual_typed_tags: { type?: string; value: string }[];
 }>;
@@ -21,6 +24,12 @@ type Row = {
   status: string | null;
   urgency: string | null;
   resonance: number | null;
+  difficulty: string | null;
+  time_to_complete: string | null;
+  source_url: string | null;
+  source_url_manual: string | null;
+  action_url: string | null;
+  action_url_type: string | null;
 };
 
 /**
@@ -34,7 +43,9 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
 
   const { data, error } = await supabase
     .from('screenshots')
-    .select('id, storage_path, created_at, category, subject, status, urgency, resonance')
+    .select(
+      'id, storage_path, created_at, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type',
+    )
     .order('created_at', { ascending: false })
     .limit(500);
 
@@ -69,6 +80,12 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     status: r.status,
     urgency: r.urgency,
     resonance: (r.resonance === 1 || r.resonance === 2 || r.resonance === 3 ? r.resonance : null),
+    difficulty: (r.difficulty as 'beginner' | 'intermediate' | 'advanced' | null) ?? null,
+    timeToComplete: (r.time_to_complete as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null) ?? null,
+    sourceUrl: r.source_url,
+    sourceUrlManual: r.source_url_manual,
+    actionUrl: r.action_url,
+    actionUrlType: r.action_url_type,
   }));
 };
 

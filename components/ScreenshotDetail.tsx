@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 
@@ -10,7 +11,15 @@ import { Iris } from './Iris';
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES, TAG_TYPES } from '@/lib/options';
+import {
+  CATEGORIES,
+  DIFFICULTIES,
+  RESONANCE_LEVELS,
+  STATUSES,
+  TAG_TYPES,
+  TIMES_TO_COMPLETE,
+  URGENCIES,
+} from '@/lib/options';
 import {
   deleteScreenshot,
   fetchScreenshotMeta,
@@ -46,6 +55,9 @@ type Pending = Partial<{
   urgency: string | null;
   status: string | null;
   resonance: 1 | 2 | 3 | null;
+  difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
+  timeToComplete: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
+  sourceUrlManual: string | null;
   notes: string | null;
 }>;
 
@@ -114,8 +126,13 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     urgency: 'urgency' in pending ? pending.urgency : item.urgency,
     status: 'status' in pending ? pending.status : item.status,
     resonance: 'resonance' in pending ? pending.resonance : item.resonance,
+    difficulty: 'difficulty' in pending ? pending.difficulty : item.difficulty ?? null,
+    timeToComplete: 'timeToComplete' in pending ? pending.timeToComplete : item.timeToComplete ?? null,
+    sourceUrlManual: 'sourceUrlManual' in pending ? pending.sourceUrlManual : item.sourceUrlManual ?? null,
     notes: 'notes' in pending ? pending.notes : serverNotes,
   };
+  // Effective source URL: user-set if present, otherwise AI-extracted.
+  const effectiveSourceUrl = view.sourceUrlManual ?? item.sourceUrl ?? null;
   const pendingCount = Object.keys(pending).length;
 
   // Hydrate tags + notes from server when sheet opens.
@@ -154,8 +171,20 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   const onApply = async () => {
     const patch = pending;
     setPending({});
+    // Map local camelCase keys to DB snake_case for the supabase update.
+    const dbPatch: Record<string, unknown> = {};
+    if ('category' in patch) dbPatch.category = patch.category;
+    if ('subject' in patch) dbPatch.subject = patch.subject;
+    if ('urgency' in patch) dbPatch.urgency = patch.urgency;
+    if ('status' in patch) dbPatch.status = patch.status;
+    if ('resonance' in patch) dbPatch.resonance = patch.resonance;
+    if ('difficulty' in patch) dbPatch.difficulty = patch.difficulty;
+    if ('timeToComplete' in patch) dbPatch.time_to_complete = patch.timeToComplete;
+    if ('sourceUrlManual' in patch) dbPatch.source_url_manual = patch.sourceUrlManual;
+    if ('notes' in patch) dbPatch.notes = patch.notes;
+
     onChange(patch as Partial<LocalScreenshot>);
-    await updateScreenshot(item.id, patch as Parameters<typeof updateScreenshot>[1]);
+    await updateScreenshot(item.id, dbPatch as Parameters<typeof updateScreenshot>[1]);
     if ('notes' in patch) setServerNotes(patch.notes ?? '');
   };
 
@@ -377,6 +406,51 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         })}
       </ScrollView>
 
+      {/* Difficulty */}
+      <SectionLabel>difficulty</SectionLabel>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+        {DIFFICULTIES.map((d) => {
+          const active = view.difficulty === d.key;
+          return (
+            <Chip
+              key={d.key}
+              label={d.label}
+              variant="meta"
+              selected={active}
+              color={active ? colors.ink : colors.inkMuted}
+              onPress={() =>
+                stage({ difficulty: view.difficulty === d.key ? null : (d.key as 'beginner' | 'intermediate' | 'advanced') })
+              }
+            />
+          );
+        })}
+      </ScrollView>
+
+      {/* Time to complete */}
+      <SectionLabel>time to complete</SectionLabel>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+        {TIMES_TO_COMPLETE.map((t) => {
+          const active = view.timeToComplete === t.key;
+          return (
+            <Chip
+              key={t.key}
+              label={t.label}
+              variant="meta"
+              selected={active}
+              color={active ? colors.ink : colors.inkMuted}
+              onPress={() =>
+                stage({
+                  timeToComplete:
+                    view.timeToComplete === t.key
+                      ? null
+                      : (t.key as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term'),
+                })
+              }
+            />
+          );
+        })}
+      </ScrollView>
+
       {/* Tags — manual + AI mixed, sorted by spec hierarchy: typed first (in TAG_TYPES order), alphabetical within type, untyped last. */}
       <SectionLabel>tags</SectionLabel>
       <View style={[styles.row, styles.wrap]}>
@@ -442,6 +516,29 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
           </View>
         </View>
       )}
+
+      {/* Source URL — AI extracted or manually entered. Tappable link icon. */}
+      <SectionLabel>source url</SectionLabel>
+      {effectiveSourceUrl ? (
+        <Pressable
+          onPress={() => Linking.openURL(effectiveSourceUrl).catch(() => {})}
+          style={styles.urlRow}
+        >
+          <Ionicons name="open-outline" size={16} color={colors.ink} />
+          <Text numberOfLines={1} style={styles.urlText}>
+            {effectiveSourceUrl}
+          </Text>
+        </Pressable>
+      ) : null}
+      <BottomSheetTextInput
+        value={view.sourceUrlManual ?? ''}
+        onChangeText={(t) => stage({ sourceUrlManual: t.trim() || null })}
+        placeholder={effectiveSourceUrl ? 'override or paste a URL' : 'paste a URL'}
+        placeholderTextColor={colors.inkMuted}
+        autoCapitalize="none"
+        keyboardType="url"
+        style={styles.urlInput}
+      />
 
       {/* Notes */}
       <SectionLabel>notes</SectionLabel>
@@ -590,6 +687,31 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.inkMuted,
     borderRadius: 3,
+  },
+  urlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: colors.divider,
+  },
+  urlText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.ink,
+    textDecorationLine: 'underline',
+  },
+  urlInput: {
+    fontSize: 13,
+    color: colors.ink,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.inkMuted,
+    borderRadius: 3,
+    marginTop: 8,
   },
   notesInput: {
     fontSize: 14,

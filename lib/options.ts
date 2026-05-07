@@ -25,6 +25,24 @@ export const URGENCIES = [
   { key: 'expires_soon', label: 'expires soon' },
 ] as const;
 
+export const DIFFICULTIES = [
+  { key: 'beginner', label: 'beginner' },
+  { key: 'intermediate', label: 'intermediate' },
+  { key: 'advanced', label: 'advanced' },
+] as const;
+
+export const TIMES_TO_COMPLETE = [
+  { key: 'quick', label: 'quick (under an hour)' },
+  { key: 'afternoon', label: 'afternoon' },
+  { key: 'full_day', label: 'full day' },
+  { key: 'multi_day', label: 'multi-day' },
+  { key: 'long_term', label: 'long-term' },
+] as const;
+
+export const ACTION_URL_TYPES = [
+  'tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search',
+] as const;
+
 export const RESONANCE_LEVELS = [1, 2, 3] as const;
 
 export const TAG_TYPES = [

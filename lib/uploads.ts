@@ -12,6 +12,12 @@ export type LocalScreenshot = {
   status?: string | null;
   urgency?: string | null;
   resonance?: 1 | 2 | 3 | null;
+  difficulty?: 'beginner' | 'intermediate' | 'advanced' | null;
+  timeToComplete?: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
+  sourceUrl?: string | null; // AI-extracted
+  sourceUrlManual?: string | null; // user-set
+  actionUrl?: string | null;
+  actionUrlType?: string | null;
 };
 
 const guessExt = (uri: string): string => {
