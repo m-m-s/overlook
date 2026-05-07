@@ -48,6 +48,30 @@ Originally placed the function in `server/api/analyze.ts` with the intent that M
 
 If you ever want the function and app split into separate projects, move it back to `server/` and configure root dir on Vercel — it's the cleaner long-term setup. For sprint, single repo + auto-detection is simpler.
 
+## EAS APK build — pre-flight checklist (when ready)
+
+Before running `npx eas-cli@latest build -p android --profile production`:
+
+- [ ] Make sure you've run `npx eas-cli@latest login` with an Expo account (free)
+- [ ] Make sure you've run `npx eas-cli@latest init` once for this project (creates an Expo project ID, links repo)
+- [ ] `eas.json` exists with `production.android.buildType: "apk"` ✓ (already in repo)
+- [ ] `app.json` has `android.package: "com.overlook.app"` ✓ (already in repo)
+- [ ] `app.json` has `name: "Overlook"` and `slug: "overlook"` ✓
+- [ ] Latest commit pushed to GitHub (`git status` shows nothing pending)
+- [ ] Local `.env` is filled in (it's not bundled — environment values for the production app come from `app.json` extras OR are baked in via `EXPO_PUBLIC_*` env vars at bundle time)
+
+What to expect:
+- Build queue + build itself: ~10-20 min total
+- First build of the project asks if you want EAS to generate a keystore — say **yes** (free, managed by Expo)
+- Email when done with download URL
+- On phone: tap link → tap to install (allow "Install unknown apps" for your browser once)
+- After install: launch from home screen — app icon will be the default Expo splash-style placeholder until we replace it
+
+Known remaining work for production polish (not blocking APK):
+- App icon (currently Expo default)
+- Splash screen (currently parchment + Expo default image)
+- Site URL on Supabase still set to `localhost:3000` (doesn't break magic link, but should be `overlook://` for prod)
+
 ## Phone-test debugging tips
 
 - **Magic link "dimmed screen" / "site can't be reached":** the link redirected to `localhost:3000` because Supabase's default Site URL is set there AND our `exp://*` allowlist wildcard didn't actually match. Per Supabase wildcard rules, `*` matches one segment only (no `/`), so `exp://*` doesn't match `exp://192.168.1.5:8081/--/...`. Use `exp://**` (double asterisk) to match across slashes. Or — preferred — use the 6-digit OTP code path so deep linking is irrelevant.
@@ -56,6 +80,48 @@ If you ever want the function and app split into separate projects, move it back
 - **First bundling takes ~1-2 min in Expo Go.** Subsequent reloads are faster (Metro caches).
 - **Phone needs same WiFi as Mac** running `npx expo start`. If on different networks, use `npx expo start --tunnel` (slower, more reliable).
 - **No background work between Claude turns:** Claude only runs during a message-response cycle. When the user is offline (sleep, commute), no code is being written. Plan sprint time accordingly.
+
+## Phone-test troubleshooting (decision tree)
+
+**Symptom: QR scan doesn't load app, or shows "couldn't connect"**
+- Both phone and Mac on the same WiFi? (most common cause)
+- If on different networks: kill expo, run `npx expo start --tunnel` instead — Expo provides a tunnel URL that works across networks (slower, more reliable)
+- If WiFi has client isolation enabled (some hotel/coffee-shop WiFi): tunnel mode is needed
+
+**Symptom: bundling stuck or never finishes**
+- First bundle of a fresh project: 1-3 min is normal
+- If stuck >5 min: kill expo (Ctrl+C in terminal), run `npx expo start --clear` (blows out Metro cache)
+- On phone: force-close Expo Go, reopen, scan QR fresh
+
+**Symptom: code changes not appearing on phone**
+- Press `r` in expo terminal (sends reload signal)
+- Or shake phone → "Reload" in dev menu
+- If still no change: restart with `npx expo start --clear`
+
+**Symptom: magic link "this site can't be reached" / dimmed screen**
+- See "Magic link" entries above. Use OTP code path instead (more reliable across Expo Go / dev / prod environments)
+
+**Symptom: "Email rate limit reached"**
+- Supabase default: ~4 emails/hour per address. Options:
+  - Wait 30-60 min
+  - Use a `+alias` (e.g. `maggie+test@miplata.com`) — same inbox, counts as different address for rate limiting
+  - Bump rate limit in Supabase: Authentication → Rate Limits
+
+**Symptom: AI tagging fails (toast error after upload)**
+- Check `https://overlook-delta.vercel.app/api/analyze` returns `{"error":"method not allowed"}` on GET — that means the function is mounted
+- Check Vercel deployments tab — latest should be Production + Ready
+- Check env vars: `ANTHROPIC_API_KEY` (all caps) + `OVERLOOK_SHARED_SECRET` (all caps), both scoped to Production
+- Check `.env` locally has `EXPO_PUBLIC_VERCEL_URL` and `EXPO_PUBLIC_OVERLOOK_SECRET`
+- If still failing: in Vercel → Logs tab on the latest deployment → look for the actual runtime error
+
+**Symptom: "Photo permission needed" alert won't dismiss**
+- Tap the home button, go to Settings → Apps → Expo Go → Permissions → Photos → allow. Reopen.
+
+**Symptom: cards appear but no AI tags after a long wait**
+- Vercel function might be cold-starting (5-10s) on first call
+- Or Anthropic rate-limited (unlikely at v1 scale)
+- Tap a card → in detail sheet, tap "AI tag" button to retry manually
+- Look at the expo terminal output for `[analyze] non-OK response` warnings
 
 ## Shallow-implementation watchlist (deepen iteratively)
 
