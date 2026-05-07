@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import 'react-native-url-polyfill/auto';
 
+import { ToastProvider } from '@/components/Toast';
 import { handleAuthDeepLink } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 
@@ -23,10 +24,13 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.parchment }}>
-      <BottomSheetModalProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.parchment } }} />
-        <StatusBar style="dark" />
-      </BottomSheetModalProvider>
+      {/* ToastProvider OUTSIDE BottomSheetModalProvider so toasts render on top of any sheet. */}
+      <ToastProvider>
+        <BottomSheetModalProvider>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.parchment } }} />
+          <StatusBar style="dark" />
+        </BottomSheetModalProvider>
+      </ToastProvider>
     </GestureHandlerRootView>
   );
 }

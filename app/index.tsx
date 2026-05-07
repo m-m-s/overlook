@@ -9,6 +9,7 @@ import { Card, type CardData } from '@/components/Card';
 import { applyFilters, emptyFilters, FilterBar, type Filters } from '@/components/FilterBar';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { SignIn } from '@/components/SignIn';
+import { useToast } from '@/components/Toast';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
@@ -30,6 +31,7 @@ const toCardData = (it: LocalScreenshot): CardData => ({
 
 export default function LibraryScreen() {
   const { session, loading } = useSession();
+  const toast = useToast();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -98,6 +100,7 @@ export default function LibraryScreen() {
           return next;
         });
 
+        let failures = 0;
         // 3) Fire analyses after setItems so the cards exist before patches arrive.
         for (const u of uploads) {
           void (async () => {
@@ -107,7 +110,11 @@ export default function LibraryScreen() {
               next.delete(u.id);
               return next;
             });
-            if (!patch) return;
+            if (!patch) {
+              failures++;
+              if (failures === 1) toast.error('AI tagging failed for some images — try retry from card detail');
+              return;
+            }
             setItems((prev) => prev.map((it) => (it.id === u.id ? { ...it, ...patch } : it)));
           })();
         }
