@@ -3,8 +3,8 @@
 import type { Category } from '@/components/CategoryIcon';
 
 export const CATEGORIES: Category[] = [
-  'craft', 'fashion', 'film', 'tv', 'food', 'art', 'music', 'places',
-  'meme', 'messages', 'shopping', 'reading', 'events', 'tech', 'documents',
+  'craft', 'fashion', 'film', 'tv', 'food', 'art', 'design', 'music', 'places',
+  'meme', 'messages', 'social', 'shopping', 'reading', 'events', 'tech', 'documents',
 ];
 
 export const STATUSES = [
@@ -104,8 +104,10 @@ export const TAG_TYPES = [
   // Display order — general → specific, used for the tag-row sort in
   // ScreenshotDetail. Mirrors the enum the vision prompt returns; new
   // types should slot into the position that matches their generality.
-  'item', 'place_type', 'activity', 'genre', 'cuisine', 'dish',
-  'subject', 'theme', 'technique', 'style', 'material', 'color',
+  'item', 'format', 'screenshot_type', 'platform', 'place_type', 'activity',
+  'genre', 'cuisine', 'dish',
+  'subject', 'theme', 'relationship', 'language', 'time', 'rating',
+  'technique', 'style', 'material', 'color',
   'price', 'status', 'season', 'occasion', 'mood',
   'source', 'author', 'brand', 'person', 'place',
 ] as const;

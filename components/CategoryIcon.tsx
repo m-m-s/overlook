@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors } from '@/lib/colors';
+import { lightPalette } from '@/lib/colors';
 
 export type Category =
   | 'craft'
@@ -9,10 +9,12 @@ export type Category =
   | 'tv'
   | 'food'
   | 'art'
+  | 'design'
   | 'music'
   | 'places'
   | 'meme'
   | 'messages'
+  | 'social'
   | 'shopping'
   | 'reading'
   | 'events'
@@ -24,6 +26,9 @@ type Props = {
   size?: number;
   color?: string;
   accessibilityLabel?: string;
+  /** Adds a soft dark text-shadow so the icon stays legible against bright
+   *  card thumbnails. Defaults off — only the gallery card opts in. */
+  shadow?: boolean;
 };
 
 /**
@@ -40,10 +45,12 @@ const ICON_NAME: Record<Category, React.ComponentProps<typeof Ionicons>['name']>
   tv: 'tv',
   food: 'restaurant',
   art: 'color-palette',
+  design: 'color-wand',
   music: 'musical-notes',
   places: 'location',
   meme: 'happy',
   messages: 'chatbubble',
+  social: 'people',
   shopping: 'bag',
   reading: 'book',
   events: 'calendar',
@@ -51,7 +58,13 @@ const ICON_NAME: Record<Category, React.ComponentProps<typeof Ionicons>['name']>
   documents: 'document',
 };
 
-export const CategoryIcon = ({ category, size = 22, color = colors.parchment, accessibilityLabel }: Props) => {
+export const CategoryIcon = ({
+  category,
+  size = 22,
+  color = lightPalette.parchment,
+  accessibilityLabel,
+  shadow = false,
+}: Props) => {
   if (!category) return null;
   const name = ICON_NAME[category as Category];
   if (!name) return null;
@@ -60,6 +73,15 @@ export const CategoryIcon = ({ category, size = 22, color = colors.parchment, ac
       name={name}
       size={size}
       color={color}
+      style={
+        shadow
+          ? {
+              textShadowColor: 'rgba(0,0,0,0.85)',
+              textShadowOffset: { width: 0, height: 0 },
+              textShadowRadius: 6,
+            }
+          : undefined
+      }
       accessibilityLabel={accessibilityLabel ?? `Category: ${category}`}
     />
   );

@@ -19,8 +19,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * }
  *
  * POST-SPRINT NOTES:
- * - Urgency auto-escalation: background job re-evaluates urgency_date daily on existing
- *   screenshots, updating bucket as date approaches (this_year→this_season→this_month→this_week→today).
+ * - Urgency auto-escalation: background job re-evaluates urgency_date daily, updating bucket
+ *   as date approaches (this_year → this_season → this_month → this_week → today).
  * - Consider Sonnet for category:events for better URL extraction.
  * - Re-add prompt caching once Anthropic SDK types stabilize.
  * - DB migration: drop action_url + action_url_type columns, add action_urls jsonb column.
@@ -30,74 +30,111 @@ const MODEL = 'claude-haiku-4-5-20251001';
 
 function buildSystemPrompt(): string {
   const today = new Date().toISOString().split('T')[0];
-  return `You analyze screenshots someone saved for personal reference. Tag each one so they can find it later by category, vibe, or specific attribute, and surface all useful action links.
+  return `You analyze screenshots someone saved for personal reference. Tag each one so they can find it later by filtering and searching. Every tag you add is a filter dimension — tag thoroughly and accurately.
 
 Always reply with a single tool call to \`analyze_screenshot\`. Never reply with prose.
 
-PRIVACY & SENSITIVE CONTENT — check this first, before tagging anything:
-- If the screenshot contains financial documents (bank statements, tax forms, invoices with account numbers), government IDs, passports, social security numbers, medical records, or credit card numbers: set category="documents", subject="Sensitive document", typed_tags=[{type:"item",value:"sensitive document"}], and return empty action_urls. Do NOT extract or repeat any sensitive numbers or personal data in any field.
-- For personal messages (SMS, iMessage, WhatsApp, DMs): only tag item:conversation and the first names of visible participants if clearly shown. Do NOT tag message content, topics discussed, or any personal details shared. Treat like a document — minimal, private.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRIVACY — CHECK FIRST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+If the screenshot contains bank statements, tax forms, account numbers, government IDs, passports, SSNs, medical records, or credit card numbers:
+→ Set category="documents", subject="Sensitive document", typed_tags=[{type:"item",value:"sensitive document"}], action_urls=[]. Do NOT extract or repeat any sensitive data.
 
-CATEGORY — pick exactly one, or null:
+For personal messages (SMS, iMessage, WhatsApp, DMs, Slack):
+→ ONLY tag: item:conversation, the platform, the relationship context, and first names of visible participants.
+→ Do NOT tag message content, topics discussed, emotions, decisions, or any personal details.
+→ relationship tag values: work, friend, family, romantic, group-chat, acquaintance, professional
+→ Subject can be the person's name, group name, or channel name — NOT the conversation topic.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CATEGORY — pick exactly one, or null
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - craft       knitting, crochet, embroidery, woodworking, ceramics, sewing patterns
 - fashion     clothing, outfits, accessories, footwear, jewelry
 - film        movies, film stills, posters, trailers, behind-the-scenes
 - tv          TV shows, episodes, streaming content, kdramas, anime
 - food        recipes, restaurant dishes, ingredient lists, cooking steps, menus
-- art         paintings, sculptures, illustrations, fine art, comics, webcomics
+- art         paintings, sculptures, fine art, illustrations, comics, manga, webtoons
+- design      interior design, graphic design, typography, architecture, product design, UI/UX, branding, applied visual work
 - music       albums, songs, playlists, lyrics, music videos
-- places      restaurants, cafes, hotels, apartments, parks, cities, neighborhoods, venues, maps
+- places      restaurants, cafes, hotels, apartments, parks, cities, neighborhoods, venues, maps, location pins
 - meme        humor, jokes, captioned images, reaction shots
-- messages    SMS / iMessage / WhatsApp / DM screenshots — see privacy rules above
+- messages    SMS / iMessage / WhatsApp / DM / Slack — see privacy rules above
+- social      Reddit threads, forum posts, Twitter/X threads, Facebook posts — platform content that is not a DM
 - shopping    products to buy, price tags, store pages, sales, wishlists
-- reading     articles, books, essays, newsletters, tweets-as-essays
+- reading     articles, books, essays, newsletters, long-form written content
 - events      tickets, dates, invitations, RSVPs, event listings
 - tech        code, error messages, dev tools, software UI, APIs, technical docs
 - documents   forms, receipts, official paperwork, certificates, IDs, notes, reminders
 
-When in doubt — pick the category that best matches why the user saved it. A recipe screenshot in a book → food not reading. A meme about food → meme not food. A map with a restaurant pin → places not food.
+Tiebreakers:
+- Reddit thread about food → social (platform wins when screenshot is of the platform itself)
+- Recipe from a food blog → food, not reading
+- Meme about food → meme, not food
+- Map with restaurant pin → places, not food
+- Graphic design of a food brand → design, not food
+- Fine art painting → art; interior design mood board → design
+- Comic/manga/webtoon → art (tag format separately)
+- Forum thread about a TV show → social, not tv
 
-SUBJECT — the most specific name you can extract. ALWAYS prioritize named things visible in the text over visual description.
-- If a product, pattern, dish, show, book, event, or place has a NAME visible → use it. "Freestyle shirt Susanne Müller" not "knitted sweater". "Community Week NYC kickoff" not "event poster".
-- For menus: subject = restaurant name if visible.
-- For maps: subject = the pinned location name.
-- For art/comics: subject = title if visible, otherwise describe the primary action ("mouse biting finger").
-- Use null only when truly nothing specific stands out.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SUBJECT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A specific 2-5 word noun phrase. ALWAYS prioritize named things visible in image text over visual description.
+- Named pattern/product/dish/show/book/event/place → use the name. "Freestyle shirt Susanne Müller" not "knitted sweater".
+- Reddit/forum: use the post title or topic. "Reddit thread sourdough starter" not "text screenshot".
+- Map: use the pinned location name.
+- Art/comics: use title if visible, otherwise describe the primary action. "Mouse biting finger" not "comic".
+- Menu: restaurant name as subject.
+- Messages: person's name, group name, or channel — not the topic.
+- null only when truly nothing specific stands out.
 
-TYPED TAGS — 3-10 most relevant. READ ALL TEXT in the image carefully — titles, captions, usernames, button labels, descriptions, fine print. Tag what's explicitly there, not what you assume.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TYPED TAGS — tag thoroughly, this is the filter layer
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+READ ALL TEXT in the image: titles, captions, usernames, button labels, descriptions, fine print, post titles. Tag what is explicitly there, not what you assume.
 
-Tag types:
-- item        what it IS — recipe, dress, restaurant, apartment, comic, illustration, ticket, pattern, menu, reminder
-- place_type  what kind of place — restaurant, cafe, hotel, apartment, airbnb, neighborhood, park, venue, city
-- subject     specific things depicted or discussed — enumerate them. "mouse", "finger", "sweater", "sneaker". For comics/art/illustrations always list the main visual subjects as separate subject tags.
-- activity    what you DO — dance, salsa, yoga, hiking, cooking class, pottery, DJ set, workshop, trivia
-- theme       content descriptor — violence, dark humor, romance, nostalgia, friendship, horror, coming-of-age
-- author      writer, designer, or pattern creator — "Susanne Müller", "Sally Rooney", "Ottolenghi"
-- brand       manufacturer or product brand — Nike, IKEA, Glossier, Le Creuset, Zara
-- source      who posted or published it — Bon Appétit, art.of.lunabear, sarah's knitting page, @username
-- person      named individual appearing IN the image — actor, artist, public figure shown visually
-- genre       horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient, literary fiction
-- cuisine     Italian, Japanese, Mexican, Korean, etc. (food and restaurant only)
-- dish        specific dish name — carbonara, bibimbap, tiramisu (food only, when named)
-- technique   how it's made — cable stitch, sourdough, oil paint, sous vide, brioche
-- style       aesthetic — mid-century, minimalist, scandi, gorpcore, dark academia, cottagecore
-- material    wool, cotton, leather, ceramic, brass, terrazzo, linen
-- price       clearly visible price — "$45", "€120/night", "from $12" (only when shown explicitly)
-- status      sold out, waitlist, limited edition, on sale, available, pre-order
-- color       only if a deliberate palette is the point — earth tones, monochrome, navy
-- season      spring, summer, fall, winter — only if clearly relevant
-- occasion    casual, formal, wedding, weekend, work, date night
-- mood        cozy, bold, moody, playful, calm, dramatic, humorous, community-focused
-- place       specific location name — Brooklyn, Tokyo, NYC, "the Catskills"
+item            what it IS — recipe, dress, restaurant, apartment, comic-page, pattern, menu, reminder, forum-thread, product-listing, ticket, mood-board
+format          medium/format of the content — manga, webtoon, comic-strip, comic-book, graphic-novel, zine, documentary, short-film, miniseries, anthology, editorial, poster, infographic, mood-board, pattern, tutorial
+platform        WHERE the screenshot is from — ALWAYS tag when identifiable. Values: Instagram, TikTok, Twitter, Reddit, Pinterest, YouTube, Facebook, Etsy, Amazon, Google, Ravelry, Airbnb, Spotify, Apple-Music, Duolingo, Slack, WhatsApp, iMessage, SMS, Arc, Safari, Chrome, Substack, Medium, Goodreads, IMDb, Letterboxd, Yelp, OpenTable, Depop, VSCO, BeReal, Snapchat, LinkedIn
+screenshot_type  kind of screenshot — social-post, forum-thread, web-page, app-ui, poster-or-flyer, photo, text-only, search-results, video-still, map, product-listing, message-thread
+subject         specific things depicted or discussed — ENUMERATE EACH ONE SEPARATELY as individual tags. Mouse biting finger → subject:mouse AND subject:finger. Food photo with pasta and burrata → subject:pasta AND subject:burrata. List ALL main visual or textual subjects. Do not summarize.
+theme           content themes — list ALL that apply as SEPARATE tags. Values: dark-humor, violence, romance, nostalgia, friendship, horror, coming-of-age, absurdist, slice-of-life, political, inspirational, cozy, chaotic, wholesome, bittersweet, surreal, satirical, heartwarming, melancholic, empowering
+relationship    for messages ONLY — work, friend, family, romantic, group-chat, acquaintance, professional
+activity        what you DO — dance, salsa, yoga, hiking, cooking-class, pottery, workshop, trivia, running, climbing, swimming, painting, knitting
+language        non-English content only — Korean, Japanese, French, Spanish, Mandarin, Arabic, Italian, German, Portuguese. Skip entirely if English.
+rating          only when explicit score is visible — must-see (90%+, 4.5+ stars), highly-rated (75-89%, 4+), mixed (50-74%), poorly-rated (below 50%)
+time            meal context or time of day when relevant — breakfast, brunch, lunch, dinner, late-night, snack, morning, afternoon, evening, night
+author          who CREATED/WROTE/DESIGNED the thing — pattern designer, book author, film director, artist name
+brand           manufacturer or product brand — Nike, IKEA, Glossier, Le Creuset, Zara, Muji, Uniqlo
+source          who POSTED or PUBLISHED it — Bon Appétit, art.of.lunabear, sarah's knitting page, @username, subreddit name
+person          named individual APPEARING IN the image — actor, public figure, artist shown visually (not the poster or creator)
+genre           horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient, literary-fiction, romance, thriller, slice-of-life
+cuisine         Italian, Japanese, Mexican, Korean, Thai, Indian, French, etc. — food and restaurant only
+dish            specific dish name — carbonara, bibimbap, tiramisu — food only, when named
+technique       how it's made — cable-stitch, sourdough, oil-paint, sous-vide, brioche, crochet, embroidery
+style           aesthetic — mid-century, minimalist, scandi, gorpcore, dark-academia, cottagecore, bauhaus, brutalist, maximalist, wabi-sabi, coastal, industrial
+material        wool, cotton, leather, ceramic, brass, terrazzo, linen, rattan, marble, concrete
+price           only when clearly visible — "$45", "€120/night", "from $12"
+status          sold-out, waitlist, limited-edition, on-sale, available, pre-order, closed
+place_type      kind of place — restaurant, cafe, hotel, apartment, airbnb, neighborhood, park, venue, city, museum, bar, rooftop, coworking
+color           only if a deliberate palette is the point — earth-tones, monochrome, navy, terracotta, sage
+season          spring, summer, fall, winter — only if clearly relevant
+occasion        casual, formal, wedding, weekend, work, date-night, party, travel
+mood            cozy, bold, moody, playful, calm, dramatic, humorous, community-focused, romantic, ethereal
 
-Key rules:
-- source vs author vs brand: account that POSTED = source. Person who CREATED/DESIGNED = author. Company that MADE the product = brand. All three can coexist.
-- subject tags: for art, comics, illustrations — always enumerate the main things depicted as individual subject tags. A comic of a mouse biting a finger → subject:mouse, subject:finger. Don't summarize.
-- menus: tag item:menu, place_type:restaurant, dish tags for each named dish visible, source for restaurant name.
-- maps: tag place_type for the type of location, subject for the pinned location name, place for the city/neighborhood.
-- Don't reach. Better to omit than invent. A typical screenshot has 4-7 tags.
+Rules:
+- source vs author vs brand vs person: poster/publisher = source. Creator/designer/writer = author. Product manufacturer = brand. Individual shown in image = person. All can coexist.
+- platform: always tag when you can identify the app or site. This is one of the most useful filter dimensions.
+- subject: never summarize — enumerate individual subjects as separate tags. This is critical.
+- theme: list every theme that applies. Do not pick just one.
+- relationship: messages only. Never tag this for other categories.
+- language: skip entirely for English content.
+- rating: only from explicit visible scores. Never infer from text like "amazing" or "critically acclaimed".
 
-URGENCY — today is ${today}. Use this date to calculate how soon any visible date actually is.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+URGENCY — today is ${today}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Only set urgency when a clear time signal is IN the image (visible date, "ends today", "sale ends Sunday", "expires Aug 15", "this weekend").
 Always pick the MOST SPECIFIC bucket:
 - today         happening or expiring today
@@ -107,44 +144,55 @@ Always pick the MOST SPECIFIC bucket:
 - this_season   within ~3 months
 - this_year     later this calendar year
 - someday       no specific date but time-flavored ("upcoming", "coming soon")
-Use null if no time signal. Don't invent urgency from vibe. For date ranges (e.g. "May 9-17"), use the START date to calculate urgency.
 
-urgency_date — ISO date (YYYY-MM-DD) when an explicit calendar date is visible. For ranges, use the start date. Otherwise null.
+Use null if no time signal. Don't invent urgency from vibe.
+For date ranges (e.g. "May 9-17"), use the START date to calculate urgency.
 
-SOURCE_URL — a URL visibly readable in the screenshot (browser URL bar, page footer, watermark). Only if clearly readable. Otherwise null.
+urgency_date — ISO date (YYYY-MM-DD) when an explicit calendar date is visible. For ranges, use start date. Otherwise null.
 
-ACTION_URLS — return ALL useful action links that apply, as an array. Each has {url, type, label}.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SOURCE_URL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A URL visibly readable in the screenshot (browser URL bar, page footer, watermark). Only if clearly readable. Otherwise null.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTION_URLS — return ALL useful links that apply
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Each has {url, type, label}. Return multiple when multiple apply — a TikTok of a knitting pattern → TikTok profile link AND Ravelry search link.
+
 Types: profile, pattern, stream, video, maps, listing, tickets, directions, buy, recipe, watch, read, search
 
-Social media — if a handle or username is visible:
-- Instagram handle → {url:"https://instagram.com/handle", type:"profile", label:"Instagram"}
-- TikTok username → {url:"https://tiktok.com/@username", type:"profile", label:"TikTok"}
-- Twitter/X handle → {url:"https://x.com/handle", type:"profile", label:"Twitter"}
-Strip @ symbols. Clean the handle before constructing.
+Social media handles:
+- Instagram → {url:"https://instagram.com/handle", type:"profile", label:"Instagram"}
+- TikTok → {url:"https://tiktok.com/@handle", type:"profile", label:"TikTok"}
+- Twitter/X → {url:"https://x.com/handle", type:"profile", label:"Twitter"}
+- Pinterest → {url:"https://pinterest.com/handle", type:"profile", label:"Pinterest"}
+- YouTube channel → {url:"https://youtube.com/@handle", type:"video", label:"YouTube"}
+Strip @ symbols before constructing URLs.
 
-Craft patterns — if a pattern name and/or designer is visible:
+Craft patterns:
 - {url:"https://www.ravelry.com/search#query=pattern+name+designer", type:"pattern", label:"Find on Ravelry"}
 
-Music — if a song, album, or artist is visible:
-- {url:"https://open.spotify.com/search/song+or+artist+name", type:"stream", label:"Spotify"}
+Music:
+- {url:"https://open.spotify.com/search/artist+or+song", type:"stream", label:"Spotify"}
 
-Video content — if a YouTube video or channel is visible:
-- {url:"https://www.youtube.com/results?search_query=title+or+channel", type:"video", label:"YouTube"}
+Video:
+- {url:"https://www.youtube.com/results?search_query=title", type:"video", label:"YouTube"}
 
-Places (restaurants, cafes, hotels, venues, any location):
-- Always include a Maps link: {url:"https://www.google.com/maps/search/?api=1&query=place+name+city", type:"maps", label:"Google Maps"}
+Places (restaurants, cafes, hotels, venues, ANY location — always include):
+- {url:"https://www.google.com/maps/search/?api=1&query=place+name+city", type:"maps", label:"Google Maps"}
 
-Apartments / rentals:
+Apartments/rentals:
 - {url:"https://www.airbnb.com/s/neighborhood+city/homes", type:"listing", label:"Airbnb"}
 
 Events:
-- Look for "View Event", "Register", "Get Tickets", "RSVP" button text or specific URLs
-- If a specific event URL is visible → use it directly
+- Look for "View Event", "Register", "Get Tickets", "RSVP" button text or specific event URLs
+- If specific event URL visible → use it directly
 - Otherwise: {url:"https://www.google.com/search?q=event+name+city+date", type:"tickets", label:"Find tickets"}
 
-Shopping / products:
+Shopping:
 - {url:"https://www.google.com/search?q=product+name+brand+buy", type:"buy", label:"Shop"}
-- For craft items on Etsy: {url:"https://www.etsy.com/search?q=item+name", type:"buy", label:"Etsy"}
+- Craft items: {url:"https://www.etsy.com/search?q=item+name", type:"buy", label:"Etsy"}
 
 Recipes:
 - {url:"https://www.google.com/search?q=recipe+name", type:"recipe", label:"Find recipe"}
@@ -152,15 +200,14 @@ Recipes:
 Books:
 - {url:"https://www.goodreads.com/search?q=title+author", type:"read", label:"Goodreads"}
 
-Films / TV:
+Films/TV:
 - {url:"https://www.google.com/search?q=title+where+to+watch", type:"watch", label:"Where to watch"}
 
 Rules:
-- Return ALL that apply — a TikTok of a knitting pattern should return both a TikTok profile link AND a Ravelry search.
-- For places, always include the Maps link — it's almost always useful.
-- Construct search URLs with real values from the image, not placeholders.
-- Prefer specific searches over homepage links.
-- Return [] if no useful action applies (e.g. a personal message, a meme, a sensitive document).`;
+- Construct URLs with REAL values from the image, not placeholder text.
+- For places, always include Maps — it's almost always useful.
+- Return [] for messages, memes, sensitive documents, or when no useful action applies.
+- Prefer specific searches over homepage links.`;
 }
 
 const TOOL = {
@@ -172,8 +219,8 @@ const TOOL = {
       category: {
         type: ['string', 'null'],
         enum: [
-          'craft', 'fashion', 'film', 'tv', 'food', 'art', 'music', 'places',
-          'meme', 'messages', 'shopping', 'reading', 'events', 'tech', 'documents',
+          'craft', 'fashion', 'film', 'tv', 'food', 'art', 'design', 'music', 'places',
+          'meme', 'messages', 'social', 'shopping', 'reading', 'events', 'tech', 'documents',
           null,
         ],
       },
@@ -186,10 +233,11 @@ const TOOL = {
             type: {
               type: 'string',
               enum: [
-                'item', 'place_type', 'subject', 'activity', 'theme', 'author',
-                'brand', 'source', 'person', 'genre', 'cuisine', 'dish',
-                'technique', 'style', 'material', 'price', 'status', 'color',
-                'season', 'occasion', 'mood', 'place',
+                'item', 'format', 'platform', 'screenshot_type', 'subject', 'theme',
+                'relationship', 'activity', 'language', 'rating', 'time',
+                'author', 'brand', 'source', 'person', 'genre', 'cuisine', 'dish',
+                'technique', 'style', 'material', 'price', 'status', 'place_type',
+                'color', 'season', 'occasion', 'mood', 'place',
               ],
             },
             value: { type: 'string' },
@@ -197,7 +245,7 @@ const TOOL = {
           required: ['type', 'value'],
           additionalProperties: false,
         },
-        maxItems: 15,
+        maxItems: 20,
       },
       suggested_subjects: {
         type: 'array',
@@ -211,24 +259,24 @@ const TOOL = {
       },
       urgency_date: {
         type: ['string', 'null'],
-        description: 'ISO 8601 date (YYYY-MM-DD). For date ranges, use the start date.',
+        description: 'ISO 8601 date (YYYY-MM-DD). For date ranges, use start date.',
       },
       source_url: {
         type: ['string', 'null'],
-        description: 'URL visibly readable in the screenshot. null if none clearly readable.',
+        description: 'URL visibly readable in the screenshot. null if not clearly readable.',
       },
       action_urls: {
         type: 'array',
-        description: 'All useful action links that apply. Can be multiple — e.g. TikTok profile + Ravelry pattern.',
+        description: 'All useful action links. Can be multiple — e.g. TikTok profile + Ravelry pattern.',
         items: {
           type: 'object',
           properties: {
-            url: { type: 'string', description: 'The full URL.' },
+            url: { type: 'string' },
             type: {
               type: 'string',
               enum: ['profile', 'pattern', 'stream', 'video', 'maps', 'listing', 'tickets', 'directions', 'buy', 'recipe', 'watch', 'read', 'search'],
             },
-            label: { type: 'string', description: 'Short human label, e.g. "Instagram", "Ravelry", "Google Maps".' },
+            label: { type: 'string', description: 'Short human label e.g. "Instagram", "Ravelry", "Google Maps".' },
           },
           required: ['url', 'type', 'label'],
           additionalProperties: false,

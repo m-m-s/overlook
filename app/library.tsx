@@ -2,29 +2,35 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useFocusEffect, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { Alert, Animated, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { BulkTagSheet } from '@/components/BulkTagSheet';
+import { GhostHint } from '@/components/GhostHint';
 import { Card, type CardData } from '@/components/Card';
+import { Iris } from '@/components/Iris';
 import { EdgeSwipe } from '@/components/EdgeSwipe';
 import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
+import { useDemoMode } from '@/lib/demoMode';
 import { applyFilters, filtersActive } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { searchItems } from '@/lib/search';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { signOut, useSession } from '@/lib/auth';
-import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
+import { useColors, useFonts } from '@/lib/themeContext';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
+import { pickAndImportImages } from '@/lib/galleryPicker';
 import { fetchScreenshots } from '@/lib/screenshots';
 import { animDuration, useReduceMotion } from '@/lib/a11y';
-import { enqueueAnalysis } from '@/lib/analysisQueue';
+import { enqueueAnalysis, getQueuedIds } from '@/lib/analysisQueue';
 import { heavyHaptic, warnHaptic } from '@/lib/haptics';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -43,6 +49,25 @@ const toCardData = (it: LocalScreenshot): CardData => ({
   resonance: it.resonance ?? null,
 });
 
+/**
+ * Compute the top 3 tag values to overlay in intent-mode cards. Prefers manual
+ * tags (heavier signal), then AI tags. Skips untyped values that are very
+ * generic (single chars). De-duplicates by lowercase value.
+ */
+const intentTagPills = (it: LocalScreenshot): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const push = (v: string) => {
+    const key = v.trim().toLowerCase();
+    if (!key || key.length < 2 || seen.has(key)) return;
+    seen.add(key);
+    out.push(v);
+  };
+  for (const t of it.manualTags ?? []) push(t.value);
+  for (const t of it.aiTags ?? []) push(t.value);
+  return out.slice(0, 3);
+};
+
 /** Multi-select top bar: slides down from above when active, slides up when not. */
 const BulkBar = ({
   visible,
@@ -59,6 +84,9 @@ const BulkBar = ({
 }) => {
   const reduceMotion = useReduceMotion();
   const translateY = useRef(new Animated.Value(-110)).current;
+  const c = useColors();
+  const f = useFonts();
+  const styles = useMemo(() => makeStyles(c, f), [c, f]);
 
   useEffect(() => {
     Animated.timing(translateY, {
@@ -74,15 +102,15 @@ const BulkBar = ({
       style={[styles.bulkBar, { transform: [{ translateY }] }]}
     >
       <Pressable onPress={onCancel} hitSlop={12} style={styles.bulkIconBtn} accessibilityLabel="Cancel selection">
-        <Ionicons name="close" size={22} color={colors.parchment} />
+        <Ionicons name="close" size={22} color={c.parchment} />
       </Pressable>
       <Text style={styles.bulkCount}>{count} selected</Text>
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <Pressable onPress={onTag} hitSlop={12} style={styles.bulkIconBtn} accessibilityLabel="Bulk tag">
-          <Ionicons name="pricetag-outline" size={20} color={colors.parchment} />
+          <Ionicons name="pricetag-outline" size={20} color={c.parchment} />
         </Pressable>
         <Pressable onPress={onDelete} hitSlop={12} style={styles.bulkIconBtn} accessibilityLabel="Bulk delete">
-          <Ionicons name="trash-outline" size={20} color={colors.parchment} />
+          <Ionicons name="trash-outline" size={20} color={c.parchment} />
         </Pressable>
       </View>
     </Animated.View>
@@ -98,11 +126,17 @@ export default function LibraryScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { filters, setFilters, clearFilters, searchQuery } = useFilters();
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set());
   const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
   const [cols, setCols] = useState<ColCount>(3);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [demoOn, setDemoOn] = useDemoMode();
+  const insets = useSafeAreaInsets();
   const inSelectMode = multiSelectIds.size > 0;
   const isIntentMode = cols === 1;
+  const c = useColors();
+  const f = useFonts();
+  const styles = useMemo(() => makeStyles(c, f), [c, f]);
 
   // Load persisted column count
   useEffect(() => {
@@ -117,10 +151,27 @@ export default function LibraryScreen() {
     AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
   }, [cols]);
 
-  // Android hardware back: nav-style. Sidebar > multi-select > filters >
-  // default (exit app).
+  // Close any sticky overlays whenever this screen gains focus (e.g. coming
+  // back from /upload, /triage, etc) — defensive layered: useFocusEffect +
+  // pathname watcher to catch all navigation patterns.
+  const pathname = usePathname();
+  useEffect(() => {
+    if (pathname === '/library') setSidebarOpen(false);
+  }, [pathname]);
+  useFocusEffect(
+    useCallback(() => {
+      setSidebarOpen(false);
+    }, []),
+  );
+
+  // Android hardware back: nav-style. Sheet > sidebar > multi-select >
+  // filters > default (let the navigator pop or exit app).
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (selectedId) {
+        sheetRef.current?.dismiss();
+        return true;
+      }
       if (sidebarOpen) {
         setSidebarOpen(false);
         return true;
@@ -136,22 +187,26 @@ export default function LibraryScreen() {
       return false;
     });
     return () => sub.remove();
-  }, [sidebarOpen, inSelectMode, filters, clearFilters]);
+  }, [selectedId, sidebarOpen, inSelectMode, filters, clearFilters]);
 
-  // First-card hint: when items first appear, drop a one-time toast pointing
-  // at the gestures users wouldn't discover otherwise.
+  // First-card hint: when items first appear, show a ghost-hand pinch-in
+  // overlay so users discover the gesture-based zoom.
+  const [showLibraryPinchHint, setShowLibraryPinchHint] = useState(false);
   const prevItemsCount = useRef(items.length);
   useEffect(() => {
     if (prevItemsCount.current === 0 && items.length > 0) {
       void (async () => {
-        if (!(await wasHintSeen('first-card-gestures'))) {
-          toast.show('tap a card to view • pinch to zoom • long-press to select');
-          await markHintSeen('first-card-gestures');
+        if (!(await wasHintSeen('library-pinch-zoom'))) {
+          setShowLibraryPinchHint(true);
+          await markHintSeen('library-pinch-zoom');
         }
       })();
     }
     prevItemsCount.current = items.length;
-  }, [items.length, toast]);
+  }, [items.length]);
+
+  // Intent-mode hint: ghost dot converging when first entering 1-col view.
+  const [showIntentHint, setShowIntentHint] = useState(false);
 
   // Pinch gesture: pinch out (scale > 1.3) -> zoom in (fewer cols).
   // Pinch in (scale < 0.7) -> zoom out (more cols).
@@ -174,11 +229,11 @@ export default function LibraryScreen() {
     if (cols !== 1) return;
     void (async () => {
       if (!(await wasHintSeen('intent-mode'))) {
-        toast.show('intent mode — pinch in to return to grid');
+        setShowIntentHint(true);
         await markHintSeen('intent-mode');
       }
     })();
-  }, [cols, toast]);
+  }, [cols]);
 
   const visibleItems = useMemo(() => {
     const filtered = applyFilters(items, filters);
@@ -207,7 +262,8 @@ export default function LibraryScreen() {
   useEffect(() => {
     if (!session) return;
     fetchScreenshots().then((rows) => setItems(rows));
-  }, [session]);
+    void getQueuedIds().then(setQueuedIds);
+  }, [session, demoOn]);
 
   // Two-step upload per spec privacy model: pick first, then user explicitly
   // chooses to analyze with AI or add without AI. "Nothing auto-sends ever."
@@ -223,6 +279,9 @@ export default function LibraryScreen() {
       );
     }
     if (usable.length === 0) return;
+
+    // Real upload starting — clear demo mode so fetched rows aren't masked.
+    void setDemoOn(false);
 
     const uploads = await Promise.all(
       usable.map((a) =>
@@ -291,6 +350,8 @@ export default function LibraryScreen() {
         { kind: 'error' },
       );
     }
+    // Refresh queued snapshot in case items were enqueued for retry.
+    void getQueuedIds().then(setQueuedIds);
   };
 
   const onPick = async () => {
@@ -407,10 +468,15 @@ export default function LibraryScreen() {
     exitMultiSelect();
   };
 
-  const onItemChange = (patch: Partial<LocalScreenshot>) => {
-    if (!selectedId) return;
-    setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
-  };
+  // Memoized so the ScreenshotDetail's "auto-mark ai_reviewed on open"
+  // effect doesn't re-fire on every parent render.
+  const onItemChange = useCallback(
+    (patch: Partial<LocalScreenshot>) => {
+      if (!selectedId) return;
+      setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
+    },
+    [selectedId],
+  );
 
   const onItemDelete = () => {
     if (!selectedId) return;
@@ -427,6 +493,17 @@ export default function LibraryScreen() {
   );
 
   const selected = items.find((it) => it.id === selectedId) ?? null;
+  // Walk through whatever the user is currently looking at — `visibleItems`
+  // is filters + search applied, so swiping respects the filter context.
+  const selIdx = selected ? visibleItems.findIndex((it) => it.id === selected.id) : -1;
+  const goPrev = useCallback(() => {
+    if (selIdx <= 0) return;
+    setSelectedId(visibleItems[selIdx - 1].id);
+  }, [visibleItems, selIdx]);
+  const goNext = useCallback(() => {
+    if (selIdx < 0 || selIdx >= visibleItems.length - 1) return;
+    setSelectedId(visibleItems[selIdx + 1].id);
+  }, [visibleItems, selIdx]);
 
   const onSignOut = () => {
     Alert.alert('Sign out?', `You'll be signed out of ${session?.user.email ?? 'your account'}.`, [
@@ -445,7 +522,7 @@ export default function LibraryScreen() {
   if (loading) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator color={colors.ink} />
+        <Iris level={3} size={36} color={c.ink} spinning />
       </View>
     );
   }
@@ -456,9 +533,6 @@ export default function LibraryScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Persistent edge hint bar + swipe (per spec) */}
-      {!inSelectMode && session && <EdgeSwipe onOpen={() => setSidebarOpen(true)} />}
-
       <BulkBar
         visible={inSelectMode}
         count={multiSelectIds.size}
@@ -468,15 +542,21 @@ export default function LibraryScreen() {
       />
       {items.length === 0 ? (
         <View style={styles.empty}>
+          <View style={{ marginBottom: 24, opacity: 0.92 }}>
+            <Iris level={3} size={56} color={c.ink} />
+          </View>
           <Text style={styles.emptyTitle}>Overlook</Text>
           <Text style={styles.emptySub}>your screenshot library</Text>
           <Pressable
             accessibilityLabel="Upload screenshots"
             onPress={onPick}
             disabled={busy}
-            style={({ pressed }) => [styles.bigBtn, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.bigBtn, pressed && { opacity: 0.85 }]}
           >
             <Text style={styles.bigBtnText}>{busy ? 'uploading…' : 'upload screenshots'}</Text>
+          </Pressable>
+          <Pressable onPress={() => void setDemoOn(true)} hitSlop={8} style={{ marginTop: 24 }}>
+            <Text style={styles.demoLink}>or load demo data</Text>
           </Pressable>
         </View>
       ) : (
@@ -487,7 +567,7 @@ export default function LibraryScreen() {
             data={visibleItems}
             keyExtractor={(it) => it.id}
             numColumns={cols}
-            contentContainerStyle={{ paddingBottom: 96 }}
+            contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
             columnWrapperStyle={cols > 1 ? { gap: GRID_GAP } : undefined}
             ItemSeparatorComponent={() => <View style={{ height: GRID_GAP }} />}
             ListHeaderComponent={
@@ -509,9 +589,11 @@ export default function LibraryScreen() {
                 <Card
                   data={toCardData(item)}
                   analyzing={analyzingIds.has(item.id)}
+                  queued={queuedIds.has(item.id)}
                   inSelectMode={inSelectMode}
                   selected={multiSelectIds.has(item.id)}
                   mode={isIntentMode ? 'intent' : 'grid'}
+                  tagPills={isIntentMode ? intentTagPills(item) : undefined}
                   onPress={() => onCardPress(item)}
                   onLongPress={() => onCardLongPress(item)}
                 />
@@ -521,30 +603,23 @@ export default function LibraryScreen() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                tintColor={colors.ink}
-                colors={[colors.ink]}
+                tintColor={c.ink}
+                colors={[c.ink]}
               />
             }
           />
         </GestureDetector>
       )}
-      {items.length > 0 && (
-        <Pressable
-          accessibilityLabel="Add more screenshots"
-          onPress={onPick}
-          disabled={busy}
-          style={({ pressed }) => [styles.fab, pressed && { opacity: 0.8 }]}
-        >
-          <Text style={styles.fabText}>{busy ? '…' : '+'}</Text>
-        </Pressable>
-      )}
+
+      {/* Edge swipe — rendered after the grid so it stacks on top reliably. */}
+      {!inSelectMode && session && <EdgeSwipe onOpen={() => setSidebarOpen(true)} />}
 
       <BottomSheetModal
         ref={sheetRef}
         snapPoints={snapPoints}
         backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: colors.parchment }}
-        handleIndicatorStyle={{ backgroundColor: colors.inkMuted }}
+        backgroundStyle={{ backgroundColor: c.parchment }}
+        handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
         onDismiss={() => setSelectedId(null)}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
       >
@@ -554,6 +629,8 @@ export default function LibraryScreen() {
             onChange={onItemChange}
             onDelete={onItemDelete}
             snapIndex={sheetIndex}
+            onPrev={selIdx > 0 ? goPrev : undefined}
+            onNext={selIdx >= 0 && selIdx < visibleItems.length - 1 ? goNext : undefined}
           />
         )}
       </BottomSheetModal>
@@ -562,8 +639,8 @@ export default function LibraryScreen() {
         ref={bulkSheetRef}
         snapPoints={bulkSnapPoints}
         backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: colors.parchment }}
-        handleIndicatorStyle={{ backgroundColor: colors.inkMuted }}
+        backgroundStyle={{ backgroundColor: c.parchment }}
+        handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
       >
         <BulkTagSheet
           selectedIds={Array.from(multiSelectIds)}
@@ -578,6 +655,23 @@ export default function LibraryScreen() {
         filters={filters}
         onFiltersChange={setFilters}
         userEmail={session?.user.email ?? null}
+        onPickFromGallery={async () => {
+          setSidebarOpen(false);
+          toast.show('Opening gallery…');
+          const { added, skipped, errored } = await pickAndImportImages({ allowsMultipleSelection: true });
+          if (added.length === 0 && skipped === 0 && errored === 0) return;
+          if (added.length > 0) {
+            toast.show(
+              `Added ${added.length} ${added.length === 1 ? 'image' : 'images'}` +
+                (skipped > 0 ? ` · skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''),
+            );
+            void onRefresh();
+          } else if (skipped > 0) {
+            toast.show(`All ${skipped} already imported`);
+          } else if (errored > 0) {
+            toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}`);
+          }
+        }}
         onUpload={() => {
           setSidebarOpen(false);
           // Navigate to bulk upload screen instead of opening the small picker.
@@ -587,6 +681,17 @@ export default function LibraryScreen() {
         onLibrary={() => {
           setSidebarOpen(false);
           clearFilters();
+          // Already on /library; clearing filters reveals the unfiltered grid.
+        }}
+        onApplyFilters={() => {
+          // Already on /library — just close the sidebar so the user can see
+          // the (already-active) filters take effect on the visible grid.
+          setSidebarOpen(false);
+        }}
+        onLogo={() => {
+          setSidebarOpen(false);
+          clearFilters();
+          router.push('/');
         }}
         onSavedFilters={() => {
           setSidebarOpen(false);
@@ -605,69 +710,80 @@ export default function LibraryScreen() {
           onSignOut();
         }}
       />
+
+      {/* Onboarding overlays */}
+      <GhostHint
+        visible={showLibraryPinchHint}
+        variant="pinch-in"
+        label="Pinch to change zoom"
+        onDismiss={() => setShowLibraryPinchHint(false)}
+      />
+      <GhostHint
+        visible={showIntentHint}
+        variant="pinch-in"
+        label="Pinch in to return to grid"
+        onDismiss={() => setShowIntentHint(false)}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.parchment },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  emptyTitle: { fontFamily: 'Georgia', fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
-  emptySub: {
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    marginTop: 6,
-    marginBottom: 32,
-  },
-  bigBtn: {
-    backgroundColor: colors.ink,
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    borderRadius: 4,
-  },
-  bigBtnText: {
-    color: colors.parchment,
-    fontSize: 14,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  cellIntent: { width: '100%', aspectRatio: 9 / 16 },
-  fab: {
-    position: 'absolute',
-    right: 24,
-    bottom: 36,
-    width: 56,
-    height: 56,
-    borderRadius: 4,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fabText: { color: colors.parchment, fontSize: 28, lineHeight: 30 },
-  bulkBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    backgroundColor: colors.ink,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    zIndex: 20,
-  },
-  bulkCount: {
-    color: colors.parchment,
-    fontSize: 13,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  bulkIconBtn: { padding: 4 },
-});
+const makeStyles = (c: Palette, f: FontSet) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.parchment },
+    center: { alignItems: 'center', justifyContent: 'center' },
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
+    emptyTitle: { fontFamily: f.displayMedium, fontSize: 44, color: c.ink, letterSpacing: -0.5 },
+    emptySub: {
+      fontSize: 11,
+      letterSpacing: 2,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      marginTop: 6,
+      marginBottom: 32,
+    },
+    bigBtn: {
+      backgroundColor: c.ink,
+      paddingHorizontal: 28,
+      paddingVertical: 16,
+      borderRadius: 4,
+    },
+    bigBtnText: {
+      color: c.parchment,
+      fontSize: 16,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+    },
+    cellIntent: { width: '100%', aspectRatio: 9 / 16 },
+    demoLink: {
+      fontSize: 11,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      textDecorationLine: 'underline',
+      textDecorationStyle: 'dashed',
+    },
+    bulkBar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      paddingTop: 56,
+      paddingBottom: 14,
+      paddingHorizontal: 20,
+      backgroundColor: c.ink,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      zIndex: 20,
+    },
+    bulkCount: {
+      color: c.parchment,
+      fontSize: 13,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+    },
+    bulkIconBtn: { padding: 4 },
+  });
