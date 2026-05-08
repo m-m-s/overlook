@@ -46,7 +46,7 @@ export default function SettingsScreen() {
 
   const onResetTips = async () => {
     await resetAllHints();
-    toast.show('Tip hints reset — they\'ll show again next time you see each screen');
+    toast.show('Tip hints reset — they\'ll show again next time you see each screen.');
   };
 
   const buildVersion =
@@ -72,7 +72,7 @@ export default function SettingsScreen() {
 
         <Row
           label="Show tips"
-          hint="Show one-time tooltips for new screens"
+          hint="Show one-time tooltips for new screens."
           control={<Switch value={showTips} onValueChange={setShowTips} trackColor={track} thumbColor={c.parchment} />}
         />
 
@@ -84,7 +84,7 @@ export default function SettingsScreen() {
         <Pressable
           onPress={async () => {
             await resetOnboarding();
-            toast.show('Onboarding will replay next launch');
+            toast.show('Onboarding will replay next launch.');
           }}
           style={styles.linkRow}
         >
@@ -96,7 +96,7 @@ export default function SettingsScreen() {
           <Pressable
             onPress={() => {
               clearHidden();
-              toast.show('Restored hidden category rows');
+              toast.show('Restored hidden category rows.');
             }}
             style={styles.linkRow}
           >
@@ -111,7 +111,7 @@ export default function SettingsScreen() {
 
         <Row
           label="Haptic feedback"
-          hint="Vibration on taps and saves"
+          hint="Vibration on taps and saves."
           control={
             <Switch
               value={haptics}
@@ -127,7 +127,7 @@ export default function SettingsScreen() {
 
         <Row
           label="Screenshot notifications"
-          hint="Push when a new screenshot is captured"
+          hint="Push when a new screenshot is captured."
           control={
             <Switch
               value={screenshotNotify}
@@ -170,7 +170,7 @@ export default function SettingsScreen() {
 
         <Row
           label="Demo data"
-          hint="Show 14 sample screenshots so the UI isn't empty"
+          hint="Show 14 sample screenshots so the UI isn't empty."
           control={
             <Switch
               value={demoOn}
@@ -206,7 +206,7 @@ export default function SettingsScreen() {
 
         <View style={styles.colophon}>
           <Text style={styles.colophonText}>
-            Overlook · a home for the inspo, references, and visual notes scattered across your phone.
+            Overlook · A home for the inspo, references, and visual notes scattered across your phone.
           </Text>
         </View>
       </ScrollView>

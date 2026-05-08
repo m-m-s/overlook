@@ -157,7 +157,7 @@ export default function TriageScreen() {
       Animated.timing(cardSlide, { toValue: -40, duration: dur, useNativeDriver: true }),
     ]).start(() => {
       if (cursor + 1 >= total) {
-        toast.show(`done with ${activeQueue} ✓`);
+        toast.show(`Done with ${activeQueue} ✓`);
         exitQueue();
         cardOpacity.setValue(1);
         cardSlide.setValue(0);
@@ -191,7 +191,7 @@ export default function TriageScreen() {
       id,
       dbPatch as Parameters<typeof updateScreenshot>[1],
     );
-    if (error) toast.error(`save failed: ${error.slice(0, 80)}`);
+    if (error) toast.error(`Save failed: ${error.slice(0, 80)}`);
   };
 
   const toggleCategory = (cat: string) => {
@@ -233,9 +233,9 @@ export default function TriageScreen() {
       if (patch) {
         setItems((prev) => prev.map((it) => (it.id === current.id ? { ...it, ...patch } : it)));
         successHaptic();
-        toast.show('analyzed ✓');
+        toast.show('Analyzed ✓');
       } else {
-        toast.error('AI analyze failed — try again later');
+        toast.error('AI analyze failed — try again later.');
       }
     } finally {
       setAnalyzing(false);
@@ -253,7 +253,7 @@ export default function TriageScreen() {
     setItems((prev) => prev.map((it) => (it.id === current.id ? { ...it, manualTags: updated } : it)));
     setTagInput('');
     const { error } = await updateScreenshot(current.id, { manual_typed_tags: updated });
-    if (error) toast.error(`save failed: ${error.slice(0, 80)}`);
+    if (error) toast.error(`Save failed: ${error.slice(0, 80)}`);
   };
 
   // ---- RENDER ----

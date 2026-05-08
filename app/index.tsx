@@ -372,9 +372,9 @@ export default function HomeScreen() {
       );
       void loadItems();
     } else if (skipped > 0) {
-      toast.show(`All ${skipped} already imported`);
+      toast.show(`All ${skipped} already imported.`);
     } else if (errored > 0) {
-      toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}`);
+      toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}.`);
     }
   }, [toast, loadItems]);
 
@@ -404,7 +404,7 @@ export default function HomeScreen() {
               {batchState!.processed} of {batchState!.total} done
             </Text>
             <Text style={[styles.emptyBody, { marginTop: -8 }]}>
-              Your images will appear here{'\n'}when they finish
+              Your images will appear here{'\n'}when they finish.
             </Text>
             <Pressable
               onPress={() => router.push('/upload')}
@@ -480,7 +480,7 @@ export default function HomeScreen() {
           <Pressable onPress={() => router.push('/upload')} style={styles.batchBanner}>
             <Ionicons name="arrow-forward" size={16} color={c.parchment} />
             <Text style={styles.batchBannerText}>
-              Importing · {batchState.processed} of {batchState.total} done · tap to view
+              importing · {batchState.processed} of {batchState.total} done · tap to view
             </Text>
           </Pressable>
         )}
@@ -597,7 +597,7 @@ export default function HomeScreen() {
         {reorderMode && (
           <View style={styles.reorderHeader}>
             <Text style={styles.reorderHint}>
-              Long-press a row title to drag · tap × to hide
+              Long-press a row title to drag, tap × to hide.
             </Text>
             {hiddenRows.length > 0 && (
               <Pressable onPress={() => clearHidden()} hitSlop={8}>
@@ -814,9 +814,11 @@ export default function HomeScreen() {
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
         onDismiss={() => setSelectedId(null)}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        // Keyboard handling: 'interactive' keeps the sheet bound to the
-        // top of the keyboard (so inputs stay visible); 'restore' returns
-        // to the previous snap when keyboard dismisses.
+        // Keep the sheet's bottom edge ABOVE the Android gesture nav so
+        // the footer (share/delete) is always reachable. Without this,
+        // the 100% snap extends edge-to-edge and the buttons sit behind
+        // the gesture nav bar.
+        bottomInset={insets.bottom}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"

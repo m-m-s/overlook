@@ -37,7 +37,7 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
     try {
       const sf = await createSavedFilter(trimmed, filters, pinned, searchQuery);
       if (!sf) {
-        toast.error('save failed — try again');
+        toast.error('Save failed — try again.');
         return;
       }
       toast.show(pinned ? 'saved & pinned to home ✓' : 'filter saved ✓');
@@ -87,7 +87,7 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
             <View style={styles.toggleRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.toggleLabel}>Pin to home</Text>
-                <Text style={styles.toggleHint}>Show as a row on the home screen</Text>
+                <Text style={styles.toggleHint}>Show as a row on the home screen.</Text>
               </View>
               <Switch
                 value={pinned}

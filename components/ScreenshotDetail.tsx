@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Sharing from 'expo-sharing';
-import { Animated, Dimensions, LayoutAnimation, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
@@ -288,28 +288,61 @@ const LinksSection = ({
           </Pressable>
         ))}
 
-        {!adding ? (
-          <Pressable onPress={() => setAdding(true)} style={[styles.pill, styles.pillAdd]}>
-            <Ionicons name="add" size={14} color={c.inkMuted} />
-            <Text style={[styles.pillLabel, { color: c.inkMuted }]}>Add link</Text>
-          </Pressable>
-        ) : (
-          <View style={[styles.pill, styles.pillAddActive]}>
-            <BottomSheetTextInput
+        <Pressable onPress={() => setAdding(true)} style={[styles.pill, styles.pillAdd]}>
+          <Ionicons name="add" size={14} color={c.inkMuted} />
+          <Text style={[styles.pillLabel, { color: c.inkMuted }]}>Add link</Text>
+        </Pressable>
+      </ScrollView>
+
+      {/* Add-link prompt — rendered in a separate Modal rather than inline
+          so the keyboard never hides the input. The Modal portals at the
+          root window so it sits above everything (including the bottom
+          sheet) and handles its own KeyboardAvoidingView. */}
+      <Modal
+        visible={adding}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAdding(false)}
+        statusBarTranslucent
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.addLinkOverlay}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setAdding(false)}
+            accessibilityLabel="Close"
+          />
+          <View style={styles.addLinkCard}>
+            <Text style={styles.addLinkHeading}>Add link</Text>
+            <Text style={styles.addLinkHint}>Paste any URL — Instagram, Maps, Spotify, anywhere.</Text>
+            <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="paste a URL"
+              placeholder="https://"
               placeholderTextColor={c.inkMuted}
               autoCapitalize="none"
               keyboardType="url"
               autoFocus
               onSubmitEditing={commitDraft}
-              onBlur={commitDraft}
-              style={styles.pillInput}
+              style={styles.addLinkInput}
             />
+            <View style={styles.addLinkBtns}>
+              <Pressable onPress={() => setAdding(false)} style={styles.addLinkCancel}>
+                <Text style={styles.addLinkCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={commitDraft}
+                disabled={!draft.trim()}
+                style={[styles.addLinkPrimary, !draft.trim() && { opacity: 0.4 }]}
+              >
+                <Text style={styles.addLinkPrimaryText}>Add</Text>
+              </Pressable>
+            </View>
           </View>
-        )}
-      </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Inline source-URL editor — only revealed by long-pressing the
           source pill, so the row stays compact by default. */}
@@ -397,6 +430,70 @@ const makeLinksStyles = (c: Palette, f: FontSet) =>
       borderStyle: 'dashed',
       borderColor: c.inkMuted,
       borderRadius: 4,
+    },
+    addLinkOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+    },
+    addLinkCard: {
+      backgroundColor: c.parchment,
+      borderRadius: 8,
+      padding: 20,
+      gap: 10,
+    },
+    addLinkHeading: {
+      fontFamily: f.displayMedium,
+      fontSize: 20,
+      color: c.ink,
+      letterSpacing: -0.4,
+    },
+    addLinkHint: {
+      fontFamily: f.body,
+      fontSize: 13,
+      color: c.inkSoft,
+      lineHeight: 19,
+    },
+    addLinkInput: {
+      fontFamily: f.body,
+      fontSize: 14,
+      color: c.ink,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: c.ink,
+      borderRadius: 4,
+      marginTop: 4,
+    },
+    addLinkBtns: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 10,
+      marginTop: 6,
+    },
+    addLinkCancel: {
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+    },
+    addLinkCancelText: {
+      fontSize: 13,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+    },
+    addLinkPrimary: {
+      backgroundColor: c.ink,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 4,
+    },
+    addLinkPrimaryText: {
+      color: c.parchment,
+      fontSize: 13,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      fontWeight: '600',
     },
   });
 
@@ -581,12 +678,17 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   const swipeGesture = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-12, 12])
-        .failOffsetY([-20, 20])
+        // Smaller activation X + bigger Y tolerance so horizontal swipes
+        // anywhere across the sheet width register without being canceled
+        // by minor vertical drift. Velocity threshold lets a fast flick
+        // count even if the user only travels ~40px.
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-40, 40])
         .runOnJS(true)
         .onEnd((e) => {
-          if (e.translationX < -60 && onNext) onNext();
-          else if (e.translationX > 60 && onPrev) onPrev();
+          const flick = Math.abs(e.velocityX) > 600;
+          if ((e.translationX < -50 || (flick && e.translationX < -20)) && onNext) onNext();
+          else if ((e.translationX > 50 || (flick && e.translationX > 20)) && onPrev) onPrev();
         }),
     [onNext, onPrev],
   );
@@ -634,7 +736,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   // Surface failures via toast so silent server errors don't go unnoticed.
   const persistNow = async (patch: Parameters<typeof updateScreenshot>[1]) => {
     const { error } = await updateScreenshot(item.id, patch);
-    if (error) toast.error(`save failed: ${error.slice(0, 80)}`);
+    if (error) toast.error(`Save failed: ${error.slice(0, 80)}`);
   };
 
   // Stage scalar changes into `pending`; commit on Apply.
@@ -706,7 +808,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
     if (error) {
       // Restore the pending state so the user can fix and re-apply.
       setPending(patch);
-      toast.error(`save failed: ${error.slice(0, 80)}`);
+      toast.error(`Save failed: ${error.slice(0, 80)}`);
       return;
     }
     // Privacy: if we just marked this item local-only, also drop it from the
@@ -777,7 +879,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
     try {
       const ok = await Sharing.isAvailableAsync();
       if (!ok) {
-        toast.error('Sharing not available on this device');
+        toast.error('Sharing not available on this device.');
         return;
       }
       await Sharing.shareAsync(item.uri, { mimeType: 'image/jpeg' });
@@ -805,9 +907,9 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           subject: patch.subject ?? null,
           urgency: patch.urgency ?? null,
         });
-        toast.show('analyzed ✓');
+        toast.show('Analyzed ✓');
       } else {
-        toast.error('analysis failed — try again later');
+        toast.error('Analysis failed — try again later.');
       }
     } finally {
       setAnalyzing(false);
@@ -882,10 +984,42 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       </Animated.View>
       )}
 
+      {/* Pending-changes bar — floats just below the image so it doesn't
+          displace scroll content when it appears (avoids the awkward
+          "page jumps down" feel when the user toggles a field at the
+          bottom of the sheet). zIndex 2 keeps it above the parallax. */}
+      {pendingCount > 0 && (
+        <View
+          style={[
+            styles.pendingBar,
+            {
+              position: 'absolute',
+              top: hideImage ? 8 : IMAGE_MAX + 8,
+              left: 12,
+              right: 12,
+              zIndex: 2,
+              elevation: 4,
+            },
+          ]}
+        >
+          <Text style={styles.pendingText}>
+            {pendingCount} {pendingCount === 1 ? 'change' : 'changes'} pending
+          </Text>
+          <View style={styles.pendingBtns}>
+            <Pressable onPress={onCancel} style={styles.pendingCancel}>
+              <Text style={styles.pendingCancelText}>cancel</Text>
+            </Pressable>
+            <Pressable onPress={onApply} style={styles.pendingApply}>
+              <Text style={styles.pendingApplyText}>apply</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       <BottomSheetScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 32 + insets.bottom },
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 80 + insets.bottom },
         ]}
         onScroll={onScroll}
       >
@@ -900,24 +1034,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         }}
       >
 
-      {/* Pending-changes bar — placed at the top of the scroll content so
-          it sits right below the image (close to where the user just
-          made edits) instead of floating at the top of the screen. */}
-      {pendingCount > 0 && (
-        <View style={styles.pendingBar}>
-          <Text style={styles.pendingText}>
-            {pendingCount} {pendingCount === 1 ? 'change' : 'changes'} pending
-          </Text>
-          <View style={styles.pendingBtns}>
-            <Pressable onPress={onCancel} style={styles.pendingCancel}>
-              <Text style={styles.pendingCancelText}>cancel</Text>
-            </Pressable>
-            <Pressable onPress={onApply} style={styles.pendingApply}>
-              <Text style={styles.pendingApplyText}>apply</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
 
 
       {/* Fullscreen zoom — pinch-to-zoom + pan via gesture-handler.
@@ -1394,8 +1510,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={styles.sectionLabel}>Allow AI tagging</Text>
           <Text style={styles.emptyHint}>
             {view.localOnly
-              ? 'Image stays on this device — AI analysis is off'
-              : 'AI can analyze this image to suggest tags'}
+              ? 'Image stays on this device — AI analysis is off.'
+              : 'AI can analyze this image to suggest tags.'}
           </Text>
         </View>
         <Pressable

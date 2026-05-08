@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { Iris } from './Iris';
 import { sendMagicLink, signInWithPassword, signUpWithPassword, verifyEmailOtp } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 
@@ -34,7 +35,7 @@ export const SignIn = () => {
 
   const onVerify = async () => {
     if (code.trim().length < 6) {
-      setErrorMsg('Enter the 6-digit code from the email');
+      setErrorMsg('Enter the code from the email');
       return;
     }
     setStatus('verifying');
@@ -83,6 +84,9 @@ export const SignIn = () => {
       style={styles.wrap}
     >
       <View style={styles.inner}>
+        <View style={styles.hero}>
+          <Iris level={3} size={48} color={colors.ink} />
+        </View>
         <Text style={styles.title}>Overlook</Text>
         <Text style={styles.sub}>your screenshot library</Text>
 
@@ -116,7 +120,7 @@ export const SignIn = () => {
                 style={({ pressed }) => [styles.btn, { flex: 1 }, pressed && { opacity: 0.7 }]}
               >
                 {status === 'pwd-loading' ? (
-                  <ActivityIndicator color={colors.parchment} />
+                  <Iris level={3} size={18} color={colors.parchment} spinning />
                 ) : (
                   <Text style={styles.btnText}>sign in</Text>
                 )}
@@ -134,23 +138,23 @@ export const SignIn = () => {
               <Text style={styles.linkBtnText}>← back to magic link</Text>
             </Pressable>
             <Text style={styles.devNote}>
-              dev fallback. magic link is the primary path. requires &quot;confirm email&quot; turned OFF in supabase auth settings for sign-up to work without sending email.
+              Dev fallback. Magic link is the primary path. Requires &quot;confirm email&quot; turned OFF in Supabase auth settings for sign-up to work without sending email.
             </Text>
           </View>
         ) : status === 'sent' || status === 'verifying' ? (
           <View style={styles.sentBox}>
             <Text style={styles.sentTitle}>check your email</Text>
             <Text style={styles.sentBody}>
-              we sent a 6-digit code + a link to {email}. enter the code below, or tap the link from this device.
+              We sent a code + a link to {email}. Enter the code below, or tap the link from this device.
             </Text>
 
             <TextInput
               value={code}
               onChangeText={setCode}
-              placeholder="000000"
+              placeholder="00000000"
               placeholderTextColor={colors.inkMuted}
               keyboardType="number-pad"
-              maxLength={6}
+              maxLength={8}
               autoFocus
               editable={status !== 'verifying'}
               style={[styles.input, styles.codeInput]}
@@ -161,7 +165,7 @@ export const SignIn = () => {
               style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
             >
               {status === 'verifying' ? (
-                <ActivityIndicator color={colors.parchment} />
+                <Iris level={3} size={18} color={colors.parchment} spinning />
               ) : (
                 <Text style={styles.btnText}>sign in</Text>
               )}
@@ -192,7 +196,7 @@ export const SignIn = () => {
               style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
             >
               {status === 'sending' ? (
-                <ActivityIndicator color={colors.parchment} />
+                <Iris level={3} size={18} color={colors.parchment} spinning />
               ) : (
                 <Text style={styles.btnText}>send magic link</Text>
               )}
@@ -211,7 +215,8 @@ export const SignIn = () => {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.parchment },
   inner: { flex: 1, justifyContent: 'center', padding: 32 },
-  title: { fontFamily: 'Georgia', fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
+  hero: { marginBottom: 18, opacity: 0.9 },
+  title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 44, color: colors.ink, letterSpacing: -0.5 },
   sub: {
     fontSize: 11,
     letterSpacing: 2,
@@ -227,7 +232,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 18,
     color: colors.ink,
-    fontFamily: 'Georgia',
+    fontFamily: 'PlayfairDisplay_500Medium',
     marginBottom: 24,
   },
   btn: {
@@ -238,19 +243,19 @@ const styles = StyleSheet.create({
   },
   btnText: {
     color: colors.parchment,
-    fontSize: 13,
-    letterSpacing: 1.5,
+    fontSize: 15,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
     fontWeight: '600',
   },
   error: { color: '#C0392B', marginTop: 16, fontSize: 14 },
   sentBox: { paddingVertical: 12 },
-  sentTitle: { fontFamily: 'Georgia', fontSize: 22, color: colors.ink, marginBottom: 12 },
+  sentTitle: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: colors.ink, marginBottom: 12 },
   sentBody: { color: colors.ink, fontSize: 15, lineHeight: 22, marginBottom: 24 },
   codeInput: {
-    fontFamily: 'Georgia',
-    fontSize: 28,
-    letterSpacing: 8,
+    fontFamily: 'PlayfairDisplay_500Medium',
+    fontSize: 24,
+    letterSpacing: 4,
     textAlign: 'center',
     paddingVertical: 16,
   },
@@ -271,8 +276,8 @@ const styles = StyleSheet.create({
   },
   btnOutlinedText: {
     color: colors.ink,
-    fontSize: 13,
-    letterSpacing: 1.5,
+    fontSize: 15,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
     fontWeight: '600',
   },

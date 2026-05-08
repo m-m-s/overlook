@@ -2,12 +2,16 @@ import { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
 import { Circle, Line, Svg } from 'react-native-svg';
 
-import { colors } from '@/lib/colors';
+import { lightPalette } from '@/lib/colors';
 
 type Props = {
   level: 1 | 2 | 3;
   size?: number;
   color?: string;
+  /** When true, the rings render solid-filled (selected look). Default: outlined. */
+  filled?: boolean;
+  /** Background to use as the inner negative-space color when filled. Defaults to parchment. */
+  fillBackground?: string;
   /** Spin the iris (used during processing). */
   spinning?: boolean;
   /** Override the auto-generated accessibilityLabel. */
@@ -26,7 +30,15 @@ const LEVEL_LABELS: Record<1 | 2 | 3, string> = {
  * Level 2: outer circle + filled center dot
  * Level 3: outer circle + middle circle + filled center dot
  */
-export const Iris = ({ level, size = 24, color = colors.parchment, spinning, accessibilityLabel }: Props) => {
+export const Iris = ({
+  level,
+  size = 24,
+  color = lightPalette.parchment,
+  filled = false,
+  fillBackground = lightPalette.parchment,
+  spinning,
+  accessibilityLabel,
+}: Props) => {
   const spin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -58,18 +70,42 @@ export const Iris = ({ level, size = 24, color = colors.parchment, spinning, acc
       style={transform ? { transform } : undefined}
     >
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        {level === 1 && <Line x1="4" y1="12" x2="20" y2="12" stroke={color} strokeWidth={2} strokeLinecap="round" />}
+        {level === 1 && (
+          <Line
+            x1="4"
+            y1="12"
+            x2="20"
+            y2="12"
+            stroke={color}
+            strokeWidth={filled ? 3 : 2}
+            strokeLinecap="round"
+          />
+        )}
         {level === 2 && (
           <>
-            <Circle cx="12" cy="12" r="9" fill="none" stroke={color} strokeWidth={1.75} />
-            <Circle cx="12" cy="12" r="2" fill={color} />
+            {filled ? (
+              <Circle cx="12" cy="12" r="9" fill={color} />
+            ) : (
+              <Circle cx="12" cy="12" r="9" fill="none" stroke={color} strokeWidth={1.75} />
+            )}
+            <Circle cx="12" cy="12" r="2" fill={filled ? fillBackground : color} />
           </>
         )}
         {level === 3 && (
           <>
-            <Circle cx="12" cy="12" r="9" fill="none" stroke={color} strokeWidth={1.75} />
-            <Circle cx="12" cy="12" r="5.5" fill="none" stroke={color} strokeWidth={1.75} />
-            <Circle cx="12" cy="12" r="2" fill={color} />
+            {filled ? (
+              <>
+                <Circle cx="12" cy="12" r="9" fill={color} />
+                <Circle cx="12" cy="12" r="5.5" fill={fillBackground} />
+                <Circle cx="12" cy="12" r="2" fill={color} />
+              </>
+            ) : (
+              <>
+                <Circle cx="12" cy="12" r="9" fill="none" stroke={color} strokeWidth={1.75} />
+                <Circle cx="12" cy="12" r="5.5" fill="none" stroke={color} strokeWidth={1.75} />
+                <Circle cx="12" cy="12" r="2" fill={color} />
+              </>
+            )}
           </>
         )}
       </Svg>

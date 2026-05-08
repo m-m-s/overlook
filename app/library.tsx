@@ -275,7 +275,7 @@ export default function LibraryScreen() {
     const usable = assets.filter((a) => a.assetId);
     if (skipped > 0) {
       toast.error(
-        `${skipped} image${skipped === 1 ? '' : 's'} skipped (camera-only — must come from your Photos library to import)`,
+        `${skipped} image${skipped === 1 ? '' : 's'} skipped (camera-only — must come from your Photos library to import).`,
       );
     }
     if (usable.length === 0) return;
@@ -346,7 +346,7 @@ export default function LibraryScreen() {
     }
     if (failures > 0) {
       toast.show(
-        `${failures} of ${uploads.length} couldn't be AI-tagged — queued for retry when online`,
+        `${failures} of ${uploads.length} couldn't be AI-tagged — queued for retry when online.`,
         { kind: 'error' },
       );
     }
@@ -581,7 +581,7 @@ export default function LibraryScreen() {
             }
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={styles.emptySub}>no screenshots match these filters</Text>
+                <Text style={styles.emptySub}>No screenshots match these filters.</Text>
               </View>
             }
             renderItem={({ item }) => (
@@ -622,6 +622,7 @@ export default function LibraryScreen() {
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
         onDismiss={() => setSelectedId(null)}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
+        bottomInset={insets.bottom}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
@@ -671,9 +672,9 @@ export default function LibraryScreen() {
             );
             void onRefresh();
           } else if (skipped > 0) {
-            toast.show(`All ${skipped} already imported`);
+            toast.show(`All ${skipped} already imported.`);
           } else if (errored > 0) {
-            toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}`);
+            toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}.`);
           }
         }}
         onUpload={() => {
