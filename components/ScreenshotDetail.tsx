@@ -444,7 +444,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   // pass, no React reconciliation. Previously we shrank the image's `height`
   // each frame; height changes force layout for every descendant — that was
   // the jank source. translateY runs at 60fps even on Android.
-  const IMAGE_MAX = SCREEN_HEIGHT * (snapIndex >= 2 ? 0.7 : 0.32);
+  // Locked to 32% across all snap points — previously the image grew to
+  // 70% at full snap, but that "snap up to fuller width" felt awkward.
+  // The fullscreen lightbox (tap the image) is the path for a bigger view.
+  const IMAGE_MAX = SCREEN_HEIGHT * 0.32;
   const COLLAPSE_DISTANCE = IMAGE_MAX;
   const scrollY = useRef(new Animated.Value(0)).current;
   const imageTranslateY = scrollY.interpolate({
