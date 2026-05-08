@@ -9,7 +9,48 @@ import { useEffect, useState } from 'react';
 const KEYS = {
   hapticsEnabled: 'overlook.settings.haptics',
   showTips: 'overlook.settings.showTips',
+  theme: 'overlook.settings.theme',
+  screenshotNotify: 'overlook.settings.screenshotNotify',
 } as const;
+
+// Theme keys = full visual presets (palette + font set + status/urgency
+// hue set). Adding a new theme just means a new key here + an entry in
+// lib/themeContext. Accessible variants override the warm status/urgency
+// palette with a colour-blind safe one (Wong, Nature 2011).
+export type ThemeChoice =
+  | 'editorial-light'
+  | 'editorial-dark'
+  | 'modern-light'
+  | 'modern-dark'
+  | 'mono-light'
+  | 'accessible-light'
+  | 'accessible-dark'
+  | 'system';
+
+const VALID_THEMES: ThemeChoice[] = [
+  'editorial-light',
+  'editorial-dark',
+  'modern-light',
+  'modern-dark',
+  'mono-light',
+  'accessible-light',
+  'accessible-dark',
+  'system',
+];
+
+export const useThemeChoice = () => {
+  const [theme, setTheme] = useState<ThemeChoice>('editorial-light');
+  useEffect(() => {
+    AsyncStorage.getItem(KEYS.theme).then((v) => {
+      if (v && (VALID_THEMES as string[]).includes(v)) setTheme(v as ThemeChoice);
+    });
+  }, []);
+  const update = (next: ThemeChoice) => {
+    setTheme(next);
+    AsyncStorage.setItem(KEYS.theme, next).catch(() => {});
+  };
+  return [theme, update] as const;
+};
 
 export const useBoolSetting = (key: string, defaultValue: boolean) => {
   const [value, setValue] = useState<boolean>(defaultValue);
@@ -28,11 +69,23 @@ export const useBoolSetting = (key: string, defaultValue: boolean) => {
   return [value, update] as const;
 };
 
-export const useHapticsEnabled = () => useBoolSetting(KEYS.hapticsEnabled, false);
+// Haptics ON by default — long-press is a primary gesture in the app
+// (multi-select, edit-mode, reorder), and the vibration is the main signal
+// that something happened. User can toggle off in settings.
+export const useHapticsEnabled = () => useBoolSetting(KEYS.hapticsEnabled, true);
 export const useShowTips = () => useBoolSetting(KEYS.showTips, true);
+export const useScreenshotNotify = () => useBoolSetting(KEYS.screenshotNotify, true);
+
+export const isScreenshotNotifyEnabled = async (): Promise<boolean> => {
+  const v = await AsyncStorage.getItem(KEYS.screenshotNotify);
+  if (v === null) return true;
+  return v === '1';
+};
 
 // One-shot getters (non-hook). For places that don't have hook access.
+// Default true — only return false when the user has explicitly disabled.
 export const isHapticsEnabled = async (): Promise<boolean> => {
   const v = await AsyncStorage.getItem(KEYS.hapticsEnabled);
+  if (v === null) return true;
   return v === '1';
 };
