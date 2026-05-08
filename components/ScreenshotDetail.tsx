@@ -96,19 +96,24 @@ const LOCAL_ONLY_DEFAULT_CATEGORIES = new Set(['documents', 'messages']);
 const SectionHeader = ({
   label,
   editing,
+  onExit,
 }: {
   label: string;
   editing: boolean;
+  /** Tap target shown beside the label when editing — exits this section's edit mode. */
+  onExit?: () => void;
 }) => {
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
   return (
     <View style={styles.sectionHead}>
-      <Text style={styles.sectionLabel}>
-        {label}
-        {editing && <Text style={styles.sectionLabelEditing}>  · editing</Text>}
-      </Text>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      {editing && onExit && (
+        <Pressable onPress={onExit} hitSlop={8} style={styles.sectionExit}>
+          <Text style={styles.sectionExitText}>Done editing</Text>
+        </Pressable>
+      )}
     </View>
   );
 };
@@ -1115,7 +1120,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {/* Category — only show separately when editing OR neither category nor subject is set */}
       {(isEditing('category') || (!view.category && !view.subject)) && (
         <Section onToggle={() => toggleEditing('category')}>
-          <SectionHeader label="category" editing={isEditing('category')} />
+          <SectionHeader label="category" editing={isEditing('category')} onExit={() => toggleEditing('category')} />
           {isEditing('category') ? (
             <Shake trigger={isEditing('category')} style={[styles.row, styles.wrap]}>
               {CATEGORIES.map((cat) => {
@@ -1148,7 +1153,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {/* Subject — only show separately when editing OR no value */}
       {(isEditing('subject') || (!view.subject && !view.category)) && (
         <Section onToggle={() => toggleEditing('subject')}>
-          <SectionHeader label="subject" editing={isEditing('subject')} />
+          <SectionHeader label="subject" editing={isEditing('subject')} onExit={() => toggleEditing('subject')} />
           {isEditing('subject') ? (
             <>
               {aiSubjects.length > 0 && !view.subject && (
@@ -1175,7 +1180,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {/* Tags — placed above resonance/urgency/status so the descriptive
           metadata is read before the manual quantitative fields. */}
       <Section onToggle={() => toggleEditing('tags')}>
-      <SectionHeader label="tags" editing={isEditing('tags')} />
+      <SectionHeader label="tags" editing={isEditing('tags')} onExit={() => toggleEditing('tags')} />
       {(() => {
         const sorted = sortedDisplayTags(manualTags, aiTags);
         if (sorted.length === 0 && !isEditing('tags')) {
@@ -1261,7 +1266,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
 
       {/* Resonance */}
       <Section onToggle={() => toggleEditing('resonance')}>
-      <SectionHeader label="resonance" editing={isEditing('resonance')} />
+      <SectionHeader label="resonance" editing={isEditing('resonance')} onExit={() => toggleEditing('resonance')} />
       {isEditing('resonance') ? (
         <Shake trigger={isEditing('resonance')} style={styles.row}>
           {RESONANCE_LEVELS.map((r) => {
@@ -1291,7 +1296,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
 
       {/* Urgency */}
       <Section onToggle={() => toggleEditing('urgency')}>
-      <SectionHeader label="urgency" editing={isEditing('urgency')} />
+      <SectionHeader label="urgency" editing={isEditing('urgency')} onExit={() => toggleEditing('urgency')} />
       {isEditing('urgency') ? (
         <Shake trigger={isEditing('urgency')} style={[styles.row, styles.wrap]}>
           {URGENCIES.map((u) => {
@@ -1483,7 +1488,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
 
       {/* Notes — read mode shows text; edit mode shows multi-line input */}
       <Section onToggle={() => toggleEditing('notes')}>
-      <SectionHeader label="notes" editing={isEditing('notes')} />
+      <SectionHeader label="notes" editing={isEditing('notes')} onExit={() => toggleEditing('notes')} />
       {isEditing('notes') ? (
         <BottomSheetTextInput
           value={view.notes ?? ''}
@@ -1624,7 +1629,21 @@ const makeStyles = (c: Palette, f: FontSet) =>
       marginTop: 8,
       marginBottom: 4,
     },
-    sectionHead: { marginTop: 6, marginBottom: 2 },
+    sectionHead: {
+      marginTop: 6,
+      marginBottom: 2,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    sectionExit: { paddingHorizontal: 4, paddingVertical: 2 },
+    sectionExitText: {
+      fontSize: 10,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      textDecorationLine: 'underline',
+    },
     subLabel: {
       fontSize: 10,
       letterSpacing: 1.4,
