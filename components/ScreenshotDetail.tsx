@@ -54,6 +54,10 @@ type Props = {
   onNext?: () => void;
   /** Swipe-right in the image area calls this to go back to the previous item. */
   onPrev?: () => void;
+  /** When true, skip the parallax image header. Used by the library's
+   *  intent-mode (1-col) view where the full image is already on screen
+   *  behind the sheet, so re-rendering it inside the sheet is redundant. */
+  hideImage?: boolean;
 };
 
 /**
@@ -426,7 +430,7 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
   });
 };
 
-export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNext, onPrev }: Props) => {
+export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNext, onPrev, hideImage = false }: Props) => {
   const { session } = useSession();
   const toast = useToast();
   const c = useColors();
@@ -798,7 +802,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {/* Parallax image header — sits ABOVE the scroll content (zIndex 1)
           and translates up as the user scrolls. The scroll content has a
           matching paddingTop so the image visually occupies the top
-          IMAGE_MAX pixels at scroll=0. Tap at full snap opens lightbox. */}
+          IMAGE_MAX pixels at scroll=0. Tap at full snap opens lightbox.
+          Suppressed in intent-mode (hideImage) since the image is already
+          visible behind the sheet. */}
+      {!hideImage && (
       <Animated.View
         pointerEvents="box-none"
         style={{
@@ -847,6 +854,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           </Pressable>
         </GestureDetector>
       </Animated.View>
+      )}
 
       {/* Sticky pending-changes bar — floats above the parallax image so
           Apply/Cancel are always reachable, even after the user scrolls
@@ -870,7 +878,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       <BottomSheetScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: IMAGE_MAX + 16, paddingBottom: 32 + insets.bottom },
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 32 + insets.bottom },
         ]}
         onScroll={onScroll}
       >
