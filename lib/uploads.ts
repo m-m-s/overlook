@@ -6,11 +6,16 @@ import type { TypedTag } from './tags';
 /** A single action link — AI-extracted or user-added. The set of types
  *  matches what the vision prompt returns; UI maps each to an icon. */
 export type ActionLinkType =
+  | 'profile'
+  | 'pattern'
+  | 'stream'
+  | 'video'
+  | 'maps'
+  | 'listing'
   | 'tickets'
   | 'directions'
   | 'buy'
   | 'recipe'
-  | 'listen'
   | 'watch'
   | 'read'
   | 'search';

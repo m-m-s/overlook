@@ -6,7 +6,8 @@ import type { TypedTag } from './tags';
 import type { ActionLink, ActionLinkType, LocalScreenshot } from './uploads';
 
 const VALID_ACTION_TYPES = new Set<ActionLinkType>([
-  'tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search',
+  'profile', 'pattern', 'stream', 'video', 'maps', 'listing',
+  'tickets', 'directions', 'buy', 'recipe', 'watch', 'read', 'search',
 ]);
 
 /** Parse the jsonb action_urls column into typed entries. Falls back to

@@ -2,11 +2,8 @@
 
 import type { Category } from '@/components/CategoryIcon';
 
-// Note: `film` was merged into `tv` (which now covers all moving-image
-// content — movies, shows, YouTube, kdrama, etc.). The format tag type
-// distinguishes feature-film vs tv-show vs vlog etc.
 export const CATEGORIES: Category[] = [
-  'craft', 'fashion', 'tv', 'food', 'art', 'music', 'places',
+  'craft', 'fashion', 'film', 'tv', 'food', 'art', 'music', 'places',
   'meme', 'messages', 'shopping', 'reading', 'events', 'tech', 'documents',
 ];
 
@@ -105,9 +102,10 @@ export const formatTagValue = (raw: string): string => {
 
 export const TAG_TYPES = [
   // Display order — general → specific, used for the tag-row sort in
-  // ScreenshotDetail. New types added by the vision prompt should slot
-  // into the position that matches their semantic generality.
-  'item', 'activity', 'format', 'genre', 'cuisine', 'subject', 'theme',
-  'technique', 'style', 'material', 'color', 'season', 'occasion', 'mood',
-  'source', 'person', 'place',
+  // ScreenshotDetail. Mirrors the enum the vision prompt returns; new
+  // types should slot into the position that matches their generality.
+  'item', 'place_type', 'activity', 'genre', 'cuisine', 'dish',
+  'subject', 'theme', 'technique', 'style', 'material', 'color',
+  'price', 'status', 'season', 'occasion', 'mood',
+  'source', 'author', 'brand', 'person', 'place',
 ] as const;

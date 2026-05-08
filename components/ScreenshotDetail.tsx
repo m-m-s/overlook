@@ -135,11 +135,16 @@ const Section = ({
 
 const actionUrlIcon = (type: string | null | undefined): React.ComponentProps<typeof Ionicons>['name'] => {
   switch (type) {
+    case 'profile': return 'person-outline';
+    case 'pattern': return 'grid-outline';
+    case 'stream': return 'musical-notes-outline';
+    case 'video': return 'play-outline';
+    case 'maps': return 'map-outline';
+    case 'listing': return 'home-outline';
     case 'tickets': return 'ticket-outline';
     case 'directions': return 'navigate-outline';
     case 'buy': return 'bag-outline';
     case 'recipe': return 'restaurant-outline';
-    case 'listen': return 'musical-notes-outline';
     case 'watch': return 'play-outline';
     case 'read': return 'book-outline';
     case 'search': return 'search-outline';
@@ -147,17 +152,20 @@ const actionUrlIcon = (type: string | null | undefined): React.ComponentProps<ty
   }
 };
 
-/** Guess an action type from a freshly-pasted URL. The vision prompt emits
- *  type=search for unrecognised cases; we mirror that as the default so
- *  user-added URLs land in a sensible bucket. */
+/** Guess an action type from a freshly-pasted URL. Mirrors the vision
+ *  prompt's enum so user-added URLs land in the same buckets as AI ones. */
 const guessLinkType = (raw: string): ActionLinkType => {
   const url = raw.toLowerCase();
-  if (url.includes('maps.google') || url.includes('google.com/maps')) return 'directions';
+  if (url.includes('maps.google') || url.includes('google.com/maps') || url.includes('goo.gl/maps')) return 'maps';
+  if (url.includes('instagram.com') || url.includes('tiktok.com') || url.includes('x.com/') || url.includes('twitter.com')) return 'profile';
+  if (url.includes('ravelry.com')) return 'pattern';
+  if (url.includes('airbnb.com') || url.includes('vrbo.com') || url.includes('zillow.com') || url.includes('streeteasy.com')) return 'listing';
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return 'video';
+  if (url.includes('spotify.com') || url.includes('music.apple') || url.includes('soundcloud')) return 'stream';
+  if (url.includes('netflix.com') || url.includes('disneyplus') || url.includes('hbomax') || url.includes('hulu.com') || url.includes('max.com')) return 'watch';
   if (url.includes('ticket') || url.includes('eventbrite') || url.includes('partiful') || url.includes('lu.ma')) return 'tickets';
-  if (url.includes('shop') || url.includes('amazon.com') || url.includes('etsy.com') || url.includes('product')) return 'buy';
+  if (url.includes('amazon.com') || url.includes('etsy.com') || url.includes('shop') || url.includes('product')) return 'buy';
   if (url.includes('recipe') || url.includes('allrecipes') || url.includes('nytimes.com/recipes')) return 'recipe';
-  if (url.includes('spotify.com') || url.includes('music.apple') || url.includes('soundcloud')) return 'listen';
-  if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('netflix.com') || url.includes('disneyplus')) return 'watch';
   if (url.includes('goodreads') || url.includes('substack') || url.includes('medium.com')) return 'read';
   return 'search';
 };

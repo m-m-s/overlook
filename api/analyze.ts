@@ -5,125 +5,162 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * POST /api/analyze
  *
  * Body: { image_base64: string, mime_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' }
- * Header (optional, sprint-mode soft auth): x-overlook-secret: <OVERLOOK_SHARED_SECRET>
+ * Header: x-overlook-secret: <OVERLOOK_SHARED_SECRET>
  *
- * Returns: { typed_tags: {type,value}[], category: string|null, subject: string|null, urgency: string|null, urgency_date: string|null, suggested_subjects: string[] }
+ * Returns: {
+ *   typed_tags: {type,value}[],
+ *   category: string|null,
+ *   subject: string|null,
+ *   urgency: string|null,
+ *   urgency_date: string|null,
+ *   suggested_subjects: string[],
+ *   source_url: string|null,
+ *   action_urls: {url, type, label}[]
+ * }
  *
- * Sprint scope per SPRINT.md — does NOT return difficulty / time_to_complete / source_url / action_url.
- *
- * NOTE: The system prompt below is a baseline. Maggie has a separately-tested prompt — paste it
- *       into SYSTEM_PROMPT before going to production.
+ * POST-SPRINT NOTES:
+ * - Urgency auto-escalation: background job re-evaluates urgency_date daily on existing
+ *   screenshots, updating bucket as date approaches (this_year→this_season→this_month→this_week→today).
+ * - Consider Sonnet for category:events for better URL extraction.
+ * - Re-add prompt caching once Anthropic SDK types stabilize.
+ * - DB migration: drop action_url + action_url_type columns, add action_urls jsonb column.
  */
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
 function buildSystemPrompt(): string {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  return `You analyze screenshots someone saved for personal reference. Your job is to tag each one so the user can later find it by category, vibe, or specific attribute, and surface a useful action link when one applies.
+  const today = new Date().toISOString().split('T')[0];
+  return `You analyze screenshots someone saved for personal reference. Tag each one so they can find it later by category, vibe, or specific attribute, and surface all useful action links.
 
 Always reply with a single tool call to \`analyze_screenshot\`. Never reply with prose.
 
-CATEGORY — pick exactly one, or null if none clearly fits:
-- craft       handmade things: knitting, crochet, embroidery, woodworking, ceramics, sewing patterns
+PRIVACY & SENSITIVE CONTENT — check this first, before tagging anything:
+- If the screenshot contains financial documents (bank statements, tax forms, invoices with account numbers), government IDs, passports, social security numbers, medical records, or credit card numbers: set category="documents", subject="Sensitive document", typed_tags=[{type:"item",value:"sensitive document"}], and return empty action_urls. Do NOT extract or repeat any sensitive numbers or personal data in any field.
+- For personal messages (SMS, iMessage, WhatsApp, DMs): only tag item:conversation and the first names of visible participants if clearly shown. Do NOT tag message content, topics discussed, or any personal details shared. Treat like a document — minimal, private.
+
+CATEGORY — pick exactly one, or null:
+- craft       knitting, crochet, embroidery, woodworking, ceramics, sewing patterns
 - fashion     clothing, outfits, accessories, footwear, jewelry
-- tv          ALL moving-image content: TV shows, episodes, streaming content, kdrama / chinese drama / jdrama, anime, YouTube, vlogs, web series, AND movies / feature films / film stills / posters / trailers. Use the `format` tag type to distinguish (feature-film vs tv-show vs vlog vs anime, etc.).
-- food        recipes, restaurant dishes, ingredient lists, cooking steps
-- art         paintings, sculptures, illustrations, fine art
+- film        movies, film stills, posters, trailers, behind-the-scenes
+- tv          TV shows, episodes, streaming content, kdramas, anime
+- food        recipes, restaurant dishes, ingredient lists, cooking steps, menus
+- art         paintings, sculptures, illustrations, fine art, comics, webcomics
 - music       albums, songs, playlists, lyrics, music videos
-- places      restaurants, cafes, hotels, apartments, parks, cities, neighborhoods
+- places      restaurants, cafes, hotels, apartments, parks, cities, neighborhoods, venues, maps
 - meme        humor, jokes, captioned images, reaction shots
-- messages    SMS / iMessage / WhatsApp / DM screenshots, text exchanges
-- shopping    products to buy, price tags, store pages, sales
+- messages    SMS / iMessage / WhatsApp / DM screenshots — see privacy rules above
+- shopping    products to buy, price tags, store pages, sales, wishlists
 - reading     articles, books, essays, newsletters, tweets-as-essays
-- events      tickets, dates, invitations, RSVPs, event listings, things happening
+- events      tickets, dates, invitations, RSVPs, event listings
 - tech        code, error messages, dev tools, software UI, APIs, technical docs
-- documents   forms, receipts, official paperwork, certificates, IDs
+- documents   forms, receipts, official paperwork, certificates, IDs, notes, reminders
 
-When in doubt between two — pick the one that better matches user intent for retrieval. (e.g. a screenshot of a recipe in a cookbook → food, not reading. A meme that happens to feature food → meme, not food.)
+When in doubt — pick the category that best matches why the user saved it. A recipe screenshot in a book → food not reading. A meme about food → meme not food. A map with a restaurant pin → places not food.
 
-SUBJECT — a specific 2-4 word noun phrase. Be concrete. Prioritize named things if a name appears in the image. Examples:
-- "Freestyle shirt Susanne Müller", "Crochet beanie", "Italian carbonara", "React useEffect", "Brooklyn apartment", "Lady Bird poster", "Community Week NYC"
-If a pattern/product/event has a name visible in the image, use it. Use null when nothing specific stands out.
+SUBJECT — the most specific name you can extract. ALWAYS prioritize named things visible in the text over visual description.
+- If a product, pattern, dish, show, book, event, or place has a NAME visible → use it. "Freestyle shirt Susanne Müller" not "knitted sweater". "Community Week NYC kickoff" not "event poster".
+- For menus: subject = restaurant name if visible.
+- For maps: subject = the pinned location name.
+- For art/comics: subject = title if visible, otherwise describe the primary action ("mouse biting finger").
+- Use null only when truly nothing specific stands out.
 
-TYPED TAGS — 3-8 most relevant, all of {type, value}. READ ALL TEXT IN THE IMAGE carefully — captions, usernames, titles, button labels, descriptions. Tag what's explicitly written, not just what's visually prominent:
-- item        what it IS — recipe, dress, restaurant, apartment, tutorial, podcast, pattern, event listing, ticket, comic, illustration
-- activity    what you DO — dance, salsa, yoga, hiking, cooking class, pottery, DJ set, workshop, trivia night
-- subject     concrete thing depicted — mouse, finger, sweater, cat, sneaker (use for specific nouns central to the image)
-- theme       content descriptor — violence, dark humor, body horror, romance, nostalgia, friendship (use when the theme is the point)
-- genre       horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient, romance, thriller
-- format      medium / form-of-content for TV (umbrella for all moving image), music, and reading. Use the most specific bucket:
-              Moving image: feature-film, short-film, animated-film, documentary-film, tv-show, miniseries, sitcom, reality-tv, talk-show, game-show, drama, kdrama, chinese-drama, jdrama, anime, sketch-comedy, stand-up-special, documentary, youtube, vlog, web-series, short-form, music-video
-              Music (audio-only): album, single, ep, mixtape, playlist, concert, dj-set, podcast
-              Reading: novel, essay, article, newsletter, comic, graphic-novel, poetry, twitter-thread
-              ALWAYS include exactly one format tag when the medium is clear from the image (poster, thumbnail, streaming app UI, etc.). Skip when ambiguous.
-- cuisine     Italian, Japanese, Mexican, etc. (food only)
-- technique   how it's made — cable stitch, sourdough, oil paint, sous vide
-- style       aesthetic — mid-century, minimalist, scandi, gorpcore, dark academia
-- material    wool, cotton, leather, ceramic, brass, terrazzo
-- color       only if a deliberate palette stands out — earth tones, monochrome, navy
-- season      spring, summer, fall, winter — only if relevant
-- occasion    casual, formal, wedding, weekend, work
-- mood        cozy, bold, moody, playful, calm, dramatic, community-focused, humorous
-- source      brand / creator / platform account if clearly visible — Bon Appétit, Nike, art.of.lunabear, sarah's knitting page
-- person      named individual who made or designed the thing — "Susanne Müller" (pattern designer), "Nora Ephron" (author). Use for the CREATOR not the poster.
-- place       location — Brooklyn, Tokyo, NYC, "the cabin"
+TYPED TAGS — 3-10 most relevant. READ ALL TEXT in the image carefully — titles, captions, usernames, button labels, descriptions, fine print. Tag what's explicitly there, not what you assume.
 
-Skip a type if it does not clearly apply. Don't reach. Skip "color" unless a real palette is intentional.
-For source vs person: if a TikTok/Instagram account posts content by a named designer or artist, tag the ACCOUNT as source AND the named creator as person (e.g. source: sarah's knitting page, person: Susanne Müller).
-For events: always check for activity tags — if the description mentions dancing, music, a sport, food, crafts, tag those activities.
-For art/comics/illustrations: tag concrete subjects (what's depicted) using the subject type, and themes using the theme type.
+Tag types:
+- item        what it IS — recipe, dress, restaurant, apartment, comic, illustration, ticket, pattern, menu, reminder
+- place_type  what kind of place — restaurant, cafe, hotel, apartment, airbnb, neighborhood, park, venue, city
+- subject     specific things depicted or discussed — enumerate them. "mouse", "finger", "sweater", "sneaker". For comics/art/illustrations always list the main visual subjects as separate subject tags.
+- activity    what you DO — dance, salsa, yoga, hiking, cooking class, pottery, DJ set, workshop, trivia
+- theme       content descriptor — violence, dark humor, romance, nostalgia, friendship, horror, coming-of-age
+- author      writer, designer, or pattern creator — "Susanne Müller", "Sally Rooney", "Ottolenghi"
+- brand       manufacturer or product brand — Nike, IKEA, Glossier, Le Creuset, Zara
+- source      who posted or published it — Bon Appétit, art.of.lunabear, sarah's knitting page, @username
+- person      named individual appearing IN the image — actor, artist, public figure shown visually
+- genre       horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient, literary fiction
+- cuisine     Italian, Japanese, Mexican, Korean, etc. (food and restaurant only)
+- dish        specific dish name — carbonara, bibimbap, tiramisu (food only, when named)
+- technique   how it's made — cable stitch, sourdough, oil paint, sous vide, brioche
+- style       aesthetic — mid-century, minimalist, scandi, gorpcore, dark academia, cottagecore
+- material    wool, cotton, leather, ceramic, brass, terrazzo, linen
+- price       clearly visible price — "$45", "€120/night", "from $12" (only when shown explicitly)
+- status      sold out, waitlist, limited edition, on sale, available, pre-order
+- color       only if a deliberate palette is the point — earth tones, monochrome, navy
+- season      spring, summer, fall, winter — only if clearly relevant
+- occasion    casual, formal, wedding, weekend, work, date night
+- mood        cozy, bold, moody, playful, calm, dramatic, humorous, community-focused
+- place       specific location name — Brooklyn, Tokyo, NYC, "the Catskills"
 
-URGENCY — today's date is ${today}. Use this to calculate how soon any visible date actually is.
-Only set urgency when there's a clear time signal IN the image (a date, "ends today", "this weekend", "expires Aug 15"). Always pick the MOST SPECIFIC bucket:
-- today         the event/deadline is today
-- expires_soon  expires or ends within 3 days
-- this_week     within the next 7 days (including this weekend)
-- this_month    within the next 30 days
-- this_season   within the next ~3 months
+Key rules:
+- source vs author vs brand: account that POSTED = source. Person who CREATED/DESIGNED = author. Company that MADE the product = brand. All three can coexist.
+- subject tags: for art, comics, illustrations — always enumerate the main things depicted as individual subject tags. A comic of a mouse biting a finger → subject:mouse, subject:finger. Don't summarize.
+- menus: tag item:menu, place_type:restaurant, dish tags for each named dish visible, source for restaurant name.
+- maps: tag place_type for the type of location, subject for the pinned location name, place for the city/neighborhood.
+- Don't reach. Better to omit than invent. A typical screenshot has 4-7 tags.
+
+URGENCY — today is ${today}. Use this date to calculate how soon any visible date actually is.
+Only set urgency when a clear time signal is IN the image (visible date, "ends today", "sale ends Sunday", "expires Aug 15", "this weekend").
+Always pick the MOST SPECIFIC bucket:
+- today         happening or expiring today
+- expires_soon  within 3 days
+- this_week     within 7 days
+- this_month    within 30 days
+- this_season   within ~3 months
 - this_year     later this calendar year
-- someday       no specific date but has a time flavor ("eventually", "upcoming")
-Use null if no time signal. Don't invent urgency from vibe. When a date range is visible (e.g. "May 9-17"), use the START date to calculate urgency — if it starts within 7 days, use this_week.
+- someday       no specific date but time-flavored ("upcoming", "coming soon")
+Use null if no time signal. Don't invent urgency from vibe. For date ranges (e.g. "May 9-17"), use the START date to calculate urgency.
 
-urgency_date — ISO date (YYYY-MM-DD) when an explicit calendar date is visible, otherwise null. For date ranges, use the start date.
+urgency_date — ISO date (YYYY-MM-DD) when an explicit calendar date is visible. For ranges, use the start date. Otherwise null.
 
-GENERAL RULES
-- Be conservative. Better to omit a tag than invent one. Better category=null than wrong category.
-- READ ALL TEXT in the image carefully — event descriptions, captions, subtitles, UI labels. Don't just tag the visual subject; tag what the text says too.
-- For text-heavy screenshots (articles, code, messages), focus on the SUBSTANCE not the format. A screenshot of a recipe paragraph is "food" not "reading".
-- Memes win over their content category. A meme about food → category=meme, NOT food.
-- Don't add a "color" tag for natural photos with mixed colors. Only when a palette is the point.
+SOURCE_URL — a URL visibly readable in the screenshot (browser URL bar, page footer, watermark). Only if clearly readable. Otherwise null.
 
-SUGGESTED_SUBJECTS — up to 3 alternative phrasings of the subject. These give the user a quick pick list. If subject is null, leave this empty.
+ACTION_URLS — return ALL useful action links that apply, as an array. Each has {url, type, label}.
+Types: profile, pattern, stream, video, maps, listing, tickets, directions, buy, recipe, watch, read, search
 
-SOURCE_URL — a URL visible in the screenshot itself (browser URL bar, page footer, watermark) that points to where the content lives. ONLY include if a URL is clearly readable in the image. Otherwise null.
+Social media — if a handle or username is visible:
+- Instagram handle → {url:"https://instagram.com/handle", type:"profile", label:"Instagram"}
+- TikTok username → {url:"https://tiktok.com/@username", type:"profile", label:"TikTok"}
+- Twitter/X handle → {url:"https://x.com/handle", type:"profile", label:"Twitter"}
+Strip @ symbols. Clean the handle before constructing.
 
-ACTION_URLS — an array (0–4 entries) of useful links you can construct from the screenshot. Each entry is { url, type, label } where type is one of: tickets, directions, buy, recipe, listen, watch, read, search. label is a short noun phrase (≤ 24 chars) describing what the user gets — e.g. "Tickets", "Directions", "Watch on Netflix", "@art.of.lunabear", "Recipe".
+Craft patterns — if a pattern name and/or designer is visible:
+- {url:"https://www.ravelry.com/search#query=pattern+name+designer", type:"pattern", label:"Find on Ravelry"}
 
-Return MULTIPLE entries when several distinct actions apply: e.g. an event poster might have one entry for tickets AND one for directions to the venue; a movie still might have one for "Watch" AND one for "Read reviews"; an Instagram post by a named designer might have one for the IG account AND one for the designer's Etsy/site search.
+Music — if a song, album, or artist is visible:
+- {url:"https://open.spotify.com/search/song+or+artist+name", type:"stream", label:"Spotify"}
 
-For social media posts (Instagram, TikTok, Twitter/X):
-- If an Instagram handle is visible (e.g. @art.of.lunabear), one entry: { url: "https://instagram.com/art.of.lunabear", type: "search", label: "@art.of.lunabear" }
-- If a TikTok username is visible: { url: "https://tiktok.com/@username", type: "search", label: "@username" }
-- If a Twitter/X handle is visible: { url: "https://x.com/username", type: "search", label: "@username" }
-- Strip @ symbols when constructing URLs but keep them in the label.
+Video content — if a YouTube video or channel is visible:
+- {url:"https://www.youtube.com/results?search_query=title+or+channel", type:"video", label:"YouTube"}
 
-For events specifically:
-- Look for "View Event", "Register", "Get Tickets", "RSVP" button text or specific event URLs in the screenshot. If a specific event page URL is visible, use it directly.
-- If only the organizer's main site is visible, construct a targeted Google search: "https://www.google.com/search?q=<event+name>+<city>+<date>" — more useful than linking to the homepage.
-- ALWAYS add a directions entry when a venue is named: { url: "https://www.google.com/maps/search/?api=1&query=<venue+city>", type: "directions", label: "Directions" }
+Places (restaurants, cafes, hotels, venues, any location):
+- Always include a Maps link: {url:"https://www.google.com/maps/search/?api=1&query=place+name+city", type:"maps", label:"Google Maps"}
 
-Other examples:
-- A concert poster with date/venue → tickets + directions
-- A restaurant menu / address → directions (and search for the restaurant name)
-- A product photo with a brand logo → buy
-- A recipe → recipe
-- A book cover → read (Goodreads or store search)
-- A song / album → listen (a search URL)
-- A movie / show poster → watch + a search for "where to watch"
+Apartments / rentals:
+- {url:"https://www.airbnb.com/s/neighborhood+city/homes", type:"listing", label:"Airbnb"}
 
-Be conservative: skip rather than guess. Don't fabricate URLs to specific domains the user didn't see — generic search links are fine and safe. Return [] if nothing actionable applies.
+Events:
+- Look for "View Event", "Register", "Get Tickets", "RSVP" button text or specific URLs
+- If a specific event URL is visible → use it directly
+- Otherwise: {url:"https://www.google.com/search?q=event+name+city+date", type:"tickets", label:"Find tickets"}
 
-Legacy fields action_url / action_url_type — set the FIRST entry's url + type so older clients still work. If action_urls is empty, set both to null.`;
+Shopping / products:
+- {url:"https://www.google.com/search?q=product+name+brand+buy", type:"buy", label:"Shop"}
+- For craft items on Etsy: {url:"https://www.etsy.com/search?q=item+name", type:"buy", label:"Etsy"}
+
+Recipes:
+- {url:"https://www.google.com/search?q=recipe+name", type:"recipe", label:"Find recipe"}
+
+Books:
+- {url:"https://www.goodreads.com/search?q=title+author", type:"read", label:"Goodreads"}
+
+Films / TV:
+- {url:"https://www.google.com/search?q=title+where+to+watch", type:"watch", label:"Where to watch"}
+
+Rules:
+- Return ALL that apply — a TikTok of a knitting pattern should return both a TikTok profile link AND a Ravelry search.
+- For places, always include the Maps link — it's almost always useful.
+- Construct search URLs with real values from the image, not placeholders.
+- Prefer specific searches over homepage links.
+- Return [] if no useful action applies (e.g. a personal message, a meme, a sensitive document).`;
 }
 
 const TOOL = {
@@ -135,7 +172,7 @@ const TOOL = {
       category: {
         type: ['string', 'null'],
         enum: [
-          'craft', 'fashion', 'tv', 'food', 'art', 'music', 'places',
+          'craft', 'fashion', 'film', 'tv', 'food', 'art', 'music', 'places',
           'meme', 'messages', 'shopping', 'reading', 'events', 'tech', 'documents',
           null,
         ],
@@ -149,8 +186,10 @@ const TOOL = {
             type: {
               type: 'string',
               enum: [
-                'item', 'activity', 'subject', 'theme', 'genre', 'format', 'cuisine', 'technique', 'style', 'material', 'color',
-                'season', 'occasion', 'mood', 'source', 'person', 'place',
+                'item', 'place_type', 'subject', 'activity', 'theme', 'author',
+                'brand', 'source', 'person', 'genre', 'cuisine', 'dish',
+                'technique', 'style', 'material', 'price', 'status', 'color',
+                'season', 'occasion', 'mood', 'place',
               ],
             },
             value: { type: 'string' },
@@ -158,48 +197,46 @@ const TOOL = {
           required: ['type', 'value'],
           additionalProperties: false,
         },
-        maxItems: 10,
+        maxItems: 15,
       },
       suggested_subjects: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Up to 3 alternative subject phrases the user could pick from.',
+        description: 'Up to 3 alternative subject phrases.',
         maxItems: 3,
       },
       urgency: {
         type: ['string', 'null'],
         enum: ['today', 'expires_soon', 'this_week', 'this_month', 'this_season', 'this_year', 'someday', null],
       },
-      urgency_date: { type: ['string', 'null'], description: 'ISO 8601 date (YYYY-MM-DD). For date ranges, use the start date.' },
-      source_url: { type: ['string', 'null'], description: 'URL visible in the screenshot (browser bar, footer, etc.). null if none clearly readable.' },
+      urgency_date: {
+        type: ['string', 'null'],
+        description: 'ISO 8601 date (YYYY-MM-DD). For date ranges, use the start date.',
+      },
+      source_url: {
+        type: ['string', 'null'],
+        description: 'URL visibly readable in the screenshot. null if none clearly readable.',
+      },
       action_urls: {
         type: 'array',
-        description: 'Up to 4 useful action links for this screenshot. Each entry has a url, type, and short label.',
-        maxItems: 4,
+        description: 'All useful action links that apply. Can be multiple — e.g. TikTok profile + Ravelry pattern.',
         items: {
           type: 'object',
           properties: {
-            url: { type: 'string' },
+            url: { type: 'string', description: 'The full URL.' },
             type: {
               type: 'string',
-              enum: ['tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search'],
+              enum: ['profile', 'pattern', 'stream', 'video', 'maps', 'listing', 'tickets', 'directions', 'buy', 'recipe', 'watch', 'read', 'search'],
             },
-            label: { type: 'string', description: 'Short noun phrase, ≤ 24 chars.' },
+            label: { type: 'string', description: 'Short human label, e.g. "Instagram", "Ravelry", "Google Maps".' },
           },
           required: ['url', 'type', 'label'],
           additionalProperties: false,
         },
-      },
-      // Legacy single fields — the first action_urls entry mirrored here
-      // for backward compat with older clients. Set to null if action_urls
-      // is empty.
-      action_url: { type: ['string', 'null'] },
-      action_url_type: {
-        type: ['string', 'null'],
-        enum: ['tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search', null],
+        maxItems: 5,
       },
     },
-    required: ['category', 'subject', 'typed_tags', 'suggested_subjects', 'urgency', 'urgency_date', 'source_url', 'action_urls', 'action_url', 'action_url_type'],
+    required: ['category', 'subject', 'typed_tags', 'suggested_subjects', 'urgency', 'urgency_date', 'source_url', 'action_urls'],
     additionalProperties: false,
   },
 } as const;
@@ -218,7 +255,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // Soft auth (sprint): if a shared secret is configured server-side, require it on requests.
   const expected = process.env.OVERLOOK_SHARED_SECRET;
   if (expected) {
     const provided = req.headers['x-overlook-secret'];
@@ -247,9 +283,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const client = new Anthropic({ apiKey });
 
   try {
-    // Using `as any` to bypass SDK type strictness in the Vercel build —
-    // the runtime shape is correct per Anthropic's API docs. cache_control
-    // and prompt-caching can be re-added once SDK types stabilize.
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 1024,
@@ -282,7 +315,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line no-console
     console.error('[analyze] failed', err);
     res.status(500).json({ error: msg });
   }
