@@ -1552,8 +1552,8 @@ const makeStyles = (c: Palette, f: FontSet) =>
     localOnlyRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 28,
-      paddingVertical: 8,
+      marginTop: 8,
+      paddingVertical: 4,
       gap: 12,
     },
     localOnlySwitch: {
