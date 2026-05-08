@@ -439,7 +439,7 @@ export default function HomeScreen() {
           <>
             <Text style={styles.subtitle}>your screenshot library</Text>
             <Text style={styles.emptyBody}>
-              A quiet second brain for the screenshots already on your phone.
+              A quiet home for the inspo, references, and visual notes scattered across your phone.
             </Text>
             <Pressable
               onPress={() => router.push('/upload')}

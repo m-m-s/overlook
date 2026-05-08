@@ -6,7 +6,7 @@ import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { useToast } from './Toast';
 import { colors, statusColors, urgencyColors } from '@/lib/colors';
-import { CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
+import { capitalize, CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { updateScreenshots, type ScreenshotPatch, type TypedTag } from '@/lib/screenshots';
 import { buildTagFromValue, rememberTagType } from '@/lib/tagDictionary';
@@ -124,9 +124,9 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.scroll}>
-      <Text style={styles.title}>tag {selectedIds.length} screenshot{selectedIds.length === 1 ? '' : 's'}</Text>
+      <Text style={styles.title}>Tag {selectedIds.length} screenshot{selectedIds.length === 1 ? '' : 's'}</Text>
       <Text style={styles.help}>
-        only the fields you set will change. tags are added (existing tags stay).
+        Only the fields you set will change. Tags are added (existing tags stay).
       </Text>
 
       <SectionLabel>category</SectionLabel>
@@ -136,7 +136,7 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
           return (
             <Chip
               key={cat}
-              label={cat}
+              label={capitalize(cat)}
               variant="meta"
               selected={active}
               color={active ? colors.ink : colors.inkMuted}
@@ -227,7 +227,7 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
 
       <View style={styles.footer}>
         <Pressable onPress={onClose} style={styles.cancelBtn}>
-          <Text style={styles.cancelText}>cancel</Text>
+          <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
         <Pressable
           onPress={onApply}
@@ -243,7 +243,7 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
 
 const styles = StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 60, gap: 4 },
-  title: { fontFamily: 'Georgia', fontSize: 22, color: colors.ink, marginBottom: 4 },
+  title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: colors.ink, marginBottom: 4 },
   help: { fontSize: 12, color: colors.inkMuted, marginBottom: 8, lineHeight: 18 },
   sectionLabel: {
     fontSize: 11,
@@ -291,8 +291,8 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 28,
     paddingTop: 16,
-    borderTopWidth: 2,
-    borderTopColor: colors.divider,
+    borderTopWidth: 1,
+    borderTopColor: colors.inkMuted,
     borderStyle: 'dashed',
   },
   cancelBtn: {

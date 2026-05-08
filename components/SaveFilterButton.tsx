@@ -5,19 +5,23 @@ import { Alert, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } fr
 import { useToast } from './Toast';
 import { colors } from '@/lib/colors';
 import { type Filters } from '@/lib/filters';
+import { useFilters } from '@/lib/filtersContext';
 import { createSavedFilter, type SavedFilter } from '@/lib/savedFilters';
 
 type Props = {
   filters: Filters;
   onSaved?: (sf: SavedFilter) => void;
+  /** Render as an inline small-caps text link (for the active-filters bar). */
+  compact?: boolean;
 };
 
 /**
  * Tiny "save" button for the filtered grid header. Opens a small modal:
  * name input + pin toggle + save/cancel.
  */
-export const SaveFilterButton = ({ filters, onSaved }: Props) => {
+export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
   const toast = useToast();
+  const { searchQuery } = useFilters();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [pinned, setPinned] = useState(false);
@@ -26,12 +30,12 @@ export const SaveFilterButton = ({ filters, onSaved }: Props) => {
   const onSave = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      Alert.alert('name required', 'give your saved filter a short name.');
+      Alert.alert('Name required', 'Give your saved filter a short name.');
       return;
     }
     setBusy(true);
     try {
-      const sf = await createSavedFilter(trimmed, filters, pinned);
+      const sf = await createSavedFilter(trimmed, filters, pinned, searchQuery);
       if (!sf) {
         toast.error('save failed — try again');
         return;
@@ -48,10 +52,16 @@ export const SaveFilterButton = ({ filters, onSaved }: Props) => {
 
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} hitSlop={6} style={styles.btn}>
-        <Ionicons name="bookmark-outline" size={14} color={colors.ink} />
-        <Text style={styles.btnText}>save</Text>
-      </Pressable>
+      {compact ? (
+        <Pressable onPress={() => setOpen(true)} hitSlop={6}>
+          <Text style={styles.compactLink}>save as album</Text>
+        </Pressable>
+      ) : (
+        <Pressable onPress={() => setOpen(true)} hitSlop={6} style={styles.btn}>
+          <Ionicons name="bookmark-outline" size={14} color={colors.ink} />
+          <Text style={styles.btnText}>save</Text>
+        </Pressable>
+      )}
 
       <Modal
         visible={open}
@@ -61,8 +71,8 @@ export const SaveFilterButton = ({ filters, onSaved }: Props) => {
       >
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.card} onPress={() => {}}>
-            <Text style={styles.title}>save filter</Text>
-            <Text style={styles.help}>name this filter combo so you can come back to it.</Text>
+            <Text style={styles.title}>Save filter</Text>
+            <Text style={styles.help}>Name this filter combo so you can come back to it.</Text>
 
             <TextInput
               value={name}
@@ -76,8 +86,8 @@ export const SaveFilterButton = ({ filters, onSaved }: Props) => {
 
             <View style={styles.toggleRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleLabel}>pin to home</Text>
-                <Text style={styles.toggleHint}>show as a row on the home screen</Text>
+                <Text style={styles.toggleLabel}>Pin to home</Text>
+                <Text style={styles.toggleHint}>Show as a row on the home screen</Text>
               </View>
               <Switch
                 value={pinned}
@@ -89,14 +99,14 @@ export const SaveFilterButton = ({ filters, onSaved }: Props) => {
 
             <View style={styles.btnRow}>
               <Pressable onPress={() => setOpen(false)} style={[styles.modalBtn, styles.cancelBtn]}>
-                <Text style={styles.cancelText}>cancel</Text>
+                <Text style={styles.cancelText}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={onSave}
                 disabled={busy}
                 style={[styles.modalBtn, styles.applyBtn, busy && { opacity: 0.5 }]}
               >
-                <Text style={styles.applyText}>{busy ? 'saving…' : 'save'}</Text>
+                <Text style={styles.applyText}>{busy ? 'Saving…' : 'Save'}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -107,6 +117,13 @@ export const SaveFilterButton = ({ filters, onSaved }: Props) => {
 };
 
 const styles = StyleSheet.create({
+  compactLink: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.inkMuted,
+    textDecorationLine: 'underline',
+  },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -138,16 +155,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 24,
   },
-  title: { fontFamily: 'Georgia', fontSize: 22, color: colors.ink, marginBottom: 4 },
+  title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: colors.ink, marginBottom: 4 },
   help: { fontSize: 12, color: colors.inkMuted, marginBottom: 18, lineHeight: 17 },
   input: {
     fontSize: 16,
-    fontFamily: 'Georgia',
+    fontFamily: 'PlayfairDisplay_500Medium',
     color: colors.ink,
     paddingVertical: 10,
-    borderBottomWidth: 2,
+    borderBottomWidth: 1,
     borderStyle: 'dashed',
-    borderColor: colors.divider,
+    borderColor: colors.inkMuted,
   },
   toggleRow: {
     flexDirection: 'row',

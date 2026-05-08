@@ -113,9 +113,9 @@ export const Onboarding = ({ onComplete }: Props) => {
       render: () => (
         <>
           <Iris level={3} size={84} color={c.ink} />
-          <Text style={styles.title}>A quiet second brain for screenshots.</Text>
+          <Text style={styles.title}>For the inspo, references, and visual notes scattered across your phone.</Text>
           <Text style={styles.subtitle}>
-            Tag, filter, and find the thousands of screenshots already on your phone.
+            Screenshots, saved images, recipes, outfits, places — tag once, find forever.
           </Text>
         </>
       ),

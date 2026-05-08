@@ -525,30 +525,41 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   const effectiveSourceUrl = view.sourceUrlManual ?? item.sourceUrl ?? null;
   const pendingCount = Object.keys(pending).length;
 
-  // First-time bottom-sheet hint: ghost arrow at the handle.
+  // First-time bottom-sheet hints: drag-up arrow at the handle (only when
+  // the parallax image is visible) and long-press-to-edit hint over the
+  // tag area. Each fires once per install. Both can fire on the same
+  // open — drag first, then edit ~2s later — so users see both gestures.
   const [showDragHint, setShowDragHint] = useState(false);
   const [showEditHint, setShowEditHint] = useState(false);
   const [showZoomHint, setShowZoomHint] = useState(false);
   useEffect(() => {
+    let dragTimer: ReturnType<typeof setTimeout> | undefined;
+    let editTimer: ReturnType<typeof setTimeout> | undefined;
     void (async () => {
-      if (!(await wasHintSeen('sheet-drag-up'))) {
+      const dragSeen = await wasHintSeen('sheet-drag-up');
+      const editSeen = await wasHintSeen('sheet-long-press-edit');
+      if (!dragSeen && !hideImage) {
         setShowDragHint(true);
         await markHintSeen('sheet-drag-up');
-      } else if (!(await wasHintSeen('sheet-long-press-edit'))) {
-        // After the drag hint has been seen on a previous open, telegraph
-        // the long-press-to-edit gesture on subsequent opens.
-        const t = setTimeout(async () => {
+      }
+      if (!editSeen) {
+        editTimer = setTimeout(async () => {
           setShowEditHint(true);
           await markHintSeen('sheet-long-press-edit');
-        }, 1800);
-        return () => clearTimeout(t);
+        }, dragSeen || hideImage ? 600 : 2400);
       }
     })();
-  }, []);
+    return () => {
+      if (dragTimer) clearTimeout(dragTimer);
+      if (editTimer) clearTimeout(editTimer);
+    };
+  }, [hideImage]);
 
   // Telegraph that the image is tappable to open the fullscreen
-  // pinch-zoom lightbox (works at any snap).
+  // pinch-zoom lightbox. Skipped in intent-mode (hideImage) since there's
+  // no in-sheet image to tap on there.
   useEffect(() => {
+    if (hideImage) return;
     void (async () => {
       if (!(await wasHintSeen('sheet-tap-to-zoom'))) {
         const t = setTimeout(async () => {
@@ -558,7 +569,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         return () => clearTimeout(t);
       }
     })();
-  }, []);
+  }, [hideImage]);
 
   // Horizontal swipe on the image header to walk through neighbouring
   // screenshots without closing the sheet. failOffsetY cedes vertical
@@ -856,11 +867,19 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       </Animated.View>
       )}
 
-      {/* Sticky pending-changes bar — floats above the parallax image so
-          Apply/Cancel are always reachable, even after the user scrolls
-          past the image. Only renders when scalar edits are staged. */}
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 32 + insets.bottom },
+        ]}
+        onScroll={onScroll}
+      >
+
+      {/* Pending-changes bar — placed at the top of the scroll content so
+          it sits right below the image (close to where the user just
+          made edits) instead of floating at the top of the screen. */}
       {pendingCount > 0 && (
-        <View style={[styles.pendingBar, styles.pendingBarFloating]}>
+        <View style={styles.pendingBar}>
           <Text style={styles.pendingText}>
             {pendingCount} {pendingCount === 1 ? 'change' : 'changes'} pending
           </Text>
@@ -874,14 +893,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           </View>
         </View>
       )}
-
-      <BottomSheetScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 32 + insets.bottom },
-        ]}
-        onScroll={onScroll}
-      >
 
       {/* Fullscreen zoom — pinch-to-zoom + pan via gesture-handler.
           Tap (no pan) closes. Double-tap not implemented yet. */}

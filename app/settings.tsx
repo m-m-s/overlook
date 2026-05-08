@@ -71,13 +71,13 @@ export default function SettingsScreen() {
         <SectionHeading>display</SectionHeading>
 
         <Row
-          label="show tips"
+          label="Show tips"
           hint="Show one-time tooltips for new screens"
           control={<Switch value={showTips} onValueChange={setShowTips} trackColor={track} thumbColor={c.parchment} />}
         />
 
         <Pressable onPress={onResetTips} style={styles.linkRow}>
-          <Text style={styles.linkText}>reset all tip hints</Text>
+          <Text style={styles.linkText}>Reset all tip hints</Text>
           <Ionicons name="refresh" size={16} color={c.inkMuted} />
         </Pressable>
 
@@ -88,7 +88,7 @@ export default function SettingsScreen() {
           }}
           style={styles.linkRow}
         >
-          <Text style={styles.linkText}>replay welcome flow</Text>
+          <Text style={styles.linkText}>Replay welcome flow</Text>
           <Ionicons name="play-back-outline" size={16} color={c.inkMuted} />
         </Pressable>
 
@@ -101,7 +101,7 @@ export default function SettingsScreen() {
             style={styles.linkRow}
           >
             <Text style={styles.linkText}>
-              restore {hiddenRows.length} hidden home {hiddenRows.length === 1 ? 'row' : 'rows'}
+              Restore {hiddenRows.length} hidden home {hiddenRows.length === 1 ? 'row' : 'rows'}
             </Text>
             <Ionicons name="refresh" size={16} color={c.inkMuted} />
           </Pressable>
@@ -110,7 +110,7 @@ export default function SettingsScreen() {
         <SectionHeading>feedback</SectionHeading>
 
         <Row
-          label="haptic feedback"
+          label="Haptic feedback"
           hint="Vibration on taps and saves"
           control={
             <Switch
@@ -126,7 +126,7 @@ export default function SettingsScreen() {
         />
 
         <Row
-          label="screenshot notifications"
+          label="Screenshot notifications"
           hint="Push when a new screenshot is captured"
           control={
             <Switch
@@ -150,12 +150,12 @@ export default function SettingsScreen() {
         <SectionHeading>storage</SectionHeading>
 
         <Row
-          label="screenshots"
+          label="Screenshots"
           hint={counts ? `${counts.total} on device · metadata only on server` : 'Counting…'}
           control={<View />}
         />
         <Row
-          label="queued for AI"
+          label="Queued for AI"
           hint={
             counts
               ? counts.queued === 0
@@ -169,7 +169,7 @@ export default function SettingsScreen() {
         <SectionHeading>dev</SectionHeading>
 
         <Row
-          label="demo data"
+          label="Demo data"
           hint="Show 14 sample screenshots so the UI isn't empty"
           control={
             <Switch
@@ -184,7 +184,7 @@ export default function SettingsScreen() {
         <SectionHeading>account</SectionHeading>
 
         <Row
-          label="signed in"
+          label="Signed in"
           hint={session?.user.email ?? 'Local-only mode'}
           control={<View />}
         />
@@ -196,17 +196,17 @@ export default function SettingsScreen() {
           }}
           style={styles.linkRow}
         >
-          <Text style={styles.linkText}>sign out</Text>
+          <Text style={styles.linkText}>Sign out</Text>
           <Ionicons name="log-out-outline" size={16} color={c.inkMuted} />
         </Pressable>
 
         <SectionHeading>about</SectionHeading>
 
-        <Row label="version" hint={buildVersion} control={<View />} />
+        <Row label="Version" hint={buildVersion} control={<View />} />
 
         <View style={styles.colophon}>
           <Text style={styles.colophonText}>
-            Overlook · a quiet second brain for the screenshots already on your phone.
+            Overlook · a home for the inspo, references, and visual notes scattered across your phone.
           </Text>
         </View>
       </ScrollView>
