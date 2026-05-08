@@ -51,7 +51,13 @@ TYPED TAGS — 3-8 most relevant, all of {type, value}. READ ALL TEXT IN THE IMA
 - activity    what you DO — dance, salsa, yoga, hiking, cooking class, pottery, DJ set, workshop, trivia night
 - subject     concrete thing depicted — mouse, finger, sweater, cat, sneaker (use for specific nouns central to the image)
 - theme       content descriptor — violence, dark humor, body horror, romance, nostalgia, friendship (use when the theme is the point)
-- genre       horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient
+- genre       horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient, romance, thriller
+- format      medium / form-of-content for film, TV, music, reading. Use the most specific applicable bucket:
+              TV / video: youtube, tv-show, reality-tv, drama, kdrama, chinese-drama, jdrama, anime, sitcom, miniseries, talk-show, game-show, sketch-comedy, stand-up-special, documentary, vlog, web-series, short-form
+              Film: feature-film, short-film, indie-film, documentary-film, animated-film
+              Music: album, single, ep, mixtape, playlist, music-video, concert, dj-set, podcast
+              Reading: novel, essay, article, newsletter, comic, graphic-novel, poetry, twitter-thread
+              For TV/film/music/reading content, ALWAYS include exactly one format tag when the medium is clear from the image (poster says "Netflix Series", screenshot is a YouTube thumbnail, etc.). Skip when ambiguous.
 - cuisine     Italian, Japanese, Mexican, etc. (food only)
 - technique   how it's made — cable stitch, sourdough, oil paint, sous vide
 - style       aesthetic — mid-century, minimalist, scandi, gorpcore, dark academia
@@ -142,7 +148,7 @@ const TOOL = {
             type: {
               type: 'string',
               enum: [
-                'item', 'activity', 'subject', 'theme', 'genre', 'cuisine', 'technique', 'style', 'material', 'color',
+                'item', 'activity', 'subject', 'theme', 'genre', 'format', 'cuisine', 'technique', 'style', 'material', 'color',
                 'season', 'occasion', 'mood', 'source', 'person', 'place',
               ],
             },
