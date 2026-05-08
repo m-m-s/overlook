@@ -1,9 +1,51 @@
+import { demoScreenshots } from './demoData';
+import { isDemoMode } from './demoMode';
 import { resolveDeviceAsset } from './deviceUri';
 import { isSupabaseConfigured, supabase } from './supabase';
-import type { LocalScreenshot } from './uploads';
+import type { TypedTag } from './tags';
+import type { ActionLink, ActionLinkType, LocalScreenshot } from './uploads';
+
+const VALID_ACTION_TYPES = new Set<ActionLinkType>([
+  'tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search',
+]);
+
+/** Parse the jsonb action_urls column into typed entries. Falls back to
+ *  wrapping the legacy single action_url + action_url_type pair when the
+ *  array is empty (covers rows from before the multi-url migration). */
+const parseActionUrls = (
+  raw: unknown,
+  legacyUrl: string | null,
+  legacyType: string | null,
+): ActionLink[] => {
+  if (Array.isArray(raw) && raw.length > 0) {
+    const out: ActionLink[] = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.url !== 'string' || typeof e.type !== 'string') continue;
+      if (!VALID_ACTION_TYPES.has(e.type as ActionLinkType)) continue;
+      out.push({
+        url: e.url,
+        type: e.type as ActionLinkType,
+        label: typeof e.label === 'string' ? e.label : '',
+        source: e.source === 'manual' ? 'manual' : 'ai',
+      });
+    }
+    if (out.length > 0) return out;
+  }
+  if (legacyUrl) {
+    const t = legacyType && VALID_ACTION_TYPES.has(legacyType as ActionLinkType)
+      ? (legacyType as ActionLinkType)
+      : 'search';
+    return [{ url: legacyUrl, type: t, label: '', source: 'ai' }];
+  }
+  return [];
+};
 
 export type ScreenshotPatch = Partial<{
   category: string | null;
+  categories: string[];
+  action_urls: ActionLink[];
   subject: string | null;
   status: string | null;
   urgency: string | null;
@@ -24,6 +66,7 @@ type Row = {
   created_at: string;
   device_asset_id: string | null;
   category: string | null;
+  categories: string[] | null;
   subject: string | null;
   status: string | null;
   urgency: string | null;
@@ -34,6 +77,7 @@ type Row = {
   source_url_manual: string | null;
   action_url: string | null;
   action_url_type: string | null;
+  action_urls: unknown[] | null;
   manual_typed_tags: TypedTag[] | null;
   ai_typed_tags: TypedTag[] | null;
   notes: string | null;
@@ -48,12 +92,18 @@ type Row = {
  * Sprint v1: signed URLs are valid for 1 hour. Refetch on app open.
  */
 export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
+  // Demo mode short-circuits: returns the in-memory sample set without
+  // hitting Supabase. Cleared by toggling demo mode off in settings (or empty
+  // state) — no real data is touched.
+  if (await isDemoMode()) {
+    return demoScreenshots;
+  }
   if (!isSupabaseConfigured) return [];
 
   const { data, error } = await supabase
     .from('screenshots')
     .select(
-      'id, storage_path, created_at, device_asset_id, category, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, manual_typed_tags, ai_typed_tags, notes, ai_reviewed, local_only',
+      'id, storage_path, created_at, device_asset_id, category, categories, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, action_urls, manual_typed_tags, ai_typed_tags, notes, ai_reviewed, local_only',
     )
     .order('created_at', { ascending: false })
     .limit(500);
@@ -90,16 +140,29 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
       if (r.device_asset_id) {
         const resolved = await resolveDeviceAsset(r.device_asset_id);
         uri = resolved?.uri ?? '';
+        if (!uri) {
+          // eslint-disable-next-line no-console
+          console.warn('[fetchScreenshots] failed to resolve device asset', r.device_asset_id);
+        }
       } else if (r.storage_path) {
         uri = legacySigned.find((s) => s.path === r.storage_path)?.signedUrl ?? '';
       }
+      // Categories: prefer the array column; fall back to wrapping the legacy
+      // single category string for any rows not yet backfilled.
+      const cats =
+        r.categories && r.categories.length > 0
+          ? r.categories
+          : r.category
+            ? [r.category]
+            : [];
       return {
         id: r.id,
         uri,
         storagePath: r.storage_path ?? undefined,
         createdAt: r.created_at,
         deviceAssetId: r.device_asset_id,
-        category: r.category,
+        category: cats[0] ?? null,
+        categories: cats,
         subject: r.subject,
         status: r.status,
         urgency: r.urgency,
@@ -110,6 +173,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
         sourceUrlManual: r.source_url_manual,
         actionUrl: r.action_url,
         actionUrlType: r.action_url_type,
+        actionUrls: parseActionUrls(r.action_urls, r.action_url, r.action_url_type),
         manualTags: r.manual_typed_tags ?? [],
         aiTags: r.ai_typed_tags ?? [],
         notes: r.notes,
@@ -200,7 +264,8 @@ export const updateScreenshots = async (
   return { error: null };
 };
 
-export type TypedTag = { type?: string; value: string };
+// Re-exported for convenience from the canonical declaration in lib/tags.ts.
+export type { TypedTag } from './tags';
 
 /** Fetch a single screenshot's manual tags + notes (not preloaded in list query). */
 export const fetchScreenshotMeta = async (

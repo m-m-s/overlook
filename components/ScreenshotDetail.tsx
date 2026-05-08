@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as Sharing from 'expo-sharing';
-import { Animated, Dimensions, LayoutAnimation, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, LayoutAnimation, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
@@ -42,7 +42,7 @@ import {
   type TypedTag,
 } from '@/lib/screenshots';
 import { buildTagFromValue, rememberTagType } from '@/lib/tagDictionary';
-import type { LocalScreenshot } from '@/lib/uploads';
+import type { ActionLink, ActionLinkType, LocalScreenshot } from '@/lib/uploads';
 
 type Props = {
   item: LocalScreenshot;
@@ -146,6 +146,247 @@ const actionUrlIcon = (type: string | null | undefined): React.ComponentProps<ty
     default: return 'open-outline';
   }
 };
+
+/** Guess an action type from a freshly-pasted URL. The vision prompt emits
+ *  type=search for unrecognised cases; we mirror that as the default so
+ *  user-added URLs land in a sensible bucket. */
+const guessLinkType = (raw: string): ActionLinkType => {
+  const url = raw.toLowerCase();
+  if (url.includes('maps.google') || url.includes('google.com/maps')) return 'directions';
+  if (url.includes('ticket') || url.includes('eventbrite') || url.includes('partiful') || url.includes('lu.ma')) return 'tickets';
+  if (url.includes('shop') || url.includes('amazon.com') || url.includes('etsy.com') || url.includes('product')) return 'buy';
+  if (url.includes('recipe') || url.includes('allrecipes') || url.includes('nytimes.com/recipes')) return 'recipe';
+  if (url.includes('spotify.com') || url.includes('music.apple') || url.includes('soundcloud')) return 'listen';
+  if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('netflix.com') || url.includes('disneyplus')) return 'watch';
+  if (url.includes('goodreads') || url.includes('substack') || url.includes('medium.com')) return 'read';
+  return 'search';
+};
+
+/** Best-effort label from a URL when the user adds one without a label —
+ *  show the host without "www." so the pill stays compact. */
+const labelFromUrl = (raw: string): string => {
+  try {
+    const u = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+    return u.host.replace(/^www\./, '');
+  } catch {
+    return raw.length > 24 ? raw.slice(0, 24) + '…' : raw;
+  }
+};
+
+/**
+ * Compact links row — shows the source URL (read-only) + every action_url
+ * (AI or manual) as small icon pills in a horizontal scroll. Tap a pill
+ * to open the URL. Long-press a manual pill to remove it. The trailing
+ * "+ Add" pill toggles an inline input for adding a custom link.
+ *
+ * Designed to stay quiet visually when there are 1-2 links and only get
+ * wider as the array grows — never stacks vertically.
+ */
+const LinksSection = ({
+  item,
+  sourceUrl,
+  sourceUrlManual,
+  onSourceChange,
+  onLinksChange,
+}: {
+  item: LocalScreenshot;
+  sourceUrl: string | null;
+  sourceUrlManual: string | null;
+  onSourceChange: (next: string) => void;
+  onLinksChange: (next: ActionLink[]) => void;
+}) => {
+  const c = useColors();
+  const f = useFonts();
+  const styles = useMemo(() => makeLinksStyles(c, f), [c, f]);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [editingSource, setEditingSource] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState(sourceUrlManual ?? '');
+
+  const links = item.actionUrls ?? [];
+
+  const commitDraft = () => {
+    const url = draft.trim();
+    if (!url) {
+      setAdding(false);
+      return;
+    }
+    const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+    const next: ActionLink[] = [
+      ...links,
+      {
+        url: fullUrl,
+        type: guessLinkType(url),
+        label: labelFromUrl(url),
+        source: 'manual',
+      },
+    ];
+    onLinksChange(next);
+    setDraft('');
+    setAdding(false);
+  };
+
+  const removeAt = (idx: number) => {
+    const target = links[idx];
+    if (!target || target.source !== 'manual') return; // only manual can be removed
+    const next = links.filter((_, i) => i !== idx);
+    onLinksChange(next);
+  };
+
+  const open = (url: string) => {
+    Linking.openURL(url).catch(() => {});
+  };
+
+  return (
+    <View style={styles.wrap}>
+      <Text style={styles.heading}>links</Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Source URL pill — visible-in-image link, distinct from action_urls */}
+        {sourceUrl && (
+          <Pressable
+            onPress={() => open(sourceUrl)}
+            onLongPress={() => setEditingSource((v) => !v)}
+            style={styles.pill}
+          >
+            <Ionicons name="globe-outline" size={14} color={c.ink} />
+            <Text style={styles.pillLabel} numberOfLines={1}>
+              {labelFromUrl(sourceUrl)}
+            </Text>
+          </Pressable>
+        )}
+
+        {links.map((link, i) => (
+          <Pressable
+            key={`${link.url}-${i}`}
+            onPress={() => open(link.url)}
+            onLongPress={link.source === 'manual' ? () => removeAt(i) : undefined}
+            delayLongPress={350}
+            style={[styles.pill, link.source === 'manual' && styles.pillManual]}
+          >
+            <Ionicons name={actionUrlIcon(link.type)} size={14} color={c.ink} />
+            <Text style={styles.pillLabel} numberOfLines={1}>
+              {link.label || link.type}
+            </Text>
+          </Pressable>
+        ))}
+
+        {!adding ? (
+          <Pressable onPress={() => setAdding(true)} style={[styles.pill, styles.pillAdd]}>
+            <Ionicons name="add" size={14} color={c.inkMuted} />
+            <Text style={[styles.pillLabel, { color: c.inkMuted }]}>Add link</Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.pill, styles.pillAddActive]}>
+            <BottomSheetTextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="paste a URL"
+              placeholderTextColor={c.inkMuted}
+              autoCapitalize="none"
+              keyboardType="url"
+              autoFocus
+              onSubmitEditing={commitDraft}
+              onBlur={commitDraft}
+              style={styles.pillInput}
+            />
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Inline source-URL editor — only revealed by long-pressing the
+          source pill, so the row stays compact by default. */}
+      {editingSource && (
+        <View style={styles.sourceEditor}>
+          <BottomSheetTextInput
+            value={sourceDraft}
+            onChangeText={setSourceDraft}
+            onBlur={() => {
+              if (sourceDraft !== (sourceUrlManual ?? '')) {
+                onSourceChange(sourceDraft);
+              }
+              setEditingSource(false);
+            }}
+            placeholder="override source URL"
+            placeholderTextColor={c.inkMuted}
+            autoCapitalize="none"
+            keyboardType="url"
+            style={styles.sourceInput}
+          />
+        </View>
+      )}
+    </View>
+  );
+};
+
+const makeLinksStyles = (c: Palette, f: FontSet) =>
+  StyleSheet.create({
+    wrap: { paddingTop: 6 },
+    heading: {
+      fontSize: 11,
+      letterSpacing: 1.8,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      marginTop: 8,
+      marginBottom: 6,
+    },
+    row: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingRight: 8 },
+    pill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: c.ink,
+      backgroundColor: c.parchment,
+      maxWidth: 200,
+    },
+    pillManual: {
+      backgroundColor: c.ink,
+    },
+    pillAdd: {
+      borderStyle: 'dashed',
+      borderColor: c.inkMuted,
+    },
+    pillAddActive: {
+      borderColor: c.ink,
+      paddingVertical: 4,
+      minWidth: 160,
+    },
+    pillLabel: {
+      fontFamily: f.body,
+      fontSize: 12,
+      letterSpacing: 0.2,
+      color: c.ink,
+    },
+    pillInput: {
+      flex: 1,
+      fontFamily: f.body,
+      fontSize: 12,
+      paddingVertical: 4,
+      paddingHorizontal: 4,
+      color: c.ink,
+    },
+    sourceEditor: { marginTop: 8 },
+    sourceInput: {
+      fontFamily: f.body,
+      fontSize: 13,
+      color: c.ink,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.inkMuted,
+      borderRadius: 4,
+    },
+  });
 
 type DisplayTag =
   | { tag: TypedTag; source: 'manual'; manualIndex: number; aiIndex?: undefined }
@@ -1033,46 +1274,22 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         );
       })()}
 
-      {/* Action URL — AI-suggested action button (tickets/buy/recipe/etc.) */}
-      {item.actionUrl && (
-        <Pressable
-          onPress={() => Linking.openURL(item.actionUrl!).catch(() => {})}
-          style={styles.actionUrlBtn}
-        >
-          <Ionicons name={actionUrlIcon(item.actionUrlType)} size={18} color={c.parchment} />
-          <Text style={styles.actionUrlText}>
-            {item.actionUrlType ?? 'open'}
-          </Text>
-        </Pressable>
-      )}
-
-      {/* Source URL — read mode shows tappable link; edit mode shows input */}
-      <Section onToggle={() => toggleEditing('source')}>
-      <SectionHeader label="source url" editing={isEditing('source')} />
-      {isEditing('source') ? (
-        <BottomSheetTextInput
-          value={view.sourceUrlManual ?? ''}
-          onChangeText={(t) => stage({ sourceUrlManual: t.trim() || null })}
-          placeholder={effectiveSourceUrl ? 'override or paste a URL' : 'paste a URL'}
-          placeholderTextColor={c.inkMuted}
-          autoCapitalize="none"
-          keyboardType="url"
-          style={styles.urlInput}
-        />
-      ) : effectiveSourceUrl ? (
-        <Pressable
-          onPress={() => Linking.openURL(effectiveSourceUrl).catch(() => {})}
-          style={styles.urlRow}
-        >
-          <Ionicons name="open-outline" size={16} color={c.ink} />
-          <Text numberOfLines={1} style={styles.urlText}>
-            {effectiveSourceUrl}
-          </Text>
-        </Pressable>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-      </Section>
+      {/* Links — compact horizontal pill row. Combines source URL +
+          AI-extracted action_urls + user-added custom links. Long-press
+          a manual pill to remove. "+ Add" pill toggles an inline input. */}
+      <LinksSection
+        item={item}
+        sourceUrl={effectiveSourceUrl}
+        sourceUrlManual={view.sourceUrlManual ?? null}
+        onSourceChange={(t) => stage({ sourceUrlManual: t.trim() || null })}
+        onLinksChange={(next) => {
+          // Persist immediately. Action URLs are not part of the
+          // pending/Apply flow — adding/removing a link feels best as
+          // an instant action rather than a staged edit.
+          onChange({ actionUrls: next });
+          void persistNow({ action_urls: next });
+        }}
+      />
 
       {/* Notes — read mode shows text; edit mode shows multi-line input */}
       <Section onToggle={() => toggleEditing('notes')}>

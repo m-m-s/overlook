@@ -97,30 +97,33 @@ SUGGESTED_SUBJECTS — up to 3 alternative phrasings of the subject. These give 
 
 SOURCE_URL — a URL visible in the screenshot itself (browser URL bar, page footer, watermark) that points to where the content lives. ONLY include if a URL is clearly readable in the image. Otherwise null.
 
-ACTION_URL + ACTION_URL_TYPE — when the screenshot represents a clear actionable thing the user might want to do later, construct a useful link. Pick one type from: tickets, directions, buy, recipe, listen, watch, read, search.
+ACTION_URLS — an array (0–4 entries) of useful links you can construct from the screenshot. Each entry is { url, type, label } where type is one of: tickets, directions, buy, recipe, listen, watch, read, search. label is a short noun phrase (≤ 24 chars) describing what the user gets — e.g. "Tickets", "Directions", "Watch on Netflix", "@art.of.lunabear", "Recipe".
+
+Return MULTIPLE entries when several distinct actions apply: e.g. an event poster might have one entry for tickets AND one for directions to the venue; a movie still might have one for "Watch" AND one for "Read reviews"; an Instagram post by a named designer might have one for the IG account AND one for the designer's Etsy/site search.
 
 For social media posts (Instagram, TikTok, Twitter/X):
-- If an Instagram handle is visible (e.g. @art.of.lunabear or art.of.lunabear), action_url = "https://instagram.com/art.of.lunabear", action_url_type = "search"
-- If a TikTok username is visible, action_url = "https://tiktok.com/@username", action_url_type = "search"
-- If a Twitter/X handle is visible, action_url = "https://x.com/username", action_url_type = "search"
-- Strip @ symbols and clean the handle before constructing the URL
+- If an Instagram handle is visible (e.g. @art.of.lunabear), one entry: { url: "https://instagram.com/art.of.lunabear", type: "search", label: "@art.of.lunabear" }
+- If a TikTok username is visible: { url: "https://tiktok.com/@username", type: "search", label: "@username" }
+- If a Twitter/X handle is visible: { url: "https://x.com/username", type: "search", label: "@username" }
+- Strip @ symbols when constructing URLs but keep them in the label.
 
 For events specifically:
-- Look for "View Event", "Register", "Get Tickets", "RSVP" button text or specific event URLs in the screenshot
-- If a specific event page URL is visible or partially visible in the image, use it directly
-- If only the organizer's main site is visible (not the specific event URL), construct a targeted Google search: "https://www.google.com/search?q=<event+name>+<city>+<date>" — this is more useful than linking to the organizer's homepage
-- If the event has a venue, prefer a search that includes the venue name
+- Look for "View Event", "Register", "Get Tickets", "RSVP" button text or specific event URLs in the screenshot. If a specific event page URL is visible, use it directly.
+- If only the organizer's main site is visible, construct a targeted Google search: "https://www.google.com/search?q=<event+name>+<city>+<date>" — more useful than linking to the homepage.
+- ALWAYS add a directions entry when a venue is named: { url: "https://www.google.com/maps/search/?api=1&query=<venue+city>", type: "directions", label: "Directions" }
 
 Other examples:
-- A concert poster with date/venue → action_url_type "tickets", action_url is a search like "https://www.google.com/search?q=<artist>+<venue>+<city>+tickets+<date>"
-- A restaurant menu / address → action_url_type "directions", action_url is "https://www.google.com/maps/search/?api=1&query=<restaurant+name+city>"
-- A product photo with a brand logo → action_url_type "buy", action_url is a search
-- A recipe → action_url_type "recipe", action_url is a search for the recipe
-- A book cover → action_url_type "read", a Goodreads or store search URL
-- A song / album → action_url_type "listen", a search URL
-- A movie / show poster → action_url_type "watch", a search URL
+- A concert poster with date/venue → tickets + directions
+- A restaurant menu / address → directions (and search for the restaurant name)
+- A product photo with a brand logo → buy
+- A recipe → recipe
+- A book cover → read (Goodreads or store search)
+- A song / album → listen (a search URL)
+- A movie / show poster → watch + a search for "where to watch"
 
-Be conservative: prefer null over a guess that won't help. Don't fabricate URLs to specific domains the user didn't see — generic search links are fine and safe.`;
+Be conservative: skip rather than guess. Don't fabricate URLs to specific domains the user didn't see — generic search links are fine and safe. Return [] if nothing actionable applies.
+
+Legacy fields action_url / action_url_type — set the FIRST entry's url + type so older clients still work. If action_urls is empty, set both to null.`;
 }
 
 const TOOL = {
@@ -169,13 +172,34 @@ const TOOL = {
       },
       urgency_date: { type: ['string', 'null'], description: 'ISO 8601 date (YYYY-MM-DD). For date ranges, use the start date.' },
       source_url: { type: ['string', 'null'], description: 'URL visible in the screenshot (browser bar, footer, etc.). null if none clearly readable.' },
-      action_url: { type: ['string', 'null'], description: 'A useful action link constructed for this screenshot, or null if no clear action.' },
+      action_urls: {
+        type: 'array',
+        description: 'Up to 4 useful action links for this screenshot. Each entry has a url, type, and short label.',
+        maxItems: 4,
+        items: {
+          type: 'object',
+          properties: {
+            url: { type: 'string' },
+            type: {
+              type: 'string',
+              enum: ['tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search'],
+            },
+            label: { type: 'string', description: 'Short noun phrase, ≤ 24 chars.' },
+          },
+          required: ['url', 'type', 'label'],
+          additionalProperties: false,
+        },
+      },
+      // Legacy single fields — the first action_urls entry mirrored here
+      // for backward compat with older clients. Set to null if action_urls
+      // is empty.
+      action_url: { type: ['string', 'null'] },
       action_url_type: {
         type: ['string', 'null'],
         enum: ['tickets', 'directions', 'buy', 'recipe', 'listen', 'watch', 'read', 'search', null],
       },
     },
-    required: ['category', 'subject', 'typed_tags', 'suggested_subjects', 'urgency', 'urgency_date', 'source_url', 'action_url', 'action_url_type'],
+    required: ['category', 'subject', 'typed_tags', 'suggested_subjects', 'urgency', 'urgency_date', 'source_url', 'action_urls', 'action_url', 'action_url_type'],
     additionalProperties: false,
   },
 } as const;

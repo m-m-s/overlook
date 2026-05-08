@@ -1,6 +1,28 @@
-import { isSupabaseConfigured, supabase } from './supabase';
+import * as Crypto from 'expo-crypto';
 
-type TypedTag = { type?: string; value: string };
+import { isSupabaseConfigured, supabase } from './supabase';
+import type { TypedTag } from './tags';
+
+/** A single action link — AI-extracted or user-added. The set of types
+ *  matches what the vision prompt returns; UI maps each to an icon. */
+export type ActionLinkType =
+  | 'tickets'
+  | 'directions'
+  | 'buy'
+  | 'recipe'
+  | 'listen'
+  | 'watch'
+  | 'read'
+  | 'search';
+
+export type ActionLink = {
+  url: string;
+  type: ActionLinkType;
+  /** Short noun phrase shown on the pill (≤ 24 chars from the prompt). */
+  label: string;
+  /** Where the link came from — drives long-press-to-delete affordance. */
+  source: 'ai' | 'manual';
+};
 
 export type LocalScreenshot = {
   id: string;
@@ -10,6 +32,10 @@ export type LocalScreenshot = {
   /** expo-media-library asset id, when the screenshot was imported from the device. */
   deviceAssetId?: string | null;
   category?: string | null;
+  /** Multi-category support. `category` (singular) remains as the primary —
+   * the corner icon on the card uses categories[0] === category. Filtering
+   * matches if ANY of the categories matches. */
+  categories?: string[];
   subject?: string | null;
   status?: string | null;
   urgency?: string | null;
@@ -18,8 +44,11 @@ export type LocalScreenshot = {
   timeToComplete?: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
   sourceUrl?: string | null; // AI-extracted
   sourceUrlManual?: string | null; // user-set
+  /** Legacy single action — kept synced to actionUrls[0] for backward compat. */
   actionUrl?: string | null;
   actionUrlType?: string | null;
+  /** Multiple action links per screenshot (AI + user-added). */
+  actionUrls?: ActionLink[];
   manualTags?: TypedTag[];
   aiTags?: TypedTag[];
   notes?: string | null;
@@ -41,7 +70,9 @@ export const uploadScreenshot = async (
   uri: string,
   opts: { fileHash?: string; fileCreatedAt?: string; deviceAssetId?: string } = {},
 ): Promise<LocalScreenshot> => {
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // Postgres `id` column is uuid type — must be a valid UUID. The previous
+  // string format ("timestamp-random") was rejected with code 22P02.
+  const id = Crypto.randomUUID();
   const createdAt = new Date().toISOString();
 
   if (!isSupabaseConfigured) {
@@ -61,7 +92,11 @@ export const uploadScreenshot = async (
     device_asset_id: opts.deviceAssetId ?? null,
   });
   if (insertErr) {
+    // Throw so the bulk-upload loop can mark this as failed instead of
+    // silently counting it as "done". Without this, we end up with
+    // batchState saying "X done" but no rows actually in Supabase.
     console.warn('[uploadScreenshot] row insert failed', insertErr);
+    throw new Error(`insert failed: ${insertErr.message}`);
   }
 
   return { id, uri, createdAt, deviceAssetId: opts.deviceAssetId ?? null };
