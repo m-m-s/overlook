@@ -26,8 +26,7 @@ Always reply with a single tool call to \`analyze_screenshot\`. Never reply with
 CATEGORY — pick exactly one, or null if none clearly fits:
 - craft       handmade things: knitting, crochet, embroidery, woodworking, ceramics, sewing patterns
 - fashion     clothing, outfits, accessories, footwear, jewelry
-- film        movies, film stills, posters, trailers, behind-the-scenes
-- tv          TV shows, episodes, streaming content, kdramas, anime
+- tv          ALL moving-image content: TV shows, episodes, streaming content, kdrama / chinese drama / jdrama, anime, YouTube, vlogs, web series, AND movies / feature films / film stills / posters / trailers. Use the `format` tag type to distinguish (feature-film vs tv-show vs vlog vs anime, etc.).
 - food        recipes, restaurant dishes, ingredient lists, cooking steps
 - art         paintings, sculptures, illustrations, fine art
 - music       albums, songs, playlists, lyrics, music videos
@@ -52,12 +51,11 @@ TYPED TAGS — 3-8 most relevant, all of {type, value}. READ ALL TEXT IN THE IMA
 - subject     concrete thing depicted — mouse, finger, sweater, cat, sneaker (use for specific nouns central to the image)
 - theme       content descriptor — violence, dark humor, body horror, romance, nostalgia, friendship (use when the theme is the point)
 - genre       horror, comedy, sci-fi, indie, lo-fi, fantasy, ambient, romance, thriller
-- format      medium / form-of-content for film, TV, music, reading. Use the most specific applicable bucket:
-              TV / video: youtube, tv-show, reality-tv, drama, kdrama, chinese-drama, jdrama, anime, sitcom, miniseries, talk-show, game-show, sketch-comedy, stand-up-special, documentary, vlog, web-series, short-form
-              Film: feature-film, short-film, indie-film, documentary-film, animated-film
-              Music: album, single, ep, mixtape, playlist, music-video, concert, dj-set, podcast
+- format      medium / form-of-content for TV (umbrella for all moving image), music, and reading. Use the most specific bucket:
+              Moving image: feature-film, short-film, animated-film, documentary-film, tv-show, miniseries, sitcom, reality-tv, talk-show, game-show, drama, kdrama, chinese-drama, jdrama, anime, sketch-comedy, stand-up-special, documentary, youtube, vlog, web-series, short-form, music-video
+              Music (audio-only): album, single, ep, mixtape, playlist, concert, dj-set, podcast
               Reading: novel, essay, article, newsletter, comic, graphic-novel, poetry, twitter-thread
-              For TV/film/music/reading content, ALWAYS include exactly one format tag when the medium is clear from the image (poster says "Netflix Series", screenshot is a YouTube thumbnail, etc.). Skip when ambiguous.
+              ALWAYS include exactly one format tag when the medium is clear from the image (poster, thumbnail, streaming app UI, etc.). Skip when ambiguous.
 - cuisine     Italian, Japanese, Mexican, etc. (food only)
 - technique   how it's made — cable stitch, sourdough, oil paint, sous vide
 - style       aesthetic — mid-century, minimalist, scandi, gorpcore, dark academia
@@ -134,7 +132,7 @@ const TOOL = {
       category: {
         type: ['string', 'null'],
         enum: [
-          'craft', 'fashion', 'film', 'tv', 'food', 'art', 'music', 'places',
+          'craft', 'fashion', 'tv', 'food', 'art', 'music', 'places',
           'meme', 'messages', 'shopping', 'reading', 'events', 'tech', 'documents',
           null,
         ],

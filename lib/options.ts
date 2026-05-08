@@ -2,8 +2,11 @@
 
 import type { Category } from '@/components/CategoryIcon';
 
+// Note: `film` was merged into `tv` (which now covers all moving-image
+// content — movies, shows, YouTube, kdrama, etc.). The format tag type
+// distinguishes feature-film vs tv-show vs vlog etc.
 export const CATEGORIES: Category[] = [
-  'craft', 'fashion', 'film', 'tv', 'food', 'art', 'music', 'places',
+  'craft', 'fashion', 'tv', 'food', 'art', 'music', 'places',
   'meme', 'messages', 'shopping', 'reading', 'events', 'tech', 'documents',
 ];
 
@@ -59,6 +62,45 @@ export const capitalize = (s: string): string => {
   if (!s) return s;
   if (CAPS_OVERRIDES[s]) return CAPS_OVERRIDES[s];
   return s[0].toUpperCase() + s.slice(1);
+};
+
+/** Acronyms / brand-cased tokens used inside tag values that should
+ *  render uppercased. Keys are lowercase, values are the canonical
+ *  display form. Add to this map when a new shorthand appears. */
+const TOKEN_OVERRIDES: Record<string, string> = {
+  tv: 'TV',
+  ep: 'EP',
+  dj: 'DJ',
+  ny: 'NY',
+  nyc: 'NYC',
+  la: 'LA',
+  uk: 'UK',
+  us: 'US',
+  ai: 'AI',
+  api: 'API',
+  ux: 'UX',
+  ui: 'UI',
+};
+
+/** Format a kebab-cased value (e.g. "feature-film", "tv-show", "kdrama")
+ *  into a human-readable label ("Feature Film", "TV Show", "K-Drama").
+ *  Splits on '-', title-cases each token, and applies acronym overrides
+ *  from TOKEN_OVERRIDES. Special-cases "kdrama" / "jdrama" prefixes. */
+export const formatTagValue = (raw: string): string => {
+  if (!raw) return raw;
+  // Special-case region-prefixed drama shorthand: kdrama → K-Drama, jdrama → J-Drama, cdrama → C-Drama.
+  const m = raw.match(/^([kjc])drama$/i);
+  if (m) return `${m[1].toUpperCase()}-Drama`;
+
+  return raw
+    .split('-')
+    .map((token) => {
+      const lower = token.toLowerCase();
+      if (TOKEN_OVERRIDES[lower]) return TOKEN_OVERRIDES[lower];
+      if (!token) return token;
+      return token[0].toUpperCase() + token.slice(1);
+    })
+    .join(' ');
 };
 
 export const TAG_TYPES = [

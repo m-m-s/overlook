@@ -3,20 +3,33 @@ import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-shee
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
-import { useEffect, useMemo, useState } from 'react';
-import { LayoutAnimation, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as Sharing from 'expo-sharing';
+import { Animated, Dimensions, LayoutAnimation, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-import { Chip } from './Chip';
-import { Iris } from './Iris';
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
 import { CategoryIcon, type Category } from './CategoryIcon';
+import { Chip } from './Chip';
+import { GhostHint } from './GhostHint';
+import { Iris } from './Iris';
+import { Shake } from './Shake';
 import { useToast } from './Toast';
+import { ZoomableImage } from './ZoomableImage';
+import { markHintSeen, wasHintSeen } from '@/lib/hints';
+import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { dropFromAnalysisQueue } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
-import { successHaptic, warnHaptic } from '@/lib/haptics';
-import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { heavyHaptic, successHaptic, tapHaptic, warnHaptic } from '@/lib/haptics';
+import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
+import { useColors, useFonts } from '@/lib/themeContext';
 import {
+  capitalize,
   CATEGORIES,
   DIFFICULTIES,
+  formatTagValue,
   RESONANCE_LEVELS,
   STATUSES,
   TAG_TYPES,
@@ -37,6 +50,10 @@ type Props = {
   onDelete: () => void;
   /** 0 = compact (60%), 1 = mid (85%), 2 = full (100%). Drives image size. */
   snapIndex?: number;
+  /** Swipe-left in the image area calls this to advance to the next item. */
+  onNext?: () => void;
+  /** Swipe-right in the image area calls this to go back to the previous item. */
+  onPrev?: () => void;
 };
 
 /**
@@ -53,6 +70,7 @@ type Props = {
  */
 type Pending = Partial<{
   category: string | null;
+  categories: string[];
   subject: string | null;
   urgency: string | null;
   status: string | null;
@@ -67,27 +85,51 @@ type Pending = Partial<{
 const LOCAL_ONLY_DEFAULT_CATEGORIES = new Set(['documents', 'messages']);
 
 /**
- * Tappable section header. Long-press to enter/exit edit mode for that
- * section (per spec: "Long press any section → edit mode"). Read mode shows
- * just the assigned value; edit mode reveals the chip pickers.
+ * Section header — read-only label. Long-press handling is done by the
+ * outer Section wrapper, which covers the entire section block (header +
+ * value display + empty state) so users can long-press anywhere.
  */
 const SectionHeader = ({
   label,
   editing,
-  onToggle,
 }: {
   label: string;
   editing: boolean;
-  onToggle: () => void;
-}) => (
-  <Pressable onLongPress={onToggle} hitSlop={8}>
+}) => {
+  const c = useColors();
+  const f = useFonts();
+  const styles = useMemo(() => makeStyles(c, f), [c, f]);
+  return (
     <View style={styles.sectionHead}>
       <Text style={styles.sectionLabel}>
         {label}
         {editing && <Text style={styles.sectionLabelEditing}>  · editing</Text>}
       </Text>
-      <Text style={styles.sectionEditHint}>{editing ? 'tap a chip · long-press done' : 'long-press to edit'}</Text>
     </View>
+  );
+};
+
+/**
+ * Wraps a section so long-pressing anywhere inside (label, value, empty
+ * "not set" hint) toggles edit mode. Tap on individual chips inside is
+ * still routed to the chip's own onPress because RN's Pressable doesn't
+ * eat short-tap events from nested Pressables.
+ */
+const Section = ({
+  onToggle,
+  children,
+}: {
+  onToggle: () => void;
+  children: React.ReactNode;
+}) => (
+  <Pressable
+    onLongPress={() => {
+      void heavyHaptic();
+      onToggle();
+    }}
+    delayLongPress={350}
+  >
+    {children}
   </Pressable>
 );
 
@@ -135,23 +177,53 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
   });
 };
 
-export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Props) => {
+export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNext, onPrev }: Props) => {
   const { session } = useSession();
   const toast = useToast();
+  const c = useColors();
+  const f = useFonts();
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(c, f), [c, f]);
 
-  // Image preview height grows with the snap index per spec ("Drag up for full
-  // detail view"). At compact snap, preview is a portrait thumbnail. At full,
-  // it's nearly the full screen height with the image rendered uncropped.
-  const previewStyle = useMemo(() => {
-    if (snapIndex >= 2) {
-      // Full snap: occupy most of the screen height, contain the image
-      return { width: '100%' as const, height: 560, marginBottom: 16, backgroundColor: colors.divider };
-    }
-    if (snapIndex === 1) {
-      return { width: '100%' as const, height: 380, marginBottom: 16, backgroundColor: colors.divider };
-    }
-    return { width: '100%' as const, height: 240, marginBottom: 16, backgroundColor: colors.divider };
-  }, [snapIndex]);
+  // Parallax header: the image is an absolutely-positioned overlay on top of
+  // the scroll content (which has matching paddingTop). As the user scrolls,
+  // we translateY the image — that's a paint-only transform, no Yoga layout
+  // pass, no React reconciliation. Previously we shrank the image's `height`
+  // each frame; height changes force layout for every descendant — that was
+  // the jank source. translateY runs at 60fps even on Android.
+  const IMAGE_MAX = SCREEN_HEIGHT * (snapIndex >= 2 ? 0.7 : 0.32);
+  const COLLAPSE_DISTANCE = IMAGE_MAX;
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const imageTranslateY = scrollY.interpolate({
+    inputRange: [0, COLLAPSE_DISTANCE || 1],
+    outputRange: [0, -COLLAPSE_DISTANCE],
+    extrapolate: 'clamp',
+  });
+  // Subtle scale-down + fade as the image scrolls away. Both are native-
+  // driver-eligible transforms and add a polished "the photo recedes"
+  // feel on top of the translate.
+  const imageScale = scrollY.interpolate({
+    inputRange: [0, COLLAPSE_DISTANCE || 1],
+    outputRange: [1, 0.92],
+    extrapolate: 'clamp',
+  });
+  const imageOpacity = scrollY.interpolate({
+    inputRange: [0, COLLAPSE_DISTANCE * 0.7 || 1, COLLAPSE_DISTANCE || 1],
+    outputRange: [1, 1, 0.6],
+    extrapolate: 'clamp',
+  });
+  // useNativeDriver: false here for compat with @gorhom/bottom-sheet's
+  // internal scroll handler. Because we only animate transform/opacity
+  // (no layout-affecting props), this still avoids per-frame layout work
+  // and is dramatically smoother than the previous height-based approach.
+  const onScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: false },
+  );
+
+  // Tap-to-zoom lightbox: at full snap, tapping the image opens a fullscreen
+  // modal with the original aspect ratio + pinch-to-zoom (system gestures).
+  const [zoomOpen, setZoomOpen] = useState(false);
   const [manualTags, setManualTags] = useState<TypedTag[]>([]);
   const [aiTags, setAiTags] = useState<TypedTag[]>([]);
   const [aiSubjects, setAiSubjects] = useState<string[]>([]);
@@ -177,8 +249,15 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   };
 
   // The "view" model = item + pending. UI reads from this; persist only on Apply.
+  const itemCategories: string[] =
+    item.categories && item.categories.length > 0
+      ? item.categories
+      : item.category
+        ? [item.category]
+        : [];
   const view = {
     category: 'category' in pending ? pending.category : item.category,
+    categories: 'categories' in pending ? (pending.categories ?? []) : itemCategories,
     subject: 'subject' in pending ? pending.subject : item.subject,
     urgency: 'urgency' in pending ? pending.urgency : item.urgency,
     status: 'status' in pending ? pending.status : item.status,
@@ -192,6 +271,58 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   // Effective source URL: user-set if present, otherwise AI-extracted.
   const effectiveSourceUrl = view.sourceUrlManual ?? item.sourceUrl ?? null;
   const pendingCount = Object.keys(pending).length;
+
+  // First-time bottom-sheet hint: ghost arrow at the handle.
+  const [showDragHint, setShowDragHint] = useState(false);
+  const [showEditHint, setShowEditHint] = useState(false);
+  const [showZoomHint, setShowZoomHint] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      if (!(await wasHintSeen('sheet-drag-up'))) {
+        setShowDragHint(true);
+        await markHintSeen('sheet-drag-up');
+      } else if (!(await wasHintSeen('sheet-long-press-edit'))) {
+        // After the drag hint has been seen on a previous open, telegraph
+        // the long-press-to-edit gesture on subsequent opens.
+        const t = setTimeout(async () => {
+          setShowEditHint(true);
+          await markHintSeen('sheet-long-press-edit');
+        }, 1800);
+        return () => clearTimeout(t);
+      }
+    })();
+  }, []);
+
+  // Telegraph that the image is tappable to open the fullscreen
+  // pinch-zoom lightbox (works at any snap).
+  useEffect(() => {
+    void (async () => {
+      if (!(await wasHintSeen('sheet-tap-to-zoom'))) {
+        const t = setTimeout(async () => {
+          setShowZoomHint(true);
+          await markHintSeen('sheet-tap-to-zoom');
+        }, 2400);
+        return () => clearTimeout(t);
+      }
+    })();
+  }, []);
+
+  // Horizontal swipe on the image header to walk through neighbouring
+  // screenshots without closing the sheet. failOffsetY cedes vertical
+  // drags to the bottom-sheet's own pan handler so the sheet still
+  // opens/closes normally.
+  const swipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-12, 12])
+        .failOffsetY([-20, 20])
+        .runOnJS(true)
+        .onEnd((e) => {
+          if (e.translationX < -60 && onNext) onNext();
+          else if (e.translationX > 60 && onPrev) onPrev();
+        }),
+    [onNext, onPrev],
+  );
 
   // Hydrate tags + notes from server when sheet opens.
   useEffect(() => {
@@ -223,12 +354,25 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   const stage = (patch: Pending) => setPending((prev) => ({ ...prev, ...patch }));
 
   const setCategory = (cat: Category | null) => {
-    const next = view.category === cat ? null : cat;
-    const updates: Pending = { category: next };
+    if (!cat) {
+      stage({ category: null, categories: [] });
+      return;
+    }
+    const has = view.categories.includes(cat);
+    const nextCategories = has ? view.categories.filter((x) => x !== cat) : [...view.categories, cat];
+    const updates: Pending = {
+      categories: nextCategories,
+      // Keep singular `category` synced to first entry for legacy display.
+      category: nextCategories[0] ?? null,
+    };
     // Per spec: "Certain categories (Documents, Messages, Finance) default
-    // to local-only." If user changes to one of those AND localOnly hasn't
-    // been explicitly set, flip it on.
-    if (next && LOCAL_ONLY_DEFAULT_CATEGORIES.has(next) && !view.localOnly) {
+    // to local-only." If ANY selected category is local-only-default AND
+    // localOnly hasn't been explicitly set, flip it on.
+    if (
+      !has &&
+      LOCAL_ONLY_DEFAULT_CATEGORIES.has(cat) &&
+      !view.localOnly
+    ) {
       updates.localOnly = true;
     }
     stage(updates);
@@ -249,6 +393,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
     // Map local camelCase keys to DB snake_case for the supabase update.
     const dbPatch: Record<string, unknown> = {};
     if ('category' in patch) dbPatch.category = patch.category;
+    if ('categories' in patch) dbPatch.categories = patch.categories;
     if ('subject' in patch) dbPatch.subject = patch.subject;
     if ('urgency' in patch) dbPatch.urgency = patch.urgency;
     if ('status' in patch) dbPatch.status = patch.status;
@@ -338,13 +483,53 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   };
 
   const onShare = async () => {
+    // expo-sharing uses Android's ACTION_SEND with a proper file stream so
+    // the IMAGE actually attaches. RN's built-in Share.share() ignores the
+    // `url` field on Android and only sends `message` — that's why earlier
+    // shares were sending a title string instead of the screenshot.
     try {
-      await Share.share({ url: item.uri, message: item.subject ?? '' });
+      const ok = await Sharing.isAvailableAsync();
+      if (!ok) {
+        toast.error('Sharing not available on this device');
+        return;
+      }
+      await Sharing.shareAsync(item.uri, { mimeType: 'image/jpeg' });
     } catch (err) {
-
       console.warn('[share] failed', err);
     }
   };
+
+  // Manual AI re-analyze for cards that haven't been tagged yet (e.g. the
+  // initial bulk import had a network failure on this one). Disabled while
+  // a request is in flight.
+  const [analyzing, setAnalyzing] = useState(false);
+  const onAnalyze = async () => {
+    if (analyzing) return;
+    setAnalyzing(true);
+    try {
+      const patch = await analyzeAndPersist(
+        item.uri,
+        item.id,
+        item.deviceAssetId ?? undefined,
+      );
+      if (patch) {
+        onChange({
+          category: patch.category ?? null,
+          subject: patch.subject ?? null,
+          urgency: patch.urgency ?? null,
+        });
+        toast.show('analyzed ✓');
+      } else {
+        toast.error('analysis failed — try again later');
+      }
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+  const showAnalyzeAction =
+    isAnalyzeConfigured &&
+    !view.localOnly &&
+    (item.aiTags?.length ?? 0) === 0;
 
 
   // Compute edge gradient colors for the preview (uses staged values via `view`).
@@ -360,36 +545,65 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
   ];
 
   return (
-    <BottomSheetScrollView contentContainerStyle={styles.scroll}>
-      {/* Image preview — grows with sheet snap index. Uses contentFit="contain"
-          so the entire image is visible (no cropping) at full snap. */}
-      <View style={previewStyle}>
-        <Image source={{ uri: item.uri }} style={styles.previewImg} contentFit="contain" />
-        {showEdge && (
-          <LinearGradient
-            colors={edgeColors}
-            locations={[0, 0.35, 0.65, 1]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.previewEdge}
-            pointerEvents="none"
-          />
-        )}
-        {view.category && (
-          <View style={styles.previewCat}>
-            <CategoryIcon category={view.category} size={26} />
-          </View>
-        )}
-        {view.resonance && (
-          <View style={styles.previewIris}>
-            <Iris level={view.resonance} size={26} />
-          </View>
-        )}
-      </View>
+    <View style={{ flex: 1 }}>
+      {/* Parallax image header — sits ABOVE the scroll content (zIndex 1)
+          and translates up as the user scrolls. The scroll content has a
+          matching paddingTop so the image visually occupies the top
+          IMAGE_MAX pixels at scroll=0. Tap at full snap opens lightbox. */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: IMAGE_MAX,
+          backgroundColor: c.parchment,
+          overflow: 'hidden',
+          zIndex: 1,
+          opacity: imageOpacity,
+          transform: [
+            { translateY: imageTranslateY },
+            { scale: imageScale },
+          ],
+        }}
+      >
+        <GestureDetector gesture={swipeGesture}>
+          <Pressable onPress={() => setZoomOpen(true)} style={{ flex: 1 }}>
+            <Image
+              source={{ uri: item.uri }}
+              style={{ width: '100%', height: '100%' }}
+              contentFit="cover"
+            />
+            {showEdge && (
+              <LinearGradient
+                colors={edgeColors}
+                locations={[0, 0.35, 0.65, 1]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.previewEdge}
+                pointerEvents="none"
+              />
+            )}
+            {view.category && (
+              <View style={styles.previewCat}>
+                <CategoryIcon category={view.category} size={26} />
+              </View>
+            )}
+            {view.resonance && (
+              <View style={styles.previewIris}>
+                <Iris level={view.resonance} size={26} />
+              </View>
+            )}
+          </Pressable>
+        </GestureDetector>
+      </Animated.View>
 
-      {/* Pending-changes bar (only when scalar edits are staged) */}
+      {/* Sticky pending-changes bar — floats above the parallax image so
+          Apply/Cancel are always reachable, even after the user scrolls
+          past the image. Only renders when scalar edits are staged. */}
       {pendingCount > 0 && (
-        <View style={styles.pendingBar}>
+        <View style={[styles.pendingBar, styles.pendingBarFloating]}>
           <Text style={styles.pendingText}>
             {pendingCount} {pendingCount === 1 ? 'change' : 'changes'} pending
           </Text>
@@ -404,12 +618,64 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         </View>
       )}
 
-      {/* Category → Subject as connected chips per spec ("Category depth: Category → Subject as connected chips") */}
-      {!isEditing('category') && !isEditing('subject') && (view.category || view.subject) && (
-        <Pressable onLongPress={() => toggleEditing('category')} style={styles.breadcrumb}>
-          {view.category && <Chip label={view.category} variant="meta" selected color={colors.ink} />}
-          {view.category && view.subject && (
-            <Ionicons name="chevron-forward" size={14} color={colors.inkMuted} />
+      <BottomSheetScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: IMAGE_MAX + 16, paddingBottom: 32 + insets.bottom },
+        ]}
+        onScroll={onScroll}
+      >
+
+      {/* Fullscreen zoom — pinch-to-zoom + pan via gesture-handler.
+          Tap (no pan) closes. Double-tap not implemented yet. */}
+      <Modal
+        visible={zoomOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setZoomOpen(false)}
+        statusBarTranslucent
+      >
+        <ZoomableImage
+          uri={item.uri}
+          onClose={() => setZoomOpen(false)}
+        />
+        <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingBottom: 24 }}>
+          <Text
+            style={{
+              color: c.parchment,
+              fontSize: 11,
+              letterSpacing: 1.4,
+              textTransform: 'uppercase',
+              opacity: 0.6,
+            }}
+          >
+            Tap to close
+          </Text>
+        </View>
+      </Modal>
+
+
+      {/* Categories → Subject as connected chips per spec ("Category depth: Category → Subject as connected chips") */}
+      {!isEditing('category') && !isEditing('subject') && (view.categories.length > 0 || view.subject) && (
+        <Pressable
+          onLongPress={() => {
+            void heavyHaptic();
+            toggleEditing('category');
+          }}
+          style={styles.breadcrumb}
+        >
+          {view.categories.map((cat) => (
+            <Chip
+              key={cat}
+              label={capitalize(cat)}
+              variant="meta"
+              selected
+              color={c.ink}
+              leading={<CategoryIcon category={cat} size={14} color={c.parchment} />}
+            />
+          ))}
+          {view.categories.length > 0 && view.subject && (
+            <Ionicons name="chevron-forward" size={14} color={c.inkMuted} />
           )}
           {view.subject && <Text style={styles.breadcrumbSubject}>{view.subject}</Text>}
         </Pressable>
@@ -417,45 +683,47 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
 
       {/* Category — only show separately when editing OR neither category nor subject is set */}
       {(isEditing('category') || (!view.category && !view.subject)) && (
-        <>
-          <SectionHeader
-            label="category"
-            editing={isEditing('category')}
-            onToggle={() => toggleEditing('category')}
-          />
+        <Section onToggle={() => toggleEditing('category')}>
+          <SectionHeader label="category" editing={isEditing('category')} />
           {isEditing('category') ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-              {CATEGORIES.map((cat) => (
-                <Chip
-                  key={cat}
-                  label={cat}
-                  selected={view.category === cat}
-                  variant="meta"
-                  onPress={() => setCategory(cat)}
-                  color={view.category === cat ? colors.ink : colors.inkMuted}
-                />
-              ))}
-            </ScrollView>
+            <Shake trigger={isEditing('category')} style={[styles.row, styles.wrap]}>
+              {CATEGORIES.map((cat) => {
+                const active = view.categories.includes(cat);
+                return (
+                  <Chip
+                    key={cat}
+                    label={capitalize(cat)}
+                    selected={active}
+                    variant="meta"
+                    onPress={() => setCategory(cat)}
+                    color={active ? c.ink : c.inkMuted}
+                    leading={
+                      <CategoryIcon
+                        category={cat}
+                        size={14}
+                        color={active ? c.parchment : c.inkMuted}
+                      />
+                    }
+                  />
+                );
+              })}
+            </Shake>
           ) : (
             <Text style={styles.emptyHint}>not set</Text>
           )}
-        </>
+        </Section>
       )}
 
       {/* Subject — only show separately when editing OR no value */}
       {(isEditing('subject') || (!view.subject && !view.category)) && (
-        <>
-          <SectionHeader
-            label="subject"
-            editing={isEditing('subject')}
-            onToggle={() => toggleEditing('subject')}
-          />
+        <Section onToggle={() => toggleEditing('subject')}>
+          <SectionHeader label="subject" editing={isEditing('subject')} />
           {isEditing('subject') ? (
             <>
               {aiSubjects.length > 0 && !view.subject && (
                 <View style={[styles.row, styles.wrap, { marginBottom: 8 }]}>
                   {aiSubjects.map((s) => (
-                    <Chip key={s} label={s} variant="ai" color={colors.inkMuted} onPress={() => stage({ subject: s })} />
+                    <Chip key={s} label={s} variant="ai" color={c.inkMuted} onPress={() => stage({ subject: s })} />
                   ))}
                 </View>
               )}
@@ -463,174 +731,20 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
                 value={view.subject ?? ''}
                 onChangeText={(t) => stage({ subject: t || null })}
                 placeholder="specific thing — Crochet, React hook, Italian restaurant…"
-                placeholderTextColor={colors.inkMuted}
+                placeholderTextColor={c.inkMuted}
                 style={styles.subjectInput}
               />
             </>
           ) : (
             <Text style={styles.emptyHint}>not set</Text>
           )}
-        </>
+        </Section>
       )}
 
-      {/* Resonance */}
-      <SectionHeader label="resonance" editing={isEditing('resonance')} onToggle={() => toggleEditing('resonance')} />
-      {isEditing('resonance') ? (
-        <View style={styles.row}>
-          {RESONANCE_LEVELS.map((r) => {
-            const active = view.resonance === r;
-            return (
-              <Pressable
-                key={r}
-                onPress={() => setResonance(r)}
-                style={[styles.irisBtn, active && styles.irisBtnActive]}
-              >
-                <Iris level={r} size={22} color={active ? colors.parchment : colors.ink} />
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : view.resonance ? (
-        <View style={styles.irisBtn}>
-          <Iris level={view.resonance} size={22} color={colors.ink} />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-
-      {/* Urgency */}
-      <SectionHeader label="urgency" editing={isEditing('urgency')} onToggle={() => toggleEditing('urgency')} />
-      {isEditing('urgency') ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {URGENCIES.map((u) => {
-            const active = view.urgency === u.key;
-            return (
-              <Chip
-                key={u.key}
-                label={u.label}
-                variant="meta"
-                selected={active}
-                color={active ? urgencyColors[u.key] : colors.inkMuted}
-                onPress={() => setUrgency(u.key)}
-              />
-            );
-          })}
-        </ScrollView>
-      ) : view.urgency ? (
-        <View style={styles.row}>
-          <Chip
-            label={URGENCIES.find((u) => u.key === view.urgency)?.label ?? view.urgency}
-            variant="meta"
-            selected
-            color={urgencyColors[view.urgency] ?? colors.ink}
-          />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-
-      {/* Status */}
-      <SectionHeader label="status" editing={isEditing('status')} onToggle={() => toggleEditing('status')} />
-      {isEditing('status') ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {STATUSES.map((s) => {
-            const active = view.status === s.key;
-            return (
-              <Chip
-                key={s.key}
-                label={s.label}
-                variant="meta"
-                selected={active}
-                color={active ? statusColors[s.key] : colors.inkMuted}
-                onPress={() => setStatus(s.key)}
-              />
-            );
-          })}
-        </ScrollView>
-      ) : view.status ? (
-        <View style={styles.row}>
-          <Chip
-            label={STATUSES.find((s) => s.key === view.status)?.label ?? view.status}
-            variant="meta"
-            selected
-            color={statusColors[view.status] ?? colors.ink}
-          />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-
-      {/* Difficulty */}
-      <SectionHeader label="difficulty" editing={isEditing('difficulty')} onToggle={() => toggleEditing('difficulty')} />
-      {isEditing('difficulty') ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {DIFFICULTIES.map((d) => {
-            const active = view.difficulty === d.key;
-            return (
-              <Chip
-                key={d.key}
-                label={d.label}
-                variant="meta"
-                selected={active}
-                color={active ? colors.ink : colors.inkMuted}
-                onPress={() =>
-                  stage({
-                    difficulty:
-                      view.difficulty === d.key ? null : (d.key as 'beginner' | 'intermediate' | 'advanced'),
-                  })
-                }
-              />
-            );
-          })}
-        </ScrollView>
-      ) : view.difficulty ? (
-        <View style={styles.row}>
-          <Chip label={view.difficulty} variant="meta" selected color={colors.ink} />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-
-      {/* Time to complete */}
-      <SectionHeader label="time to complete" editing={isEditing('time')} onToggle={() => toggleEditing('time')} />
-      {isEditing('time') ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {TIMES_TO_COMPLETE.map((t) => {
-            const active = view.timeToComplete === t.key;
-            return (
-              <Chip
-                key={t.key}
-                label={t.label}
-                variant="meta"
-                selected={active}
-                color={active ? colors.ink : colors.inkMuted}
-                onPress={() =>
-                  stage({
-                    timeToComplete:
-                      view.timeToComplete === t.key
-                        ? null
-                        : (t.key as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term'),
-                  })
-                }
-              />
-            );
-          })}
-        </ScrollView>
-      ) : view.timeToComplete ? (
-        <View style={styles.row}>
-          <Chip
-            label={TIMES_TO_COMPLETE.find((t) => t.key === view.timeToComplete)?.label ?? view.timeToComplete}
-            variant="meta"
-            selected
-            color={colors.ink}
-          />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-
-      {/* Tags — read mode shows tag chips (no remove X); edit mode adds X + the input + tag-type cycle on tap */}
-      <SectionHeader label="tags" editing={isEditing('tags')} onToggle={() => toggleEditing('tags')} />
+      {/* Tags — placed above resonance/urgency/status so the descriptive
+          metadata is read before the manual quantitative fields. */}
+      <Section onToggle={() => toggleEditing('tags')}>
+      <SectionHeader label="tags" editing={isEditing('tags')} />
       {(() => {
         const sorted = sortedDisplayTags(manualTags, aiTags);
         if (sorted.length === 0 && !isEditing('tags')) {
@@ -645,7 +759,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
                   return (
                     <Chip
                       key={`m-${tag.value}-${manualIndex}`}
-                      label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
+                      label={tag.type ? `${tag.type}: ${formatTagValue(tag.value)}` : formatTagValue(tag.value)}
                       variant="manual"
                       onPress={
                         isEditing('tags')
@@ -678,7 +792,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
                     onChangeText={setNewTag}
                     onSubmitEditing={addTag}
                     placeholder="+ add tag"
-                    placeholderTextColor={colors.inkMuted}
+                    placeholderTextColor={c.inkMuted}
                     autoCapitalize="none"
                     style={styles.tagInput}
                   />
@@ -694,14 +808,14 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
                           key={cand}
                           label={cand}
                           variant="meta"
-                          color={colors.ink}
+                          color={c.ink}
                           onPress={() => resolveAmbiguous(cand)}
                         />
                       ))}
                       <Chip
                         label="neither — keep untyped"
                         variant="add"
-                        color={colors.inkMuted}
+                        color={c.inkMuted}
                         onPress={() => resolveAmbiguous(null)}
                       />
                     </View>
@@ -712,6 +826,212 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
           </>
         );
       })()}
+      </Section>
+
+      {/* Resonance */}
+      <Section onToggle={() => toggleEditing('resonance')}>
+      <SectionHeader label="resonance" editing={isEditing('resonance')} />
+      {isEditing('resonance') ? (
+        <Shake trigger={isEditing('resonance')} style={styles.row}>
+          {RESONANCE_LEVELS.map((r) => {
+            const active = view.resonance === r;
+            return (
+              <Pressable
+                key={r}
+                onPress={() => {
+                  tapHaptic();
+                  setResonance(r);
+                }}
+                style={[styles.irisBtn, active && styles.irisBtnActive]}
+              >
+                <Iris level={r} size={22} color={c.ink} filled={active} />
+              </Pressable>
+            );
+          })}
+        </Shake>
+      ) : view.resonance ? (
+        <View style={styles.irisBtn}>
+          <Iris level={view.resonance} size={22} color={c.ink} />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
+      </Section>
+
+      {/* Urgency */}
+      <Section onToggle={() => toggleEditing('urgency')}>
+      <SectionHeader label="urgency" editing={isEditing('urgency')} />
+      {isEditing('urgency') ? (
+        <Shake trigger={isEditing('urgency')} style={[styles.row, styles.wrap]}>
+          {URGENCIES.map((u) => {
+            const active = view.urgency === u.key;
+            return (
+              <Chip
+                key={u.key}
+                label={u.label}
+                variant="meta"
+                selected={active}
+                color={active ? urgencyColors[u.key] : c.inkMuted}
+                onPress={() => setUrgency(u.key)}
+              />
+            );
+          })}
+        </Shake>
+      ) : view.urgency ? (
+        <View style={styles.row}>
+          <Chip
+            label={URGENCIES.find((u) => u.key === view.urgency)?.label ?? view.urgency}
+            variant="meta"
+            selected
+            color={urgencyColors[view.urgency] ?? c.ink}
+          />
+        </View>
+      ) : (
+        <Text style={styles.emptyHint}>not set</Text>
+      )}
+      </Section>
+
+      {/* Status · difficulty · time-to-complete — combined into one section to
+          save vertical space. When read-only, all three values render inline
+          on a single chip row. Long-press toggles all three into edit mode. */}
+      {(() => {
+        const editingMeta = isEditing('status') || isEditing('difficulty') || isEditing('time');
+        const toggleMeta = () => {
+          void heavyHaptic();
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setEditingSections((prev) => {
+            const next = new Set(prev);
+            const was = next.has('status') || next.has('difficulty') || next.has('time');
+            if (was) {
+              next.delete('status');
+              next.delete('difficulty');
+              next.delete('time');
+            } else {
+              next.add('status');
+              next.add('difficulty');
+              next.add('time');
+            }
+            return next;
+          });
+        };
+        return (
+          <Section onToggle={toggleMeta}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel}>
+                status · difficulty · time
+                {editingMeta && (
+                  <Text style={styles.sectionLabelEditing}>  · editing</Text>
+                )}
+              </Text>
+            </View>
+
+            {editingMeta ? (
+              <View style={{ gap: 12 }}>
+                <View>
+                  <Text style={styles.subLabel}>status</Text>
+                  <View style={[styles.row, styles.wrap]}>
+                    {STATUSES.map((s) => {
+                      const active = view.status === s.key;
+                      return (
+                        <Chip
+                          key={s.key}
+                          label={s.label}
+                          variant="meta"
+                          selected={active}
+                          color={active ? statusColors[s.key] : c.inkMuted}
+                          onPress={() => setStatus(s.key)}
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+                <View>
+                  <Text style={styles.subLabel}>difficulty</Text>
+                  <View style={[styles.row, styles.wrap]}>
+                    {DIFFICULTIES.map((d) => {
+                      const active = view.difficulty === d.key;
+                      return (
+                        <Chip
+                          key={d.key}
+                          label={d.label}
+                          variant="meta"
+                          selected={active}
+                          color={active ? c.ink : c.inkMuted}
+                          onPress={() =>
+                            stage({
+                              difficulty:
+                                view.difficulty === d.key
+                                  ? null
+                                  : (d.key as 'beginner' | 'intermediate' | 'advanced'),
+                            })
+                          }
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+                <View>
+                  <Text style={styles.subLabel}>time to complete</Text>
+                  <View style={[styles.row, styles.wrap]}>
+                    {TIMES_TO_COMPLETE.map((t) => {
+                      const active = view.timeToComplete === t.key;
+                      return (
+                        <Chip
+                          key={t.key}
+                          label={t.label}
+                          variant="meta"
+                          selected={active}
+                          color={active ? c.ink : c.inkMuted}
+                          onPress={() =>
+                            stage({
+                              timeToComplete:
+                                view.timeToComplete === t.key
+                                  ? null
+                                  : (t.key as
+                                      | 'quick'
+                                      | 'afternoon'
+                                      | 'full_day'
+                                      | 'multi_day'
+                                      | 'long_term'),
+                            })
+                          }
+                        />
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            ) : view.status || view.difficulty || view.timeToComplete ? (
+              <View style={[styles.row, styles.wrap]}>
+                {view.status && (
+                  <Chip
+                    label={STATUSES.find((s) => s.key === view.status)?.label ?? view.status}
+                    variant="meta"
+                    selected
+                    color={statusColors[view.status] ?? c.ink}
+                  />
+                )}
+                {view.difficulty && (
+                  <Chip label={capitalize(view.difficulty)} variant="meta" selected color={c.ink} />
+                )}
+                {view.timeToComplete && (
+                  <Chip
+                    label={
+                      TIMES_TO_COMPLETE.find((t) => t.key === view.timeToComplete)?.label ??
+                      view.timeToComplete
+                    }
+                    variant="meta"
+                    selected
+                    color={c.ink}
+                  />
+                )}
+              </View>
+            ) : (
+              <Text style={styles.emptyHint}>not set</Text>
+            )}
+          </Section>
+        );
+      })()}
 
       {/* Action URL — AI-suggested action button (tickets/buy/recipe/etc.) */}
       {item.actionUrl && (
@@ -719,7 +1039,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
           onPress={() => Linking.openURL(item.actionUrl!).catch(() => {})}
           style={styles.actionUrlBtn}
         >
-          <Ionicons name={actionUrlIcon(item.actionUrlType)} size={18} color={colors.parchment} />
+          <Ionicons name={actionUrlIcon(item.actionUrlType)} size={18} color={c.parchment} />
           <Text style={styles.actionUrlText}>
             {item.actionUrlType ?? 'open'}
           </Text>
@@ -727,13 +1047,14 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
       )}
 
       {/* Source URL — read mode shows tappable link; edit mode shows input */}
-      <SectionHeader label="source url" editing={isEditing('source')} onToggle={() => toggleEditing('source')} />
+      <Section onToggle={() => toggleEditing('source')}>
+      <SectionHeader label="source url" editing={isEditing('source')} />
       {isEditing('source') ? (
         <BottomSheetTextInput
           value={view.sourceUrlManual ?? ''}
           onChangeText={(t) => stage({ sourceUrlManual: t.trim() || null })}
           placeholder={effectiveSourceUrl ? 'override or paste a URL' : 'paste a URL'}
-          placeholderTextColor={colors.inkMuted}
+          placeholderTextColor={c.inkMuted}
           autoCapitalize="none"
           keyboardType="url"
           style={styles.urlInput}
@@ -743,7 +1064,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
           onPress={() => Linking.openURL(effectiveSourceUrl).catch(() => {})}
           style={styles.urlRow}
         >
-          <Ionicons name="open-outline" size={16} color={colors.ink} />
+          <Ionicons name="open-outline" size={16} color={c.ink} />
           <Text numberOfLines={1} style={styles.urlText}>
             {effectiveSourceUrl}
           </Text>
@@ -751,16 +1072,18 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
       ) : (
         <Text style={styles.emptyHint}>not set</Text>
       )}
+      </Section>
 
       {/* Notes — read mode shows text; edit mode shows multi-line input */}
-      <SectionHeader label="notes" editing={isEditing('notes')} onToggle={() => toggleEditing('notes')} />
+      <Section onToggle={() => toggleEditing('notes')}>
+      <SectionHeader label="notes" editing={isEditing('notes')} />
       {isEditing('notes') ? (
         <BottomSheetTextInput
           value={view.notes ?? ''}
           onChangeText={(t) => stage({ notes: t })}
           multiline
           placeholder="quick thought, link, anything…"
-          placeholderTextColor={colors.inkMuted}
+          placeholderTextColor={c.inkMuted}
           style={styles.notesInput}
         />
       ) : view.notes ? (
@@ -768,6 +1091,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
       ) : (
         <Text style={styles.emptyHint}>not set</Text>
       )}
+      </Section>
 
       {/* Privacy: local-only toggle. When on, skip AI analysis entirely.
           Auto-flips when category becomes documents / messages. */}
@@ -777,7 +1101,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
           <Text style={styles.emptyHint}>
             {view.localOnly
               ? 'AI analysis is disabled for this card'
-              : 'allow AI to tag this card'}
+              : 'Allow AI to tag this card'}
           </Text>
         </View>
         <Pressable
@@ -796,10 +1120,30 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
         </Pressable>
       </View>
 
-      {/* Footer actions: share + delete (per spec — no AI re-analyze button) */}
+      {/* Manual AI analyze — only surfaces when the card hasn't been
+          analyzed yet (e.g. the original bulk import failed on this one).
+          Hidden once AI tags exist so it doesn't clutter normal usage. */}
+      {showAnalyzeAction && (
+        <Pressable
+          onPress={onAnalyze}
+          disabled={analyzing}
+          style={({ pressed }) => [
+            styles.analyzeBtn,
+            (pressed || analyzing) && { opacity: 0.7 },
+          ]}
+          accessibilityLabel="Analyze with AI"
+        >
+          <Ionicons name="sparkles-outline" size={16} color={c.parchment} />
+          <Text style={styles.analyzeBtnText}>
+            {analyzing ? 'analyzing…' : 'analyze with AI'}
+          </Text>
+        </Pressable>
+      )}
+
+      {/* Footer actions: share + delete */}
       <View style={styles.footer}>
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
-          <Ionicons name="share-outline" size={18} color={colors.ink} />
+          <Ionicons name="share-outline" size={18} color={c.ink} />
           <Text style={styles.footerText}>share</Text>
         </Pressable>
         <Pressable onPress={onTrash} style={styles.footerBtn} accessibilityLabel="Delete screenshot">
@@ -807,268 +1151,318 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0 }: Pr
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
-    </BottomSheetScrollView>
+      </BottomSheetScrollView>
+
+      {/* Onboarding overlays */}
+      <GhostHint
+        visible={showDragHint}
+        variant="drag-up"
+        label="Drag up for full detail"
+        topOffset={32}
+        onDismiss={() => setShowDragHint(false)}
+      />
+      <GhostHint
+        visible={showEditHint}
+        variant="tap"
+        label="Long-press tags to edit"
+        topOffset={IMAGE_MAX + 80}
+        onDismiss={() => setShowEditHint(false)}
+      />
+      <GhostHint
+        visible={showZoomHint}
+        variant="tap"
+        label="Tap image to zoom"
+        topOffset={IMAGE_MAX / 2 - 40}
+        onDismiss={() => setShowZoomHint(false)}
+      />
+    </View>
   );
 };
 
-const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 80, gap: 4 },
-  previewImg: { width: '100%', height: '100%' },
-  previewEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: '18%' },
-  previewCat: {
-    position: 'absolute',
-    left: 12,
-    bottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  previewIris: {
-    position: 'absolute',
-    right: 12,
-    bottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
-    elevation: 4,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    marginTop: 22,
-    marginBottom: 10,
-  },
-  sectionHead: { marginTop: 22, marginBottom: 10 },
-  sectionLabelEditing: { color: colors.ink, fontWeight: '700' },
-  sectionEditHint: {
-    fontSize: 9,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.divider,
-    marginTop: 2,
-  },
-  emptyHint: {
-    fontSize: 12,
-    color: colors.inkMuted,
-    fontStyle: 'italic',
-  },
-  subjectReadOnly: {
-    fontSize: 18,
-    fontFamily: 'Georgia',
-    color: colors.ink,
-    paddingVertical: 4,
-  },
-  breadcrumb: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 22,
-    marginBottom: 4,
-    flexWrap: 'wrap',
-  },
-  breadcrumbSubject: {
-    fontFamily: 'Georgia',
-    fontSize: 17,
-    color: colors.ink,
-  },
-  notesReadOnly: {
-    fontSize: 14,
-    color: colors.ink,
-    paddingVertical: 6,
-    lineHeight: 20,
-  },
-  localOnlyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 28,
-    paddingVertical: 8,
-    gap: 12,
-  },
-  localOnlySwitch: {
-    width: 42,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.divider,
-    padding: 2,
-    justifyContent: 'center',
-  },
-  localOnlySwitchOn: {
-    backgroundColor: colors.ink,
-  },
-  localOnlyThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: colors.parchment,
-  },
-  row: { flexDirection: 'row', gap: 6 },
-  wrap: { flexWrap: 'wrap', rowGap: 8 },
-  subjectInput: {
-    fontSize: 16,
-    fontFamily: 'Georgia',
-    color: colors.ink,
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: colors.divider,
-  },
-  irisBtn: {
-    width: 44,
-    height: 44,
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  irisBtnActive: { backgroundColor: colors.ink },
-  addTagRow: { marginTop: 8 },
-  ambiguousRow: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.divider,
-    borderRadius: 4,
-    gap: 10,
-  },
-  ambiguousLabel: {
-    fontSize: 12,
-    color: colors.ink,
-    fontStyle: 'italic',
-  },
-  pendingBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.ink,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 4,
-    marginTop: 4,
-  },
-  pendingText: {
-    color: colors.parchment,
-    fontSize: 11,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  pendingBtns: { flexDirection: 'row', gap: 6 },
-  pendingCancel: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.parchment,
-    borderRadius: 3,
-  },
-  pendingCancelText: {
-    color: colors.parchment,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  pendingApply: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.parchment,
-    borderRadius: 3,
-  },
-  pendingApplyText: {
-    color: colors.ink,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  tagInput: {
-    fontSize: 13,
-    color: colors.ink,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.inkMuted,
-    borderRadius: 3,
-  },
-  actionUrlBtn: {
-    marginTop: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    backgroundColor: colors.ink,
-    borderRadius: 4,
-  },
-  actionUrlText: {
-    color: colors.parchment,
-    fontSize: 13,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-  urlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderColor: colors.divider,
-  },
-  urlText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.ink,
-    textDecorationLine: 'underline',
-  },
-  urlInput: {
-    fontSize: 13,
-    color: colors.ink,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.inkMuted,
-    borderRadius: 3,
-    marginTop: 8,
-  },
-  notesInput: {
-    fontSize: 14,
-    color: colors.ink,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.divider,
-    borderRadius: 4,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 32,
-    paddingVertical: 14,
-    borderTopWidth: 2,
-    borderTopColor: colors.divider,
-    borderStyle: 'dashed',
-  },
-  footerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  footerText: {
-    color: colors.ink,
-    fontSize: 12,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-});
+const makeStyles = (c: Palette, f: FontSet) =>
+  StyleSheet.create({
+    scroll: { padding: 20, paddingBottom: 120, gap: 4 },
+    previewImg: { width: '100%', height: '100%' },
+    previewEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 8 },
+    previewCat: {
+      position: 'absolute',
+      left: 12,
+      bottom: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.5,
+      shadowRadius: 3,
+      elevation: 4,
+    },
+    previewIris: {
+      position: 'absolute',
+      right: 12,
+      bottom: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.5,
+      shadowRadius: 3,
+      elevation: 4,
+    },
+    sectionLabel: {
+      fontSize: 11,
+      letterSpacing: 1.8,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    sectionHead: { marginTop: 6, marginBottom: 2 },
+    subLabel: {
+      fontSize: 10,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      marginBottom: 6,
+    },
+    sectionLabelEditing: { color: c.ink, fontWeight: '700' },
+    emptyHint: {
+      fontSize: 12,
+      color: c.inkMuted,
+      fontStyle: 'italic',
+    },
+    breadcrumb: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 8,
+      marginBottom: 4,
+      flexWrap: 'wrap',
+    },
+    breadcrumbSubject: {
+      fontFamily: f.displayMedium,
+      fontSize: 17,
+      color: c.ink,
+    },
+    notesReadOnly: {
+      fontSize: 14,
+      color: c.ink,
+      paddingVertical: 6,
+      lineHeight: 20,
+    },
+    localOnlyRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 28,
+      paddingVertical: 8,
+      gap: 12,
+    },
+    localOnlySwitch: {
+      width: 42,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: c.divider,
+      padding: 2,
+      justifyContent: 'center',
+    },
+    localOnlySwitchOn: {
+      backgroundColor: c.ink,
+    },
+    localOnlyThumb: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: c.parchment,
+    },
+    row: { flexDirection: 'row', gap: 6 },
+    wrap: { flexWrap: 'wrap', rowGap: 8 },
+    subjectInput: {
+      fontSize: 16,
+      fontFamily: f.displayMedium,
+      color: c.ink,
+      paddingVertical: 8,
+      borderBottomWidth: 2,
+      borderStyle: 'dashed',
+      borderColor: c.divider,
+    },
+    irisBtn: {
+      width: 44,
+      height: 44,
+      borderWidth: 1,
+      borderColor: c.ink,
+      borderRadius: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    irisBtnActive: { borderWidth: 2 },
+    addTagRow: { marginTop: 8 },
+    ambiguousRow: {
+      marginTop: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.divider,
+      borderRadius: 4,
+      gap: 10,
+    },
+    ambiguousLabel: {
+      fontSize: 12,
+      color: c.ink,
+      fontStyle: 'italic',
+    },
+    pendingBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: c.ink,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 4,
+      marginTop: 4,
+    },
+    pendingBarFloating: {
+      position: 'absolute',
+      top: 8,
+      left: 12,
+      right: 12,
+      zIndex: 2,
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    pendingText: {
+      color: c.parchment,
+      fontSize: 11,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    pendingBtns: { flexDirection: 'row', gap: 6 },
+    pendingCancel: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: c.parchment,
+      borderRadius: 3,
+    },
+    pendingCancelText: {
+      color: c.parchment,
+      fontSize: 11,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+    },
+    pendingApply: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: c.parchment,
+      borderRadius: 3,
+    },
+    pendingApplyText: {
+      color: c.ink,
+      fontSize: 11,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+    },
+    tagInput: {
+      fontSize: 13,
+      color: c.ink,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.inkMuted,
+      borderRadius: 3,
+    },
+    actionUrlBtn: {
+      marginTop: 22,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      backgroundColor: c.ink,
+      borderRadius: 4,
+    },
+    actionUrlText: {
+      color: c.parchment,
+      fontSize: 13,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+    },
+    urlRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderColor: c.divider,
+    },
+    urlText: {
+      flex: 1,
+      fontSize: 13,
+      color: c.ink,
+      textDecorationLine: 'underline',
+    },
+    urlInput: {
+      fontSize: 13,
+      color: c.ink,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.inkMuted,
+      borderRadius: 3,
+      marginTop: 8,
+    },
+    notesInput: {
+      fontSize: 14,
+      color: c.ink,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: c.divider,
+      borderRadius: 4,
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    analyzeBtn: {
+      marginTop: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      paddingHorizontal: 18,
+      borderRadius: 4,
+      backgroundColor: c.ink,
+    },
+    analyzeBtnText: {
+      color: c.parchment,
+      fontSize: 15,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      fontWeight: '600',
+    },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginTop: 32,
+      paddingVertical: 14,
+      borderTopWidth: 2,
+      borderTopColor: c.divider,
+      borderStyle: 'dashed',
+    },
+    footerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      minHeight: 44,
+    },
+    footerText: {
+      color: c.ink,
+      fontSize: 12,
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+  });
