@@ -591,6 +591,26 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
     [onNext, onPrev],
   );
 
+  // Pinch on the in-sheet image snap-opens the fullscreen zoom modal.
+  // The lightbox is where the actual pinch+pan zoom lives — the in-sheet
+  // image is too small to zoom usefully, so we just hand the gesture off.
+  const pinchToZoomGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .runOnJS(true)
+        .onStart(() => {
+          setZoomOpen(true);
+        }),
+    [],
+  );
+
+  // Combine swipe (horizontal pan for prev/next) and pinch (open lightbox)
+  // so two-finger pinches don't get swallowed by the pan handler.
+  const imageGesture = useMemo(
+    () => Gesture.Simultaneous(swipeGesture, pinchToZoomGesture),
+    [swipeGesture, pinchToZoomGesture],
+  );
+
   // Hydrate tags + notes from server when sheet opens.
   useEffect(() => {
     if (!session) return;
@@ -838,7 +858,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           ],
         }}
       >
-        <GestureDetector gesture={swipeGesture}>
+        <GestureDetector gesture={imageGesture}>
           <Pressable onPress={() => setZoomOpen(true)} style={{ flex: 1 }}>
             <Image
               source={{ uri: item.uri }}
