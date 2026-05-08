@@ -622,6 +622,9 @@ export default function LibraryScreen() {
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
         onDismiss={() => setSelectedId(null)}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
         {selected && (
           <ScreenshotDetail

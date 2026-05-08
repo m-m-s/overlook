@@ -874,6 +874,16 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         ]}
         onScroll={onScroll}
       >
+      {/* Tap-outside-section catcher — Pressable wrapper. When the user
+          taps in the scroll's empty space (gaps between sections,
+          padding, etc.) we close all open edit modes. Inner Pressables
+          on chips/inputs/sections handle their own taps and don't bubble
+          here, so editing UI stays interactive. */}
+      <Pressable
+        onPress={() => {
+          if (editingSections.size > 0) closeAllEditing();
+        }}
+      >
 
       {/* Pending-changes bar — placed at the top of the scroll content so
           it sits right below the image (close to where the user just
@@ -893,6 +903,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           </View>
         </View>
       )}
+
 
       {/* Fullscreen zoom — pinch-to-zoom + pan via gesture-handler.
           Tap (no pan) closes. Double-tap not implemented yet. */}
@@ -923,30 +934,51 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       </Modal>
 
 
-      {/* Categories → Subject as connected chips per spec ("Category depth: Category → Subject as connected chips") */}
+      {/* Categories → Subject as connected chips. Each part is tappable
+          to enter its own edit mode: tapping a category chip opens the
+          category selector, tapping the subject text opens the subject
+          input. Long-press still works on either to toggle. */}
       {!isEditing('category') && !isEditing('subject') && (view.categories.length > 0 || view.subject) && (
-        <Pressable
-          onLongPress={() => {
-            void heavyHaptic();
-            toggleEditing('category');
-          }}
-          style={styles.breadcrumb}
-        >
+        <View style={styles.breadcrumb}>
           {view.categories.map((cat) => (
-            <Chip
+            <Pressable
               key={cat}
-              label={capitalize(cat)}
-              variant="meta"
-              selected
-              color={c.ink}
-              leading={<CategoryIcon category={cat} size={14} color={c.parchment} />}
-            />
+              onPress={() => toggleEditing('category')}
+              onLongPress={() => {
+                void heavyHaptic();
+                toggleEditing('category');
+              }}
+            >
+              <Chip
+                label={capitalize(cat)}
+                variant="meta"
+                selected
+                color={c.ink}
+                leading={<CategoryIcon category={cat} size={14} color={c.parchment} />}
+              />
+            </Pressable>
           ))}
           {view.categories.length > 0 && view.subject && (
             <Ionicons name="chevron-forward" size={14} color={c.inkMuted} />
           )}
-          {view.subject && <Text style={styles.breadcrumbSubject}>{view.subject}</Text>}
-        </Pressable>
+          {view.subject && (
+            <Pressable
+              onPress={() => toggleEditing('subject')}
+              onLongPress={() => {
+                void heavyHaptic();
+                toggleEditing('subject');
+              }}
+            >
+              <Text style={styles.breadcrumbSubject}>{view.subject}</Text>
+            </Pressable>
+          )}
+          {/* If category is set but subject isn't, expose an "+ add title" affordance */}
+          {view.categories.length > 0 && !view.subject && (
+            <Pressable onPress={() => toggleEditing('subject')} hitSlop={6}>
+              <Text style={styles.breadcrumbAddTitle}>+ add title</Text>
+            </Pressable>
+          )}
+        </View>
       )}
 
       {/* Category — only show separately when editing OR neither category nor subject is set */}
@@ -1395,6 +1427,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
+      </Pressable>
       </BottomSheetScrollView>
 
       {/* Onboarding overlays */}
@@ -1482,6 +1515,14 @@ const makeStyles = (c: Palette, f: FontSet) =>
       fontFamily: f.displayMedium,
       fontSize: 17,
       color: c.ink,
+    },
+    breadcrumbAddTitle: {
+      fontFamily: f.body,
+      fontSize: 13,
+      color: c.inkMuted,
+      borderBottomWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: c.inkMuted,
     },
     notesReadOnly: {
       fontSize: 14,

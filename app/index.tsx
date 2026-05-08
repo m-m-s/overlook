@@ -814,6 +814,12 @@ export default function HomeScreen() {
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
         onDismiss={() => setSelectedId(null)}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
+        // Keyboard handling: 'interactive' keeps the sheet bound to the
+        // top of the keyboard (so inputs stay visible); 'restore' returns
+        // to the previous snap when keyboard dismisses.
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
         {selected && (
           <ScreenshotDetail
