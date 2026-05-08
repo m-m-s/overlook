@@ -14,7 +14,7 @@ import { refreshHapticsCache } from '@/lib/haptics';
 import { resetAllHints } from '@/lib/hints';
 import { useHiddenRows } from '@/lib/rowOrder';
 import { fetchScreenshots } from '@/lib/screenshots';
-import { useHapticsEnabled, useScreenshotNotify, useShowTips, type ThemeChoice } from '@/lib/settings';
+import { resetOnboarding, useHapticsEnabled, useScreenshotNotify, useShowTips, type ThemeChoice } from '@/lib/settings';
 import { useColors, useFonts, useThemeMode } from '@/lib/themeContext';
 
 export default function SettingsScreen() {
@@ -79,6 +79,17 @@ export default function SettingsScreen() {
         <Pressable onPress={onResetTips} style={styles.linkRow}>
           <Text style={styles.linkText}>reset all tip hints</Text>
           <Ionicons name="refresh" size={16} color={c.inkMuted} />
+        </Pressable>
+
+        <Pressable
+          onPress={async () => {
+            await resetOnboarding();
+            toast.show('Onboarding will replay next launch');
+          }}
+          style={styles.linkRow}
+        >
+          <Text style={styles.linkText}>replay welcome flow</Text>
+          <Ionicons name="play-back-outline" size={16} color={c.inkMuted} />
         </Pressable>
 
         {hiddenRows.length > 0 && (

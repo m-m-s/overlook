@@ -11,7 +11,23 @@ const KEYS = {
   showTips: 'overlook.settings.showTips',
   theme: 'overlook.settings.theme',
   screenshotNotify: 'overlook.settings.screenshotNotify',
+  onboardingComplete: 'overlook.settings.onboardingComplete',
 } as const;
+
+/** First-launch onboarding flag. Marked true after the user completes the
+ *  onboarding flow once. Settings has a "reset onboarding" link that
+ *  flips this back so the flow plays again. */
+export const useOnboardingComplete = () => useBoolSetting(KEYS.onboardingComplete, false);
+export const isOnboardingComplete = async (): Promise<boolean> => {
+  const v = await AsyncStorage.getItem(KEYS.onboardingComplete);
+  return v === '1';
+};
+export const markOnboardingComplete = async (): Promise<void> => {
+  await AsyncStorage.setItem(KEYS.onboardingComplete, '1');
+};
+export const resetOnboarding = async (): Promise<void> => {
+  await AsyncStorage.removeItem(KEYS.onboardingComplete);
+};
 
 // Theme keys = full visual presets (palette + font set + status/urgency
 // hue set). Adding a new theme just means a new key here + an entry in
