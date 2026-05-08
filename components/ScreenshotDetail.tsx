@@ -832,6 +832,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   ];
 
   return (
+    <GestureDetector gesture={imageGesture}>
     <View style={{ flex: 1 }}>
       {/* Parallax image header — sits ABOVE the scroll content (zIndex 1)
           and translates up as the user scrolls. The scroll content has a
@@ -858,8 +859,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           ],
         }}
       >
-        <GestureDetector gesture={imageGesture}>
-          <Pressable onPress={() => setZoomOpen(true)} style={{ flex: 1 }}>
+        <Pressable onPress={() => setZoomOpen(true)} style={{ flex: 1 }}>
             <Image
               source={{ uri: item.uri }}
               style={{ width: '100%', height: '100%' }}
@@ -875,18 +875,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
                 pointerEvents="none"
               />
             )}
-            {view.category && (
-              <View style={styles.previewCat}>
-                <CategoryIcon category={view.category} size={26} />
-              </View>
-            )}
-            {view.resonance && (
-              <View style={styles.previewIris}>
-                <Iris level={view.resonance} size={26} />
-              </View>
-            )}
+            {/* Category + resonance icon overlays were dropped — the
+                chips below the image carry the same info, so the
+                overlays were redundant chrome on top of the photo. */}
           </Pressable>
-        </GestureDetector>
       </Animated.View>
       )}
 
@@ -1392,28 +1384,31 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       )}
       </Section>
 
-      {/* Privacy: local-only toggle. When on, skip AI analysis entirely.
-          Auto-flips when category becomes documents / messages. */}
+      {/* AI tagging toggle. The DB field is `local_only` (privacy-first
+          invariant), but the UI surfaces it as the positive "Allow AI
+          tagging" so the toggle's meaning matches the switch direction:
+          ON = AI allowed, OFF = stays on device. Auto-flips OFF when
+          the category becomes documents / messages. */}
       <View style={styles.localOnlyRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.sectionLabel}>private (local-only)</Text>
+          <Text style={styles.sectionLabel}>Allow AI tagging</Text>
           <Text style={styles.emptyHint}>
             {view.localOnly
-              ? 'AI analysis is disabled for this card'
-              : 'Allow AI to tag this card'}
+              ? 'Image stays on this device — AI analysis is off'
+              : 'AI can analyze this image to suggest tags'}
           </Text>
         </View>
         <Pressable
           onPress={() => stage({ localOnly: !view.localOnly })}
-          style={[styles.localOnlySwitch, view.localOnly && styles.localOnlySwitchOn]}
-          accessibilityLabel="Toggle private (local-only)"
+          style={[styles.localOnlySwitch, !view.localOnly && styles.localOnlySwitchOn]}
+          accessibilityLabel="Toggle AI tagging"
           accessibilityRole="switch"
-          accessibilityState={{ checked: view.localOnly }}
+          accessibilityState={{ checked: !view.localOnly }}
         >
           <View
             style={[
               styles.localOnlyThumb,
-              view.localOnly && { transform: [{ translateX: 18 }] },
+              !view.localOnly && { transform: [{ translateX: 18 }] },
             ]}
           />
         </Pressable>
@@ -1476,6 +1471,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         onDismiss={() => setShowZoomHint(false)}
       />
     </View>
+    </GestureDetector>
   );
 };
 
@@ -1529,9 +1525,9 @@ const makeStyles = (c: Palette, f: FontSet) =>
     breadcrumb: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginTop: 8,
-      marginBottom: 4,
+      gap: 12,
+      marginTop: 12,
+      marginBottom: 6,
       flexWrap: 'wrap',
     },
     breadcrumbSubject: {

@@ -471,7 +471,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       marginTop: 8,
       paddingBottom: 10,
       borderBottomWidth: 1,
-      borderStyle: 'dashed',
       borderColor: c.inkMuted,
     },
     searchRow: {
@@ -544,7 +543,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       marginTop: 22,
       marginBottom: 6,
       borderTopWidth: 1,
-      borderStyle: 'dashed',
       borderColor: c.inkMuted,
     },
     iconChip: {
