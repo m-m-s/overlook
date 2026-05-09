@@ -174,10 +174,9 @@ const makeStyles = (c: Palette) =>
   StyleSheet.create({
     card: {
       flex: 1,
-      aspectRatio: 1,
-      // Parchment instead of divider grey so the side bars/letterbox you get
-      // when an image's aspect doesn't fill a square card blend into the page
-      // background instead of looking like a visible frame.
+      // 4:5 portrait — taller than wide so screenshots crop less. The
+      // cells in HomeRow / library / upload grids match this ratio.
+      aspectRatio: 4 / 5,
       backgroundColor: c.parchment,
       overflow: 'hidden',
     },

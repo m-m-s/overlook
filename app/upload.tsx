@@ -896,7 +896,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
       color: c.inkMuted,
       marginBottom: 10,
     },
-    reviewCell: { flex: 1 / 4, aspectRatio: 1, backgroundColor: c.divider },
+    reviewCell: { flex: 1 / 4, aspectRatio: 4 / 5, backgroundColor: c.divider },
     reviewImg: { width: '100%', height: '100%' },
     reviewOverlay: {
       position: 'absolute',

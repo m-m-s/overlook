@@ -567,7 +567,7 @@ export default function LibraryScreen() {
               </View>
             }
             renderItem={({ item }) => (
-              <View style={isIntentMode ? styles.cellIntent : { flex: 1 / cols, aspectRatio: 1 }}>
+              <View style={isIntentMode ? styles.cellIntent : { flex: 1 / cols, aspectRatio: 4 / 5 }}>
                 <Card
                   data={toCardData(item)}
                   analyzing={analyzingIds.has(item.id)}

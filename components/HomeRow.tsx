@@ -192,7 +192,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
       color: c.inkMuted,
     },
     rowList: { paddingHorizontal: 0 },
-    rowCell: { aspectRatio: 1 },
+    rowCell: { aspectRatio: 4 / 5 },
     rowCellDim: { opacity: 0.65 },
     emptyMessage: {
       fontFamily: f.italic,
