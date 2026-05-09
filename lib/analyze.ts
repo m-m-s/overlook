@@ -36,13 +36,21 @@ const guessMime = (uri: string): 'image/jpeg' | 'image/png' | 'image/webp' | 'im
  *                via the deviceUri cache before reading
  */
 const readAsBase64 = async (uri: string): Promise<string> => {
-  // content:// URIs aren't directly readable by FileSystem on Android.
-  // Caller should pass the file:// localUri; if it's content://, fail loudly
-  // so we update the call site instead of silently returning bad bytes.
+  // content:// URIs (Android MediaStore) — FileSystem.readAsStringAsync
+  // doesn't accept them directly, but copyAsync DOES, and the destination
+  // file:// is readable. We copy to cache, read, delete.
   if (uri.startsWith('content://')) {
-    throw new Error(
-      'analyzeImage was passed a content:// URI. Resolve it to a file:// localUri via resolveDeviceAsset() first.',
-    );
+    const tmp = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ''}analyze-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.jpg`;
+    await FileSystem.copyAsync({ from: uri, to: tmp });
+    try {
+      return await FileSystem.readAsStringAsync(tmp, { encoding: FileSystem.EncodingType.Base64 });
+    } finally {
+      try {
+        await FileSystem.deleteAsync(tmp, { idempotent: true });
+      } catch {
+        // ignore
+      }
+    }
   }
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
     const tmp = `${FileSystem.cacheDirectory ?? FileSystem.documentDirectory ?? ''}analyze-${Date.now()}.bin`;
@@ -91,14 +99,14 @@ export const analyzeImage = async (
     });
 
     if (!r.ok) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[analyze] non-OK response', r.status, await r.text());
       return null;
     }
     const json = (await r.json()) as AnalyzeResult;
     return json;
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[analyze] fetch failed', err);
     return null;
   }
