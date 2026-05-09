@@ -1220,9 +1220,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {onSelect && <SimilarRow item={item} allItems={allItems} onSelect={onSelect} />}
 
       {/* Footer actions: share + delete — inline at the bottom of scroll
-          content. Sheet's bottomInset=insets.bottom (in DetailSheetHost)
-          keeps the sheet above the gesture nav, so this footer lands
-          naturally above the nav at max scroll. */}
+          content. Scroll's paddingBottom (= insets.bottom + 12) keeps
+          this above the gesture nav indicator at max scroll. */}
       <View style={styles.footer}>
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
           <Ionicons name="share-outline" size={18} color={c.ink} />
