@@ -27,7 +27,8 @@ import { signOut, useSession } from '@/lib/auth';
 import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
-import { pickAndImportImages } from '@/lib/galleryPicker';
+import { pickGalleryImages } from '@/lib/galleryPicker';
+import { useScreenshotWatcher } from '@/lib/screenshotWatcher';
 import { fetchScreenshots } from '@/lib/screenshots';
 import { animDuration, useReduceMotion } from '@/lib/a11y';
 import { enqueueAnalysis, getQueuedIds } from '@/lib/analysisQueue';
@@ -135,6 +136,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const inSelectMode = multiSelectIds.size > 0;
   const isIntentMode = cols === 1;
+  const { enqueue: enqueueAssets } = useScreenshotWatcher();
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
@@ -627,20 +629,8 @@ export default function LibraryScreen() {
         userEmail={session?.user.email ?? null}
         onPickFromGallery={async () => {
           setSidebarOpen(false);
-          toast.show('Opening gallery…');
-          const { added, skipped, errored } = await pickAndImportImages({ allowsMultipleSelection: true });
-          if (added.length === 0 && skipped === 0 && errored === 0) return;
-          if (added.length > 0) {
-            toast.show(
-              `Added ${added.length} ${added.length === 1 ? 'image' : 'images'}` +
-                (skipped > 0 ? ` · skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''),
-            );
-            void onRefresh();
-          } else if (skipped > 0) {
-            toast.show(`All ${skipped} already imported.`);
-          } else if (errored > 0) {
-            toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}.`);
-          }
+          const assets = await pickGalleryImages({ allowsMultipleSelection: true });
+          if (assets.length > 0) enqueueAssets(assets);
         }}
         onUpload={() => {
           setSidebarOpen(false);

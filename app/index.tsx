@@ -23,7 +23,8 @@ import type { FontSet, Palette } from '@/lib/colors';
 import { setBatchState, useBatchState } from '@/lib/batchState';
 import { applyFilters as applyFiltersToItems, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
-import { pickAndImportImages } from '@/lib/galleryPicker';
+import { pickGalleryImages } from '@/lib/galleryPicker';
+import { useScreenshotWatcher } from '@/lib/screenshotWatcher';
 import { capitalize, CATEGORIES } from '@/lib/options';
 import type { Category } from '@/components/CategoryIcon';
 import { mergeWithDefaults, useHiddenRows, usePinOrder, useRowOrder } from '@/lib/rowOrder';
@@ -325,23 +326,17 @@ export default function HomeScreen() {
   // selected image through the same upload pipeline as a watcher-detected
   // screenshot. Lets the user add inspo / art / general images, not just
   // their phone's Screenshots album.
+  // Gallery-picked images flow through the same post-screenshot popup
+  // as watcher-detected screenshots — same resonance/urgency/quick-tag
+  // chips, same Analyze & Add / Add without AI / Dismiss actions. The
+  // popup auto-iterates the queue one image at a time.
+  const { enqueue: enqueueAssets } = useScreenshotWatcher();
   const onPickFromGallery = useCallback(async () => {
     setSidebarOpen(false);
-    toast.show('Opening gallery…');
-    const { added, skipped, errored } = await pickAndImportImages({ allowsMultipleSelection: true });
-    if (added.length === 0 && skipped === 0 && errored === 0) return; // user canceled
-    if (added.length > 0) {
-      toast.show(
-        `Added ${added.length} ${added.length === 1 ? 'image' : 'images'}` +
-          (skipped > 0 ? ` · skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''),
-      );
-      void loadItems();
-    } else if (skipped > 0) {
-      toast.show(`All ${skipped} already imported.`);
-    } else if (errored > 0) {
-      toast.error(`Failed to import ${errored} ${errored === 1 ? 'image' : 'images'}.`);
-    }
-  }, [toast, loadItems]);
+    const assets = await pickGalleryImages({ allowsMultipleSelection: true });
+    if (assets.length === 0) return;
+    enqueueAssets(assets);
+  }, [enqueueAssets]);
 
   // LOADING STATE — first fetch hasn't completed yet
   if (!loaded && session) {

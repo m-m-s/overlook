@@ -44,6 +44,9 @@ type Ctx = {
   consume: () => void;
   /** Drop the entire queue. */
   clear: () => void;
+  /** Push externally-sourced assets (gallery picker, share sheet, etc.)
+   *  into the same queue so they flow through the same popup UX. */
+  enqueue: (assets: ScannedAsset[]) => void;
 };
 
 const WatcherContext = createContext<Ctx | null>(null);
@@ -266,10 +269,19 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
     setQueue([]);
   }, []);
 
+  const enqueue = useCallback((assets: ScannedAsset[]) => {
+    setQueue((q) => {
+      const fresh = assets.filter((a) => !queuedIds.current.has(a.id));
+      for (const a of fresh) queuedIds.current.add(a.id);
+      return [...q, ...fresh];
+    });
+  }, []);
+
   const value: Ctx = {
     next: queue[0] ?? null,
     consume,
     clear,
+    enqueue,
   };
 
   return <WatcherContext.Provider value={value}>{children}</WatcherContext.Provider>;

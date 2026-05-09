@@ -1,86 +1,68 @@
-import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 
-import { fetchExistingFingerprints, uploadScreenshot, type LocalScreenshot } from './uploads';
+import type { ScannedAsset } from './mediaLibrary';
 
 /**
- * Per Maggie's framing: "the power of this app isn't just categorizing
- * existing screenshots but also new ones and images in general — we need
- * a way to add images NOT in the screenshot folder." This module wraps
- * expo-image-picker so the user can pick any images from their gallery
- * (or take a new photo), and pipes each through the same upload flow as
- * a watcher-detected screenshot — same metadata, same Supabase row, same
- * triage path.
+ * Open the system image picker and convert the chosen images into
+ * ScannedAssets ready to be enqueued into the post-screenshot popup.
  *
- * Returns the freshly-uploaded LocalScreenshots so the caller can refresh
- * the grid + toast a count. Skips images whose hash matches an existing
- * row (silent dedup, same as the bulk-upload scan path).
+ * Per Maggie: gallery-picked images should flow through the SAME popup
+ * UX as watcher-detected screenshots (resonance + urgency + quick tag
+ * → Analyze & Add / Add without AI / Dismiss). No bulk batching, no
+ * separate review screen — the popup auto-iterates one image at a time.
+ *
+ * For each picked image we save to MediaLibrary so the URI survives
+ * across app launches (image-picker URIs are cache-scoped). Returns the
+ * resulting ScannedAssets; the caller passes them to the watcher's
+ * enqueue() to surface the popup.
  */
-export const pickAndImportImages = async (opts?: {
+export const pickGalleryImages = async (opts?: {
   allowsMultipleSelection?: boolean;
-}): Promise<{ added: LocalScreenshot[]; skipped: number; errored: number }> => {
+}): Promise<ScannedAsset[]> => {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
     allowsMultipleSelection: opts?.allowsMultipleSelection ?? true,
-    selectionLimit: 50, // hard cap so a "select all" doesn't tie up the app
+    selectionLimit: 50,
     quality: 1,
     exif: false,
   });
-  if (result.canceled || result.assets.length === 0) {
-    return { added: [], skipped: 0, errored: 0 };
-  }
+  if (result.canceled || result.assets.length === 0) return [];
 
-  // Pre-fetch existing fingerprints once so per-image dedup is cheap.
-  const existing = await fetchExistingFingerprints();
-
-  const added: LocalScreenshot[] = [];
-  let skipped = 0;
-  let errored = 0;
-
+  const out: ScannedAsset[] = [];
   for (const a of result.assets) {
     try {
-      // Use a stable hash from the asset's filesize + URI tail as a
-      // fingerprint. Consistent enough to skip dupes within a session;
-      // image-picker doesn't give us file content directly without a
-      // FileSystem read so we keep it cheap.
-      const fp = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        `${a.uri}|${a.fileSize ?? a.width * a.height}|${a.fileName ?? ''}`,
-      );
-      if (existing.has(fp)) {
-        skipped++;
-        continue;
-      }
-
-      // Persist the asset to MediaLibrary so the URI survives app reload.
-      // image-picker URIs point at a session-scoped cache directory and
-      // can be evicted; saveToLibraryAsync moves them into the user's
-      // gallery and gives us a stable MediaLibrary asset id we can
-      // re-resolve on next launch.
-      let deviceAssetId: string | undefined;
+      // Save into MediaLibrary so the asset has a stable id and survives
+      // cache eviction. Falls back to the picker's cache URI if save
+      // fails (e.g. permission denied) — still works for the session.
+      let id: string | null = a.assetId ?? null;
       let uri = a.uri;
+      let creationTime = a.exif?.DateTimeOriginal
+        ? Date.parse(a.exif.DateTimeOriginal)
+        : Date.now();
+      let modificationTime = creationTime;
       try {
         const saved = await MediaLibrary.createAssetAsync(a.uri);
-        deviceAssetId = saved.id;
+        id = saved.id;
         uri = saved.uri;
+        creationTime = saved.creationTime ?? creationTime;
+        modificationTime = saved.modificationTime ?? modificationTime;
       } catch {
-        // If MediaLibrary save fails (permission denied, e.g.) we still
-        // upload using the cache URI — works for the current session.
+        // best-effort
       }
-
-      const local = await uploadScreenshot(uri, {
-        fileHash: fp,
-        fileCreatedAt: new Date(a.exif?.DateTimeOriginal ?? Date.now()).toISOString(),
-        deviceAssetId,
+      if (!id) continue; // can't track without an asset id
+      out.push({
+        id,
+        uri,
+        filename: a.fileName ?? `gallery-${id}.jpg`,
+        width: a.width,
+        height: a.height,
+        creationTime,
+        modificationTime,
       });
-      added.push(local);
-      existing.add(fp);
     } catch (err) {
-      console.warn('[galleryPicker] upload failed', err);
-      errored++;
+      console.warn('[galleryPicker] convert failed', err);
     }
   }
-
-  return { added, skipped, errored };
+  return out;
 };
