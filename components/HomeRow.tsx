@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import Svg, { Line } from 'react-native-svg';
 
 import { Card } from './Card';
 import type { CardData } from './Card';
@@ -94,11 +95,20 @@ export const HomeRow = ({
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
 
+  // SVG dashed underline width tracks the row header's measured width so
+  // it spans full-bleed exactly. RN's CSS borderStyle:'dashed' doesn't
+  // allow customizing dash/gap lengths — SVG with strokeDasharray does.
+  const [headerWidth, setHeaderWidth] = useState(0);
+  const onHeaderLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (w !== headerWidth) setHeaderWidth(w);
+  };
+
   const data = maxItems != null ? items.slice(0, maxItems) : items;
 
   return (
     <View style={styles.row}>
-      <View style={styles.rowHeader}>
+      <View style={styles.rowHeader} onLayout={onHeaderLayout}>
         {iconCategory && (
           <View style={styles.rowIcon}>
             <CategoryIcon category={iconCategory} size={20} color={c.ink} />
@@ -146,6 +156,27 @@ export const HomeRow = ({
           </View>
         )}
       </View>
+      {/* Dashed underline rendered as SVG (full control over dash + gap
+          lengths). RN's CSS borderStyle:'dashed' renders the pattern as
+          short dots with no spacing — looks like a dotted line, not a
+          dashed one. */}
+      {headerWidth > 0 && (
+        <Svg
+          width={headerWidth}
+          height={1}
+          style={{ marginTop: -8, marginBottom: 8 }}
+        >
+          <Line
+            x1={0}
+            y1={0.5}
+            x2={headerWidth}
+            y2={0.5}
+            stroke={c.ink}
+            strokeWidth={0.6}
+            strokeDasharray="3, 5"
+          />
+        </Svg>
+      )}
       {data.length === 0 && emptyMessage ? (
         <Text style={styles.emptyMessage}>{emptyMessage}</Text>
       ) : (
@@ -193,11 +224,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       // paddingHorizontal (not marginHorizontal) so the dashed underline
       // extends full-bleed across the screen while content sits indented.
       paddingHorizontal: 20,
-      // hairlineWidth = thinnest line the device can render (typically
-      // 0.5-0.66 pixels on retina screens).
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderStyle: 'dashed',
-      borderBottomColor: c.ink,
     },
     rowTitle: {
       fontFamily: f.displayMedium,
