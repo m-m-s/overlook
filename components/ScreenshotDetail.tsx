@@ -1235,7 +1235,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           contentContainerStyle.paddingBottom (BottomSheetScrollView is
           inconsistent with it on Android). 140 is enough to push the
           footer well above the gesture nav indicator. */}
-      <View style={{ height: 320 + insets.bottom }} />
+      <View style={{ height: 380 + insets.bottom }} />
       </View>
       </BottomSheetScrollView>
 
@@ -1384,9 +1384,9 @@ const makeStyles = (c: Palette, f: FontSet) =>
       fontFamily: f.displayMedium,
       color: c.ink,
       paddingVertical: 8,
-      borderBottomWidth: 2,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderStyle: 'dashed',
-      borderColor: c.divider,
+      borderColor: c.ink,
     },
     irisBtn: {
       width: 44,
@@ -1572,8 +1572,8 @@ const makeStyles = (c: Palette, f: FontSet) =>
       justifyContent: 'space-around',
       marginTop: 32,
       paddingVertical: 14,
-      borderTopWidth: 2,
-      borderTopColor: c.divider,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.ink,
       borderStyle: 'dashed',
     },
     footerBtn: {
