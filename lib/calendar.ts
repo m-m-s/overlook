@@ -1,5 +1,8 @@
-import * as Calendar from 'expo-calendar';
 import { Linking, Platform } from 'react-native';
+
+// expo-calendar is a native module that isn't in Expo Go. We import it lazily
+// inside the iOS branch so the Android Expo Go bundle never tries to resolve it.
+type ExpoCalendarModule = typeof import('expo-calendar');
 
 /**
  * Add a screenshot's date-bearing item to the user's calendar.
@@ -62,8 +65,14 @@ export const addToCalendar = async (
     }
   }
 
-  // iOS path — request permission and create the event in the default calendar.
+  // iOS path — lazy require so the Android bundle never resolves expo-calendar.
   try {
+    let Calendar: ExpoCalendarModule;
+    try {
+      Calendar = require('expo-calendar') as ExpoCalendarModule;
+    } catch {
+      return { ok: false, error: 'Calendar module unavailable in this build' };
+    }
     const { status } = await Calendar.requestCalendarPermissionsAsync();
     if (status !== 'granted') return { ok: false, error: 'Calendar permission denied' };
     const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
