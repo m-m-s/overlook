@@ -272,6 +272,10 @@ export default function TriageScreen() {
         setItems((prev) => prev.map((it) => (it.id === current.id ? { ...it, ...patch } : it)));
         successHaptic();
         toast.show('Analyzed ✓');
+        // Auto-advance: once AI populates the missing fields, the card
+        // satisfies the queue's predicate so it shouldn't sit on this
+        // screen waiting for the user to tap Skip. Move on.
+        advance();
       } else {
         toast.error('AI analyze failed — try again later.');
       }

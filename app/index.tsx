@@ -414,7 +414,14 @@ export default function HomeScreen() {
         )}
         <SidebarRender
           open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          onClose={() => {
+            setSidebarOpen(false);
+            // If the user picked filters while the sidebar was open and
+            // dismissed it (tap-outside / back), route them to /library
+            // where the filters actually apply — home's fixed rows don't
+            // render filtered results.
+            if (filtersActive(filters) > 0) router.push('/library');
+          }}
           filters={filters}
           onFiltersChange={setFilters}
           email={session?.user.email ?? null}

@@ -168,7 +168,11 @@ export default function LibraryScreen() {
   );
 
   // Android hardware back: nav-style. Sheet > sidebar > multi-select >
-  // filters > default (let the navigator pop or exit app).
+  // default (let the navigator pop). Active filters do NOT intercept
+  // back — the user navigated INTO a filtered view via a filter pick or
+  // saved-filter tap, so back should pop back to where they came from.
+  // (Earlier behavior cleared filters in place, which felt like the
+  // back button was 'broken' — it reset the screen instead of navigating.)
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (sheetOpen) {
@@ -183,14 +187,10 @@ export default function LibraryScreen() {
         exitMultiSelect();
         return true;
       }
-      if (filtersActive(filters) > 0) {
-        clearFilters();
-        return true;
-      }
       return false;
     });
     return () => sub.remove();
-  }, [sheetOpen, sidebarOpen, inSelectMode, filters, clearFilters]);
+  }, [sheetOpen, sidebarOpen, inSelectMode]);
 
   // First-card hint: when items first appear, show a ghost-hand pinch-in
   // overlay so users discover the gesture-based zoom.

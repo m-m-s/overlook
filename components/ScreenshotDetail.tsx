@@ -1171,7 +1171,20 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           </Text>
         </View>
         <Pressable
-          onPress={() => stage({ localOnly: !view.localOnly })}
+          onPress={async () => {
+            // Toggle is autosave (no pending bar). It's a binary privacy
+            // setting, not part of a multi-field edit — confirmation
+            // adds friction without a clear benefit.
+            const next = !view.localOnly;
+            onChange({ localOnly: next });
+            const { error } = await updateScreenshot(item.id, { local_only: next });
+            if (error) {
+              onChange({ localOnly: !next }); // revert on failure
+              toast.error('Save failed');
+              return;
+            }
+            if (next) void dropFromAnalysisQueue(item.id);
+          }}
           style={[styles.localOnlySwitch, !view.localOnly && styles.localOnlySwitchOn]}
           accessibilityLabel="Toggle AI tagging"
           accessibilityRole="switch"
