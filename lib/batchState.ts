@@ -31,13 +31,26 @@ export const getBatchState = async (): Promise<BatchState | null> => {
 };
 
 /**
- * Hook returning the current batch state. Re-checks on app foreground via
- * the caller (use AppState listener if needed).
+ * Hook returning the current batch state. Polls every 2s while a batch is
+ * active so the home banner shows live progress when the user navigates
+ * back from the processing screen.
  */
 export const useBatchState = (refreshKey: number = 0): BatchState | null => {
   const [state, setState] = useState<BatchState | null>(null);
   useEffect(() => {
-    void getBatchState().then(setState);
+    let cancelled = false;
+    const tick = async () => {
+      const next = await getBatchState();
+      if (!cancelled) setState(next);
+    };
+    void tick();
+    const id = setInterval(() => {
+      void tick();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [refreshKey]);
   return state;
 };

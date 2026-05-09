@@ -67,6 +67,12 @@ export const queueLength = async (): Promise<number> => {
   return (await read()).length;
 };
 
+/** Snapshot of currently-queued screenshot ids — for showing the queued badge in grids. */
+export const getQueuedIds = async (): Promise<Set<string>> => {
+  const queue = await read();
+  return new Set(queue.map((q) => q.screenshotId));
+};
+
 let draining = false;
 
 /**
