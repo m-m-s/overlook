@@ -120,10 +120,7 @@ export const HomeRow = ({
           <Text style={styles.rowTitle}>{title}</Text>
         </Pressable>
         <Text style={styles.rowCount}>{count}</Text>
-        {/* Dashed connector — fills the space between title/count and the
-            see-all link, sitting on the baseline of the title text.
-            Editorial dashed-underline pattern from the spec. */}
-        <View style={styles.dashedConnector} />
+        <View style={{ flex: 1 }} />
         {reorderMode ? (
           <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
             {onHide && (
@@ -186,11 +183,21 @@ const makeStyles = (c: Palette, f: FontSet) =>
     row: { marginBottom: 20 },
     rowHeader: {
       flexDirection: 'row',
-      alignItems: 'baseline',
-      paddingBottom: 8,
+      // Center-aligned so the category icon / emoji sits visually
+      // centered on the title's cap-height instead of floating above
+      // baseline.
+      alignItems: 'center',
+      paddingBottom: 6,
       marginBottom: 8,
       gap: 8,
-      marginHorizontal: 20,
+      // paddingHorizontal (not marginHorizontal) so the dashed underline
+      // extends full-bleed across the screen while content sits indented.
+      paddingHorizontal: 20,
+      // hairlineWidth = thinnest line the device can render (typically
+      // 0.5-0.66 pixels on retina screens).
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderStyle: 'dashed',
+      borderBottomColor: c.ink,
     },
     rowTitle: {
       fontFamily: f.displayMedium,
@@ -199,16 +206,8 @@ const makeStyles = (c: Palette, f: FontSet) =>
       letterSpacing: -0.3,
       textTransform: 'capitalize',
     },
-    rowIcon: {
-      // Nudges down to align baseline-ish with the serif title; the
-      // header itself uses alignItems:'baseline' so without this nudge
-      // the icon floats above the text.
-      transform: [{ translateY: 2 }],
-    },
-    rowEmoji: {
-      fontSize: 20,
-      transform: [{ translateY: 2 }],
-    },
+    rowIcon: {},
+    rowEmoji: { fontSize: 20 },
     rowCount: {
       fontFamily: f.italic,
       fontSize: 14,
@@ -222,13 +221,9 @@ const makeStyles = (c: Palette, f: FontSet) =>
     },
     dashedConnector: {
       flex: 1,
-      borderBottomWidth: 2,
+      borderBottomWidth: 1,
       borderStyle: 'dashed',
-      borderColor: c.divider,
-      // Sits on the baseline of the title text. The header uses
-      // alignItems:'baseline' so this 2px line aligns naturally with the
-      // bottom of letters; marginBottom nudges it down a couple pixels so
-      // it reads as an underline rather than a strikethrough.
+      borderColor: c.ink,
       marginBottom: 4,
       marginHorizontal: 8,
     },

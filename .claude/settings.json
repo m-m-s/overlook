@@ -5,7 +5,11 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(git commit *)",
-      "Bash(npx expo *)"
+      "Bash(npx expo *)",
+      "Bash(tail -100 /private/tmp/claude-502/-Users-maggie-overlook/66dfb811-5358-4535-bd3e-d2a29327eb7c/tasks/b5rn8z4l0.output 2>&1; echo \"---\"; ls /tmp/expo-*.log 2>/dev/null; ls ~/.expo/ 2>/dev/null | head)",
+      "Read(//Users/maggie/.expo/**)",
+      "Bash(eas --version)",
+      "Bash(eas whoami *)"
     ]
   }
 }

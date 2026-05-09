@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { CategoryIcon, type Category } from './CategoryIcon';
 import { useToast } from './Toast';
 import { colors } from '@/lib/colors';
 import { type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
+import { CATEGORIES } from '@/lib/options';
 import { createSavedFilter, type SavedFilter } from '@/lib/savedFilters';
 
 type Props = {
@@ -26,6 +28,10 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
   const [name, setName] = useState('');
   const [pinned, setPinned] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Either a CATEGORIES key (silhouette icon) or any short string
+   *  (typically a single emoji). Empty = no icon on the home row. */
+  const [icon, setIcon] = useState('');
+  const [emojiDraft, setEmojiDraft] = useState('');
 
   const onSave = async () => {
     const trimmed = name.trim();
@@ -35,7 +41,13 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
     }
     setBusy(true);
     try {
-      const sf = await createSavedFilter(trimmed, filters, pinned, searchQuery);
+      const sf = await createSavedFilter(
+        trimmed,
+        filters,
+        pinned,
+        searchQuery,
+        icon || undefined,
+      );
       if (!sf) {
         toast.error('Save failed — try again.');
         return;
@@ -45,6 +57,8 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
       setOpen(false);
       setName('');
       setPinned(false);
+      setIcon('');
+      setEmojiDraft('');
     } finally {
       setBusy(false);
     }
@@ -87,6 +101,61 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
               autoCapitalize="none"
               autoFocus
               style={styles.input}
+            />
+
+            {/* Icon picker — optional. Pick a category silhouette or
+                type an emoji. Empty = row shows no icon, just title. */}
+            <Text style={styles.iconLabel}>Icon (optional)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.iconRow}
+            >
+              <Pressable
+                onPress={() => {
+                  setIcon('');
+                  setEmojiDraft('');
+                }}
+                style={[styles.iconChip, !icon && styles.iconChipOn]}
+                accessibilityLabel="No icon"
+              >
+                <Text style={[styles.iconChipText, !icon && { color: colors.parchment }]}>
+                  none
+                </Text>
+              </Pressable>
+              {CATEGORIES.map((cat) => {
+                const selected = icon === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => {
+                      setIcon(cat);
+                      setEmojiDraft('');
+                    }}
+                    style={[styles.iconChip, selected && styles.iconChipOn]}
+                    accessibilityLabel={`Use ${cat} icon`}
+                  >
+                    <CategoryIcon
+                      category={cat as Category}
+                      size={18}
+                      color={selected ? colors.parchment : colors.ink}
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <TextInput
+              value={emojiDraft}
+              onChangeText={(v) => {
+                setEmojiDraft(v);
+                // First grapheme only — keeps the chip visually tidy.
+                const first = Array.from(v)[0] ?? '';
+                setIcon(first);
+              }}
+              placeholder="…or type an emoji"
+              placeholderTextColor={colors.inkMuted}
+              maxLength={4}
+              style={styles.emojiInput}
             />
 
             <View style={styles.toggleRow}>
@@ -167,6 +236,47 @@ const styles = StyleSheet.create({
     fontFamily: 'PlayfairDisplay_500Medium',
     color: colors.ink,
     paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.inkMuted,
+  },
+  iconLabel: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    color: colors.inkMuted,
+    marginTop: 18,
+    marginBottom: 8,
+  },
+  iconRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingRight: 8,
+  },
+  iconChip: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.ink,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+  },
+  iconChipOn: {
+    backgroundColor: colors.ink,
+  },
+  iconChipText: {
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: colors.ink,
+  },
+  emojiInput: {
+    fontSize: 20,
+    paddingVertical: 8,
+    marginTop: 8,
+    color: colors.ink,
     borderBottomWidth: 1,
     borderStyle: 'dashed',
     borderColor: colors.inkMuted,

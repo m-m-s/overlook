@@ -106,6 +106,7 @@ export const createSavedFilter = async (
   filters: Filters,
   pinned: boolean,
   searchQuery?: string,
+  icon?: string,
 ): Promise<SavedFilter | null> => {
   if (!isSupabaseConfigured) return null;
   const { data: userRes } = await supabase.auth.getUser();
@@ -116,7 +117,7 @@ export const createSavedFilter = async (
     .insert({
       user_id: userId,
       name: name.trim(),
-      filters: serializeFilters(filters, searchQuery),
+      filters: serializeFilters(filters, searchQuery, icon),
       pinned,
     })
     .select('id, name, filters, pinned, created_at')

@@ -24,7 +24,8 @@ import { setBatchState, useBatchState } from '@/lib/batchState';
 import { applyFilters as applyFiltersToItems, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { pickAndImportImages } from '@/lib/galleryPicker';
-import { capitalize } from '@/lib/options';
+import { capitalize, CATEGORIES } from '@/lib/options';
+import type { Category } from '@/components/CategoryIcon';
 import { mergeWithDefaults, useHiddenRows, usePinOrder, useRowOrder } from '@/lib/rowOrder';
 import { useColors, useFonts } from '@/lib/themeContext';
 import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
@@ -602,6 +603,7 @@ export default function HomeScreen() {
             <HomeRow
               key={`cat-${row.category}`}
               title={capitalize(row.category)}
+              iconCategory={row.category as Category}
               count={row.items.length}
               items={row.items}
               maxItems={30}
@@ -622,10 +624,15 @@ export default function HomeScreen() {
 
         {!reorderMode && orderedPinnedFilters.map((pf) => {
           const matched = applyFiltersToItems(items, pf.filters);
+          // pf.icon may be a category key (renders silhouette) OR an emoji
+          // (renders as text). Detect by looking it up in CATEGORIES.
+          const iconIsCategory = pf.icon && (CATEGORIES as readonly string[]).includes(pf.icon);
           return (
             <HomeRow
               key={pf.id}
               title={pf.name}
+              iconCategory={iconIsCategory ? (pf.icon as Category) : undefined}
+              iconEmoji={!iconIsCategory ? pf.icon : undefined}
               count={matched.length}
               items={matched}
               maxItems={30}
