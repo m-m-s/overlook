@@ -173,7 +173,7 @@ export const HomeRow = ({
             y2={0.5}
             stroke={c.ink}
             strokeWidth={0.6}
-            strokeDasharray="3, 5"
+            strokeDasharray="3, 3"
           />
         </Svg>
       )}
