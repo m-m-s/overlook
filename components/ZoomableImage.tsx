@@ -62,23 +62,15 @@ export const ZoomableImage = ({ uri, onClose }: Props) => {
       ty.setValue(savedTy.current + e.translationY);
       movedRef.current = true;
     })
-    .onEnd((e) => {
+    .onEnd(() => {
+      // Persist current pan position for the next gesture. Pan-to-dismiss
+      // was removed: invoking onClose() while a native-driven spring was
+      // pending caused a crash inside a Modal on Android. Tap-to-close
+      // and the X button cover dismissal.
       const txv = (tx as unknown as { _value: number })._value;
       const tyv = (ty as unknown as { _value: number })._value;
       const sv = (scale as unknown as { _value: number })._value;
-      // Swipe-away to dismiss when not zoomed in: any vertical OR horizontal
-      // swipe past 120px (or fast flick past velocity 800) closes the lightbox.
       if (sv <= 1.05) {
-        const farEnough =
-          Math.abs(tyv) > 120 ||
-          Math.abs(txv) > 120 ||
-          Math.abs(e.velocityY) > 800 ||
-          Math.abs(e.velocityX) > 800;
-        if (farEnough) {
-          onClose();
-          return;
-        }
-        // Snap back to center if the swipe wasn't far enough.
         Animated.spring(tx, { toValue: 0, useNativeDriver: true }).start();
         Animated.spring(ty, { toValue: 0, useNativeDriver: true }).start();
         savedTx.current = 0;

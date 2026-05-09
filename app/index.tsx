@@ -469,7 +469,7 @@ export default function HomeScreen() {
           <Pressable
             onPress={() => router.replace('/')}
             hitSlop={6}
-            style={({ pressed }) => [{ marginLeft: 10 }, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
             accessibilityLabel="Go to home"
           >
             <Text style={styles.headerTitle}>Overlook</Text>
@@ -834,7 +834,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
       paddingHorizontal: 20,
       paddingTop: 52,
       paddingBottom: 20,
-      gap: 12,
+      gap: 8,
     },
     headerTitleWrap: {
       flexDirection: 'row',

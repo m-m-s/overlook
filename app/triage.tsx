@@ -586,7 +586,10 @@ const makeStyles = (c: Palette, f: FontSet) =>
     image: {
       width: '100%',
       height: 380,
-      backgroundColor: c.divider,
+      // Parchment so the contentFit='contain' letterbox bars on either
+      // side of portrait screenshots blend into the page instead of
+      // showing as a colored border.
+      backgroundColor: c.parchment,
       marginVertical: 12,
     },
     fieldRow: { paddingHorizontal: 20, paddingVertical: 10 },
