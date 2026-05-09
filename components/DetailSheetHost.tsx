@@ -112,6 +112,13 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
         ref={sheetRef}
         snapPoints={snapPoints}
         index={initialSnapIndex}
+        // Disable content-pan-claims-sheet-drag. With it ON (default),
+        // gorhom's pan handler races with BottomSheetScrollView's pan and
+        // caps inner scroll travel so the sheet can transition between
+        // snaps via content drag. Disabling it means the inner scroll is
+        // free — drag content up/down ALWAYS scrolls; sheet snaps change
+        // only via the handle.
+        enableContentPanningGesture={false}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: c.parchment }}
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
