@@ -50,16 +50,24 @@ export const ActiveFilters = ({
 
   return (
     <View style={styles.wrap}>
-      {/* Row 0 — Overlook wordmark + hamburger. Tap wordmark to return home,
-          tap hamburger to open the sidebar (left-edge swipe also works). */}
+      {/* Row 0 — iris opens sidebar; wordmark navigates home. Two distinct
+          tap targets so users don't accidentally hit the sidebar trying to
+          tap the title. Left-edge swipe also opens the sidebar. */}
       <View style={styles.brandRow}>
         <Pressable
           onPress={onOpenSidebar}
-          hitSlop={6}
-          style={({ pressed }) => [styles.brand, pressed && { opacity: 0.7 }]}
+          hitSlop={10}
+          style={({ pressed }) => [pressed && { opacity: 0.7 }]}
           accessibilityLabel="Open sidebar"
         >
           <Iris level={3} size={26} color={colors.ink} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.replace('/')}
+          hitSlop={6}
+          style={({ pressed }) => [{ marginLeft: 10 }, pressed && { opacity: 0.7 }]}
+          accessibilityLabel="Go to home"
+        >
           <Text style={styles.brandText}>Overlook</Text>
         </Pressable>
         <View style={{ flex: 1 }} />

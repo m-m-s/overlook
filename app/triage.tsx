@@ -215,13 +215,33 @@ export default function TriageScreen() {
     advance();
   };
 
+  const onSave = () => {
+    successHaptic();
+    advance();
+  };
+
+  const onSkip = () => {
+    tapHaptic();
+    advance();
+  };
+
   // Swipe gestures on the card image per spec:
   //   swipe right → save and next
   //   swipe left  → skip and next
   //   swipe up    → delete
-  // Pan thresholds chosen so a deliberate flick triggers but accidental
-  // jitter doesn't. failOffsetX/Y let normal vertical scrolling win when
-  // the user is reading chip rows below.
+  //
+  // Stable refs to avoid the temporal-dead-zone bug we hit with empty-deps
+  // useMemo: if the gesture is created before the const handlers are
+  // initialized, the closure captures unbound names. Using refs that we
+  // update in the effect below decouples gesture creation from handler
+  // declaration order entirely.
+  const onSaveRef = useRef(onSave);
+  const onSkipRef = useRef(onSkip);
+  const onDeleteRef = useRef(onDelete);
+  onSaveRef.current = onSave;
+  onSkipRef.current = onSkip;
+  onDeleteRef.current = onDelete;
+
   const cardSwipe = useMemo(
     () =>
       Gesture.Pan()
@@ -233,27 +253,14 @@ export default function TriageScreen() {
           const ty = e.translationY;
           const horizontal = Math.abs(tx) > Math.abs(ty);
           if (horizontal) {
-            if (tx > 80) onSave();
-            else if (tx < -80) onSkip();
+            if (tx > 80) onSaveRef.current();
+            else if (tx < -80) onSkipRef.current();
           } else {
-            if (ty < -80) onDelete();
+            if (ty < -80) onDeleteRef.current();
           }
         }),
-    // onSave/onSkip/onDelete are recreated every render but their refs are
-    // stable for the gesture's lifetime; gesture only reads at end.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-
-  const onSave = () => {
-    successHaptic();
-    advance();
-  };
-
-  const onSkip = () => {
-    tapHaptic();
-    advance();
-  };
 
   const onAnalyze = async () => {
     if (!current || analyzing) return;
