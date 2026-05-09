@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -670,20 +670,13 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </View>
       )}
 
-      {/* Regular RN ScrollView, not BottomSheetScrollView. After many
-          iterations, gorhom's wrapper appears to be the source of the
-          recurring scroll-cap issue regardless of snap config or
-          paddingBottom. Plain ScrollView scrolls reliably — tradeoff:
-          drag-down-at-top no longer dismisses the sheet (user uses the
-          handle indicator or Android back button). */}
-      <ScrollView
+      <BottomSheetScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
           { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: insets.bottom + 56 },
         ]}
         onScroll={onScroll}
-        scrollEventThrottle={16}
       >
       {/* Removed: Pressable wrapping all scroll content. Its presence
           appeared to cap the BottomSheetScrollView's scroll travel —
@@ -1230,7 +1223,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </Pressable>
       </View>
       </View>
-      </ScrollView>
+      </BottomSheetScrollView>
 
       {/* Onboarding overlays */}
       <GhostHint
