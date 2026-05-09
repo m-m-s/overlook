@@ -588,15 +588,21 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   ];
 
   return (
-    <GestureDetector gesture={imageGesture}>
     <View style={{ flex: 1 }}>
       {/* Parallax image header — sits ABOVE the scroll content (zIndex 1)
           and translates up as the user scrolls. The scroll content has a
           matching paddingTop so the image visually occupies the top
           IMAGE_MAX pixels at scroll=0. Tap at full snap opens lightbox.
           Suppressed in intent-mode (hideImage) since the image is already
-          visible behind the sheet. */}
+          visible behind the sheet.
+
+          GestureDetector wraps ONLY this image header, not the whole sheet.
+          When it wrapped the entire sheet, RNGH gesture nesting interfered
+          with the BottomSheetScrollView's internal scroll handler — the
+          scroll could only travel a fraction of the content height before
+          getting capped, hiding the similar row + footer. */}
       {!hideImage && (
+      <GestureDetector gesture={imageGesture}>
       <Animated.View
         pointerEvents="box-none"
         style={{
@@ -636,6 +642,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
                 overlays were redundant chrome on top of the photo. */}
           </Pressable>
       </Animated.View>
+      </GestureDetector>
       )}
 
       {/* Pending-changes bar — floats just below the image so it doesn't
@@ -1262,7 +1269,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         onDismiss={() => setShowZoomHint(false)}
       />
     </View>
-    </GestureDetector>
   );
 };
 
