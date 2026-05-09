@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
+import * as Notifications from 'expo-notifications';
 import {
   createContext,
   useCallback,
@@ -11,8 +12,28 @@ import {
 } from 'react';
 import { AppState } from 'react-native';
 
-import { findScreenshotsAlbum, fingerprintAsset, type ScannedAsset } from './mediaLibrary';
+import { findScreenshotsAlbum, fingerprintAsset, requestMediaPermission, type ScannedAsset } from './mediaLibrary';
+import { isScreenshotNotifyEnabled } from './settings';
 import { fetchExistingFingerprints } from './uploads';
+
+// One-time channel + permission setup. Android needs a channel before we can
+// fire local notifications; permissions auto-grant for local-only on most
+// installs but we ask anyway so it shows up in app settings.
+const ensureNotificationChannel = async (): Promise<void> => {
+  await Notifications.setNotificationChannelAsync('screenshot-capture', {
+    name: 'Screenshot capture',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: null,
+    vibrationPattern: null,
+    lightColor: '#000000',
+  });
+};
+const ensureNotificationPermission = async (): Promise<boolean> => {
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status === 'granted') return true;
+  const { status: req } = await Notifications.requestPermissionsAsync();
+  return req === 'granted';
+};
 
 const LAST_SEEN_KEY = 'overlook.last_screenshot_seen';
 
@@ -56,7 +77,21 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
     let mounted = true;
 
     void (async () => {
-      // Hydrate "last seen" — default to now so we don't pop up for everything ever.
+      const granted = await requestMediaPermission();
+      // eslint-disable-next-line no-console
+      console.log('[watcher] permission granted:', granted);
+      if (!granted) return;
+
+      // Best-effort notification setup. If this fails or perms are denied,
+      // the watcher still works — user just won't get a push when a
+      // screenshot lands while the app is backgrounded.
+      try {
+        await ensureNotificationChannel();
+        await ensureNotificationPermission();
+      } catch (err) {
+        console.warn('[watcher] notification setup failed', err);
+      }
+
       const raw = await AsyncStorage.getItem(LAST_SEEN_KEY);
       if (raw) {
         const v = parseInt(raw, 10);
@@ -68,8 +103,16 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
       const album = await findScreenshotsAlbum();
       albumId.current = album?.id ?? null;
       knownFingerprints.current = await fetchExistingFingerprints();
+      // eslint-disable-next-line no-console
+      console.log(
+        '[watcher] mounted — albumId:',
+        albumId.current,
+        'lastSeen:',
+        new Date(lastSeen.current).toISOString(),
+        'knownFingerprints:',
+        knownFingerprints.current.size,
+      );
 
-      // Initial since-last-seen scan (catches screenshots while app was closed).
       if (mounted) await scan();
     })();
 
@@ -89,39 +132,112 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
       creationTime: a.creationTime,
       modificationTime: a.modificationTime,
     };
-    if (knownFingerprints.current.has(fingerprintAsset(asset))) return; // already imported
+    if (knownFingerprints.current.has(fingerprintAsset(asset))) {
+      // eslint-disable-next-line no-console
+      console.log('[watcher] skipping — already imported (fingerprint match):', asset.filename);
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log('[watcher] enqueueing:', asset.filename, asset.id);
     queuedIds.current.add(asset.id);
     setQueue((q) => [...q, asset]);
+
+    // Fire a local notification so the user knows a new screenshot is
+    // queued even if Overlook is backgrounded. Gated on the user's
+    // preference (settings → screenshot notifications, default ON).
+    void (async () => {
+      if (!(await isScreenshotNotifyEnabled())) return;
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'New screenshot',
+            body: 'Tap to tag in Overlook',
+            data: { assetId: asset.id },
+          },
+          trigger: null, // fire immediately
+        });
+      } catch (err) {
+        console.warn('[watcher] notify failed', err);
+      }
+    })();
   }, []);
 
   const scan = useCallback(async () => {
+    // Re-resolve album each scan — some Android distros only create the
+    // Screenshots album AFTER the user's first screenshot.
     if (!albumId.current) {
       const album = await findScreenshotsAlbum();
       albumId.current = album?.id ?? null;
-      if (!albumId.current) return;
     }
     try {
-      const page = await MediaLibrary.getAssetsAsync({
-        album: albumId.current,
-        mediaType: 'photo',
-        first: 10,
-        sortBy: [['creationTime', false]], // DESC: newest first
-      });
-      const fresh = page.assets.filter((a) => a.creationTime > lastSeen.current);
+      // If album-based scan fails or returns nothing, fall back to scanning
+      // recent assets across the whole library and filter by filename pattern.
+      const page = albumId.current
+        ? await MediaLibrary.getAssetsAsync({
+            album: albumId.current,
+            mediaType: 'photo',
+            first: 20,
+            sortBy: [['creationTime', false]],
+          })
+        : await MediaLibrary.getAssetsAsync({
+            mediaType: 'photo',
+            first: 30,
+            sortBy: [['creationTime', false]],
+          });
+
+      // Two filters:
+      //  1. Fresher than last-seen (ms timestamp)
+      //  2. Looks like a screenshot — by album OR by filename heuristic
+      const looksLikeScreenshot = (a: MediaLibrary.Asset): boolean => {
+        if (albumId.current) return true; // already filtered by album
+        return /screenshot/i.test(a.filename);
+      };
+      const fresh = page.assets
+        .filter((a) => a.creationTime > lastSeen.current)
+        .filter(looksLikeScreenshot);
+      // eslint-disable-next-line no-console
+      console.log(
+        '[watcher] scan: total',
+        page.assets.length,
+        'fresh',
+        fresh.length,
+        'lastSeen',
+        new Date(lastSeen.current).toISOString(),
+      );
       if (fresh.length === 0) return;
       const newest = Math.max(...fresh.map((a) => a.creationTime));
       lastSeen.current = newest;
       await AsyncStorage.setItem(LAST_SEEN_KEY, String(newest));
-      // Queue oldest-first so the popup walks them in order
       for (const a of fresh.slice().reverse()) enqueueAsset(a);
     } catch (err) {
       console.warn('[screenshotWatcher] scan failed', err);
     }
   }, [enqueueAsset]);
 
+  // Notification deep-link: when the user taps the screenshot-capture
+  // notification, surface that specific asset by moving it to the head
+  // of the queue. The popup auto-presents from queue[0] so the user
+  // lands on the right card. If the asset isn't in the queue (e.g.,
+  // already consumed), no-op; the popup just shows the next pending one.
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((res) => {
+      const assetId = res.notification.request.content.data?.assetId as string | undefined;
+      if (!assetId) return;
+      setQueue((q) => {
+        const idx = q.findIndex((a) => a.id === assetId);
+        if (idx <= 0) return q; // already at head or not present
+        const reordered = [q[idx], ...q.slice(0, idx), ...q.slice(idx + 1)];
+        return reordered;
+      });
+    });
+    return () => sub.remove();
+  }, []);
+
   // Real-time: listen for media-library changes (works in Expo Go).
   useEffect(() => {
     const sub = MediaLibrary.addListener(() => {
+      // eslint-disable-next-line no-console
+      console.log('[watcher] MediaLibrary listener fired');
       void scan();
     });
     return () => sub.remove();
@@ -130,6 +246,8 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
   // Re-scan on app foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      // eslint-disable-next-line no-console
+      console.log('[watcher] AppState ->', state);
       if (state === 'active') void scan();
     });
     return () => sub.remove();

@@ -71,6 +71,7 @@ type Row = {
   subject: string | null;
   status: string | null;
   urgency: string | null;
+  urgency_date: string | null;
   resonance: number | null;
   difficulty: string | null;
   time_to_complete: string | null;
@@ -104,7 +105,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
   const { data, error } = await supabase
     .from('screenshots')
     .select(
-      'id, storage_path, created_at, device_asset_id, category, categories, subject, status, urgency, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, action_urls, manual_typed_tags, ai_typed_tags, notes, ai_reviewed, local_only',
+      'id, storage_path, created_at, device_asset_id, category, categories, subject, status, urgency, urgency_date, resonance, difficulty, time_to_complete, source_url, source_url_manual, action_url, action_url_type, action_urls, manual_typed_tags, ai_typed_tags, notes, ai_reviewed, local_only',
     )
     .order('created_at', { ascending: false })
     .limit(500);
@@ -167,6 +168,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
         subject: r.subject,
         status: r.status,
         urgency: r.urgency,
+        urgencyDate: r.urgency_date,
         resonance: (r.resonance === 1 || r.resonance === 2 || r.resonance === 3 ? r.resonance : null),
         difficulty: (r.difficulty as 'beginner' | 'intermediate' | 'advanced' | null) ?? null,
         timeToComplete: (r.time_to_complete as 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null) ?? null,

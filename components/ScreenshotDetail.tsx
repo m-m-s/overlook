@@ -20,6 +20,7 @@ import { useToast } from './Toast';
 import { ZoomableImage } from './ZoomableImage';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
+import { addToCalendar } from '@/lib/calendar';
 import { dropFromAnalysisQueue } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
 import { heavyHaptic, successHaptic, tapHaptic, warnHaptic } from '@/lib/haptics';
@@ -1314,13 +1315,35 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           })}
         </Shake>
       ) : view.urgency ? (
-        <View style={styles.row}>
+        <View style={[styles.row, { flexWrap: 'wrap', alignItems: 'center' }]}>
           <Chip
             label={URGENCIES.find((u) => u.key === view.urgency)?.label ?? view.urgency}
             variant="meta"
             selected
             color={urgencyColors[view.urgency] ?? c.ink}
           />
+          {item.urgencyDate && (
+            <Pressable
+              onPress={async () => {
+                const r = await addToCalendar(
+                  view.subject ?? view.category ?? 'Overlook event',
+                  item.urgencyDate!,
+                  view.notes ?? undefined,
+                );
+                if (r.ok) {
+                  void successHaptic();
+                  toast.show('Opening calendar…');
+                } else {
+                  toast.error(r.error ?? 'Could not open calendar');
+                }
+              }}
+              style={styles.calendarBtn}
+              accessibilityLabel="Add to calendar"
+            >
+              <Ionicons name="calendar-outline" size={14} color={c.ink} />
+              <Text style={styles.calendarBtnText}>Add to calendar</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <Text style={styles.emptyHint}>not set</Text>
@@ -1729,6 +1752,23 @@ const makeStyles = (c: Palette, f: FontSet) =>
       justifyContent: 'center',
     },
     irisBtnActive: { borderWidth: 2 },
+    calendarBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: c.ink,
+      marginLeft: 8,
+    },
+    calendarBtnText: {
+      fontFamily: f.body,
+      fontSize: 12,
+      letterSpacing: 0.2,
+      color: c.ink,
+    },
     addTagRow: { marginTop: 8 },
     ambiguousRow: {
       marginTop: 12,

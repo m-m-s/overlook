@@ -44,6 +44,10 @@ export type LocalScreenshot = {
   subject?: string | null;
   status?: string | null;
   urgency?: string | null;
+  /** ISO date (YYYY-MM-DD) when an explicit calendar date is visible in
+   *  the screenshot — used to deep-link the user into adding a calendar
+   *  event. Set by the vision prompt. */
+  urgencyDate?: string | null;
   resonance?: 1 | 2 | 3 | null;
   difficulty?: 'beginner' | 'intermediate' | 'advanced' | null;
   timeToComplete?: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null;
