@@ -29,7 +29,7 @@ import { capitalize, CATEGORIES } from '@/lib/options';
 import type { Category } from '@/components/CategoryIcon';
 import { mergeWithDefaults, useHiddenRows, usePinOrder, useRowOrder } from '@/lib/rowOrder';
 import { useColors, useFonts } from '@/lib/themeContext';
-import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
+import { listPinnedFilters, togglePinned, type SavedFilter } from '@/lib/savedFilters';
 import { fetchScreenshots } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
@@ -585,7 +585,14 @@ export default function HomeScreen() {
                       onHide={
                         item.kind === 'cat'
                           ? () => hideRow(item.row.category)
-                          : undefined
+                          : async () => {
+                              // Unpin the saved filter — it stays available
+                              // in /saved-filters but stops surfacing on home.
+                              await togglePinned(item.pf.id, false);
+                              setPinnedFilters((prev) =>
+                                prev.filter((p) => p.id !== item.pf.id),
+                              );
+                            }
                       }
                     />
                   </View>
