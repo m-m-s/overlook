@@ -142,7 +142,7 @@ export const Onboarding = ({ onComplete }: Props) => {
           <Ionicons name="image-outline" size={56} color={c.ink} />
           <Text style={styles.title}>Access to your screenshots.</Text>
           <Text style={styles.body_text}>
-            We need read access to your Photos so Overlook can import the screenshots you've already saved and detect new ones as they appear.
+            {`We need read access to your Photos so Overlook can import the screenshots you've already saved and detect new ones as they appear.`}
           </Text>
           <Text style={styles.body_text}>
             You can grant full access or select specific images.
@@ -157,7 +157,7 @@ export const Onboarding = ({ onComplete }: Props) => {
           <Ionicons name="notifications-outline" size={56} color={c.ink} />
           <Text style={styles.title}>Catch screenshots as you take them.</Text>
           <Text style={styles.body_text}>
-            When you take a screenshot in any app, Overlook can ping you so you can tag it while it's fresh in your mind.
+            {`When you take a screenshot in any app, Overlook can ping you so you can tag it while it's fresh in your mind.`}
           </Text>
           <Text style={styles.body_text}>
             Optional — you can change this in Settings any time.
@@ -170,7 +170,7 @@ export const Onboarding = ({ onComplete }: Props) => {
       render: () => (
         <>
           <Iris level={3} size={84} color={c.ink} filled />
-          <Text style={styles.title}>You're set.</Text>
+          <Text style={styles.title}>{`You're set.`}</Text>
           <Text style={styles.subtitle}>
             Start by importing your existing screenshots, or just take one and Overlook will catch it.
           </Text>

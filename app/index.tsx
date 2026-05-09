@@ -6,8 +6,6 @@ import { Alert, BackHandler, Dimensions, FlatList, Pressable, RefreshControl, Sc
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 
 import { Card, type CardData } from '@/components/Card';
@@ -34,6 +32,8 @@ import { listPinnedFilters, type SavedFilter } from '@/lib/savedFilters';
 import { fetchScreenshots } from '@/lib/screenshots';
 import type { LocalScreenshot } from '@/lib/uploads';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const URGENT_KEYS = new Set(['today', 'expires_soon', 'this_week']);
 

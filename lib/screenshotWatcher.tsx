@@ -78,7 +78,7 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
 
     void (async () => {
       const granted = await requestMediaPermission();
-      // eslint-disable-next-line no-console
+       
       console.log('[watcher] permission granted:', granted);
       if (!granted) return;
 
@@ -103,7 +103,7 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
       const album = await findScreenshotsAlbum();
       albumId.current = album?.id ?? null;
       knownFingerprints.current = await fetchExistingFingerprints();
-      // eslint-disable-next-line no-console
+       
       console.log(
         '[watcher] mounted — albumId:',
         albumId.current,
@@ -133,11 +133,11 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
       modificationTime: a.modificationTime,
     };
     if (knownFingerprints.current.has(fingerprintAsset(asset))) {
-      // eslint-disable-next-line no-console
+       
       console.log('[watcher] skipping — already imported (fingerprint match):', asset.filename);
       return;
     }
-    // eslint-disable-next-line no-console
+     
     console.log('[watcher] enqueueing:', asset.filename, asset.id);
     queuedIds.current.add(asset.id);
     setQueue((q) => [...q, asset]);
@@ -195,7 +195,7 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
       const fresh = page.assets
         .filter((a) => a.creationTime > lastSeen.current)
         .filter(looksLikeScreenshot);
-      // eslint-disable-next-line no-console
+       
       console.log(
         '[watcher] scan: total',
         page.assets.length,
@@ -236,7 +236,7 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
   // Real-time: listen for media-library changes (works in Expo Go).
   useEffect(() => {
     const sub = MediaLibrary.addListener(() => {
-      // eslint-disable-next-line no-console
+       
       console.log('[watcher] MediaLibrary listener fired');
       void scan();
     });
@@ -246,7 +246,7 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
   // Re-scan on app foreground.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      // eslint-disable-next-line no-console
+       
       console.log('[watcher] AppState ->', state);
       if (state === 'active') void scan();
     });

@@ -97,7 +97,7 @@ export const handleAuthDeepLink = async (url: string): Promise<void> => {
       await supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as 'magiclink' | 'email' });
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[auth] deep link handler failed', { url, path, err });
   }
 };

@@ -120,7 +120,7 @@ export const fetchExistingFingerprints = async (): Promise<Set<string>> => {
     .not('file_hash', 'is', null)
     .limit(10000);
   if (error || !data) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[fetchExistingFingerprints] failed', error);
     return new Set();
   }

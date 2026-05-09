@@ -9,8 +9,6 @@ import { Animated, Dimensions, KeyboardAvoidingView, LayoutAnimation, Modal, Pla
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { Chip } from './Chip';
 import { GhostHint } from './GhostHint';
@@ -45,6 +43,8 @@ import {
 } from '@/lib/screenshots';
 import { buildTagFromValue, rememberTagType } from '@/lib/tagDictionary';
 import type { ActionLink, ActionLinkType, LocalScreenshot } from '@/lib/uploads';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 type Props = {
   item: LocalScreenshot;

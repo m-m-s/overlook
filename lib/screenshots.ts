@@ -111,7 +111,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
     .limit(500);
 
   if (error) {
-    // eslint-disable-next-line no-console
+     
     console.warn('[screenshots] fetch failed', error);
     return [];
   }
@@ -143,7 +143,7 @@ export const fetchScreenshots = async (): Promise<LocalScreenshot[]> => {
         const resolved = await resolveDeviceAsset(r.device_asset_id);
         uri = resolved?.uri ?? '';
         if (!uri) {
-          // eslint-disable-next-line no-console
+           
           console.warn('[fetchScreenshots] failed to resolve device asset', r.device_asset_id);
         }
       } else if (r.storage_path) {

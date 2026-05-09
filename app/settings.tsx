@@ -143,7 +143,7 @@ export default function SettingsScreen() {
         <View style={styles.privacyBlock}>
           <Text style={styles.privacyHeading}>Local-only by default</Text>
           <Text style={styles.privacyBody}>
-            Screenshots tagged with categories like Documents or Messages stay on your phone — they're never sent to AI for analysis. Toggle the local-only flag on any card to control it manually.
+            {`Screenshots tagged with categories like Documents or Messages stay on your phone — they're never sent to AI for analysis. Toggle the local-only flag on any card to control it manually.`}
           </Text>
         </View>
 
