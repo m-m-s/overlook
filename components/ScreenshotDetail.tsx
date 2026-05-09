@@ -1196,8 +1196,13 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
             (pressed || analyzing) && { opacity: 0.7 },
           ]}
           accessibilityLabel="Analyze with AI"
+          accessibilityState={{ busy: analyzing }}
         >
-          <Ionicons name="sparkles-outline" size={16} color={c.parchment} />
+          {analyzing ? (
+            <Iris level={3} size={18} color={c.parchment} spinning />
+          ) : (
+            <Ionicons name="sparkles-outline" size={16} color={c.parchment} />
+          )}
           <Text style={styles.analyzeBtnText}>
             {analyzing ? 'analyzing…' : 'analyze with AI'}
           </Text>

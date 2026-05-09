@@ -370,8 +370,13 @@ export default function TriageScreen() {
                 onPress={onAnalyze}
                 disabled={analyzing}
                 style={[styles.analyzeBtn, analyzing && { opacity: 0.5 }]}
+                accessibilityState={{ busy: analyzing }}
               >
-                <Ionicons name="sparkles" size={14} color={c.parchment} />
+                {analyzing ? (
+                  <Iris level={3} size={16} color={c.parchment} spinning />
+                ) : (
+                  <Ionicons name="sparkles" size={14} color={c.parchment} />
+                )}
                 <Text style={styles.analyzeBtnText}>
                   {analyzing ? 'Analyzing…' : 'Analyze with AI'}
                 </Text>
