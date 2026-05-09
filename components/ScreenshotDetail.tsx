@@ -1227,6 +1227,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
+      {/* Bottom safe-area spacer — explicit View instead of relying on
+          contentContainerStyle.paddingBottom because BottomSheetScrollView
+          on Android sometimes ignores it. Sized to clear the gesture nav
+          plus a comfortable margin so the footer never sits flush against
+          the nav indicator. */}
+      <View style={{ height: 140 + insets.bottom }} />
       </Pressable>
       </BottomSheetScrollView>
 
