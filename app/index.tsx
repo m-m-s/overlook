@@ -460,13 +460,13 @@ export default function HomeScreen() {
         >
           <Pressable
             onPress={() => setSidebarOpen(true)}
-            hitSlop={6}
-            style={({ pressed }) => [styles.headerTitleWrap, pressed && { opacity: 0.7 }]}
+            hitSlop={10}
+            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
             accessibilityLabel="Open sidebar"
           >
             <Iris level={3} size={26} color={c.ink} />
-            <Text style={styles.headerTitle}>Overlook</Text>
           </Pressable>
+          <Text style={[styles.headerTitle, { marginLeft: 10 }]}>Overlook</Text>
           <View style={{ flex: 1 }} />
           {!reorderMode && (
             <Pressable onPress={() => router.push('/library')} hitSlop={10}>
