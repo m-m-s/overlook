@@ -466,7 +466,14 @@ export default function HomeScreen() {
           >
             <Iris level={3} size={26} color={c.ink} />
           </Pressable>
-          <Text style={[styles.headerTitle, { marginLeft: 10 }]}>Overlook</Text>
+          <Pressable
+            onPress={() => router.replace('/')}
+            hitSlop={6}
+            style={({ pressed }) => [{ marginLeft: 10 }, pressed && { opacity: 0.7 }]}
+            accessibilityLabel="Go to home"
+          >
+            <Text style={styles.headerTitle}>Overlook</Text>
+          </Pressable>
           <View style={{ flex: 1 }} />
           {!reorderMode && (
             <Pressable onPress={() => router.push('/library')} hitSlop={10}>
