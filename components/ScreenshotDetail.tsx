@@ -519,10 +519,23 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
     if (type) void rememberTagType(manualTags[idx].value, type);
   };
 
-  // Share + delete moved to DetailSheetHost's BottomSheetFooter so they
-  // stay anchored to the bottom of the sheet regardless of scroll. The
-  // `onDelete` prop is kept for any future in-content delete affordance
-  // but isn't currently invoked from inside this component.
+  const onTrash = () => {
+    void warnHaptic();
+    onDelete();
+  };
+
+  const onShare = async () => {
+    try {
+      const ok = await Sharing.isAvailableAsync();
+      if (!ok) {
+        toast.error('Sharing not available on this device.');
+        return;
+      }
+      await Sharing.shareAsync(item.uri, { mimeType: 'image/jpeg' });
+    } catch (err) {
+      console.warn('[share] failed', err);
+    }
+  };
 
   // Manual AI re-analyze for cards that haven't been tagged yet (e.g. the
   // initial bulk import had a network failure on this one). Disabled while
@@ -668,10 +681,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          // gorhom's BottomSheetFooter (in DetailSheetHost) reserves
-          // layout space for the sticky footer automatically — scroll
-          // max-scroll respects it without us padding manually here.
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 16 },
+          // Sheet stops above the gesture nav (bottomInset=insets.bottom
+          // in DetailSheetHost), so 24px of breathing room at the bottom
+          // is plenty — the share/delete footer is the last scroll child.
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 24 },
         ]}
         onScroll={onScroll}
       >
@@ -1204,6 +1217,22 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       )}
 
       {onSelect && <SimilarRow item={item} allItems={allItems} onSelect={onSelect} />}
+
+      {/* Footer actions: share + delete — inline at the bottom of scroll
+          content. Sheet's bottomInset=insets.bottom (in DetailSheetHost)
+          keeps the sheet above the gesture nav, so this footer lands
+          naturally above the nav at max scroll. */}
+      <View style={styles.footer}>
+        <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
+          <Ionicons name="share-outline" size={18} color={c.ink} />
+          <Text style={styles.footerText}>share</Text>
+        </Pressable>
+        <View style={styles.footerDivider} />
+        <Pressable onPress={onTrash} style={styles.footerBtn} accessibilityLabel="Delete screenshot">
+          <Ionicons name="trash-outline" size={18} color="#C0392B" />
+          <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
+        </Pressable>
+      </View>
       </View>
       </BottomSheetScrollView>
 
