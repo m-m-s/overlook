@@ -5,6 +5,8 @@ export type SavedFilter = {
   id: string;
   name: string;
   filters: Filters;
+  /** Free-text search query saved alongside the filters. */
+  searchQuery?: string;
   pinned: boolean;
   createdAt: string;
 };
@@ -14,13 +16,18 @@ type SerializedFilters = {
   urgencies?: string[];
   statuses?: string[];
   resonances?: number[];
+  tagQueries?: string[];
+  /** Optional free-text search saved alongside the structured filters. */
+  searchQuery?: string;
 };
 
-const serializeFilters = (f: Filters): SerializedFilters => ({
+const serializeFilters = (f: Filters, searchQuery?: string): SerializedFilters => ({
   categories: Array.from(f.categories),
   urgencies: Array.from(f.urgencies),
   statuses: Array.from(f.statuses),
   resonances: Array.from(f.resonances),
+  tagQueries: Array.from(f.tagQueries),
+  searchQuery: searchQuery?.trim() || undefined,
 });
 
 const deserializeFilters = (s: SerializedFilters | null | undefined): Filters => {
@@ -32,6 +39,7 @@ const deserializeFilters = (s: SerializedFilters | null | undefined): Filters =>
   for (const r of s.resonances ?? []) {
     if (r === 1 || r === 2 || r === 3) f.resonances.add(r);
   }
+  for (const q of s.tagQueries ?? []) f.tagQueries.add(q);
   return f;
 };
 
@@ -47,6 +55,7 @@ const rowToSaved = (r: Row): SavedFilter => ({
   id: r.id,
   name: r.name,
   filters: deserializeFilters(r.filters),
+  searchQuery: r.filters?.searchQuery,
   pinned: r.pinned,
   createdAt: r.created_at,
 });
@@ -85,6 +94,7 @@ export const createSavedFilter = async (
   name: string,
   filters: Filters,
   pinned: boolean,
+  searchQuery?: string,
 ): Promise<SavedFilter | null> => {
   if (!isSupabaseConfigured) return null;
   const { data: userRes } = await supabase.auth.getUser();
@@ -95,7 +105,7 @@ export const createSavedFilter = async (
     .insert({
       user_id: userId,
       name: name.trim(),
-      filters: serializeFilters(filters),
+      filters: serializeFilters(filters, searchQuery),
       pinned,
     })
     .select('id, name, filters, pinned, created_at')
