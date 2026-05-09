@@ -10,11 +10,11 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { BulkTagSheet } from '@/components/BulkTagSheet';
+import { DetailSheetHost, type DetailSheetHostHandle } from '@/components/DetailSheetHost';
 import { GhostHint } from '@/components/GhostHint';
 import { Card, type CardData } from '@/components/Card';
 import { Iris } from '@/components/Iris';
 import { EdgeSwipe } from '@/components/EdgeSwipe';
-import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
@@ -123,7 +123,8 @@ export default function LibraryScreen() {
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const sheetHostRef = useRef<DetailSheetHostHandle>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { filters, setFilters, clearFilters, searchQuery } = useFilters();
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set());
@@ -168,8 +169,8 @@ export default function LibraryScreen() {
   // filters > default (let the navigator pop or exit app).
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (selectedId) {
-        sheetRef.current?.dismiss();
+      if (sheetOpen) {
+        sheetHostRef.current?.dismiss();
         return true;
       }
       if (sidebarOpen) {
@@ -187,7 +188,7 @@ export default function LibraryScreen() {
       return false;
     });
     return () => sub.remove();
-  }, [selectedId, sidebarOpen, inSelectMode, filters, clearFilters]);
+  }, [sheetOpen, sidebarOpen, inSelectMode, filters, clearFilters]);
 
   // First-card hint: when items first appear, show a ghost-hand pinch-in
   // overlay so users discover the gesture-based zoom.
@@ -252,12 +253,8 @@ export default function LibraryScreen() {
     }
   }, [session]);
 
-  const sheetRef = useRef<BottomSheetModal>(null);
   const bulkSheetRef = useRef<BottomSheetModal>(null);
-  // 3 snap points lets user drag from 60% (compact) -> 85% -> 100% (full detail per spec).
-  const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
   const bulkSnapPoints = useMemo(() => ['85%'], []);
-  const [sheetIndex, setSheetIndex] = useState(0);
 
   useEffect(() => {
     if (!session) return;
@@ -403,8 +400,7 @@ export default function LibraryScreen() {
   };
 
   const openDetail = (it: LocalScreenshot) => {
-    setSelectedId(it.id);
-    sheetRef.current?.present();
+    sheetHostRef.current?.present(it.id);
   };
 
   const toggleMultiSelect = (id: string) => {
@@ -468,42 +464,28 @@ export default function LibraryScreen() {
     exitMultiSelect();
   };
 
-  // Memoized so the ScreenshotDetail's "auto-mark ai_reviewed on open"
-  // effect doesn't re-fire on every parent render.
   const onItemChange = useCallback(
-    (patch: Partial<LocalScreenshot>) => {
-      if (!selectedId) return;
-      setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
+    (id: string, patch: Partial<LocalScreenshot>) => {
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
     },
-    [selectedId],
+    [],
   );
 
-  const onItemDelete = () => {
-    if (!selectedId) return;
-    const item = items.find((it) => it.id === selectedId);
-    sheetRef.current?.dismiss();
-    if (item) undoableRemove(item);
-  };
+  const onItemDelete = useCallback(
+    (id: string) => {
+      const item = items.find((it) => it.id === id);
+      if (item) undoableRemove(item);
+    },
+    [items, undoableRemove],
+  );
 
+  // Backdrop for the bulk-tag sheet (still inline below).
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.4} />
     ),
     [],
   );
-
-  const selected = items.find((it) => it.id === selectedId) ?? null;
-  // Walk through whatever the user is currently looking at — `visibleItems`
-  // is filters + search applied, so swiping respects the filter context.
-  const selIdx = selected ? visibleItems.findIndex((it) => it.id === selected.id) : -1;
-  const goPrev = useCallback(() => {
-    if (selIdx <= 0) return;
-    setSelectedId(visibleItems[selIdx - 1].id);
-  }, [visibleItems, selIdx]);
-  const goNext = useCallback(() => {
-    if (selIdx < 0 || selIdx >= visibleItems.length - 1) return;
-    setSelectedId(visibleItems[selIdx + 1].id);
-  }, [visibleItems, selIdx]);
 
   const onSignOut = () => {
     Alert.alert('Sign out?', `You'll be signed out of ${session?.user.email ?? 'your account'}.`, [
@@ -614,33 +596,14 @@ export default function LibraryScreen() {
       {/* Edge swipe — rendered after the grid so it stacks on top reliably. */}
       {!inSelectMode && session && <EdgeSwipe onOpen={() => setSidebarOpen(true)} />}
 
-      <BottomSheetModal
-        ref={sheetRef}
-        snapPoints={snapPoints}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: c.parchment }}
-        handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
-        onDismiss={() => setSelectedId(null)}
-        onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        bottomInset={insets.bottom}
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
-      >
-        {selected && (
-          <ScreenshotDetail
-            item={selected}
-            onChange={onItemChange}
-            onDelete={onItemDelete}
-            snapIndex={sheetIndex}
-            onPrev={selIdx > 0 ? goPrev : undefined}
-            onNext={selIdx >= 0 && selIdx < visibleItems.length - 1 ? goNext : undefined}
-            hideImage={cols === 1}
-            allItems={items}
-            onSelect={(id) => setSelectedId(id)}
-          />
-        )}
-      </BottomSheetModal>
+      <DetailSheetHost
+        ref={sheetHostRef}
+        items={visibleItems}
+        onItemChange={onItemChange}
+        onItemDelete={onItemDelete}
+        hideImage={cols === 1}
+        onOpenChange={setSheetOpen}
+      />
 
       <BottomSheetModal
         ref={bulkSheetRef}

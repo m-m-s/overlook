@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { router, useFocusEffect, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Dimensions, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -9,10 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 
 import { Card, type CardData } from '@/components/Card';
+import { DetailSheetHost, type DetailSheetHostHandle } from '@/components/DetailSheetHost';
 import { EdgeSwipe } from '@/components/EdgeSwipe';
 import { GhostHint } from '@/components/GhostHint';
 import { Iris } from '@/components/Iris';
-import { ScreenshotDetail } from '@/components/ScreenshotDetail';
 import { Sidebar } from '@/components/Sidebar';
 import { useToast } from '@/components/Toast';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
@@ -62,7 +61,6 @@ export default function HomeScreen() {
   const batchState = useBatchState(batchRefreshKey);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { filters, setFilters, applyFilters: applyFilterCtx, setSearchQuery } = useFilters();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const { remove: undoableRemove } = useUndoableDelete(setItems);
   const [reorderMode, setReorderMode] = useState(false);
   const { order: rowOrder, replace: replaceRowOrder } = useRowOrder();
@@ -70,9 +68,8 @@ export default function HomeScreen() {
   const { hidden: hiddenRows, hide: hideRow, clear: clearHidden } = useHiddenRows();
   const [demoOn, setDemoOn] = useDemoMode();
   const insets = useSafeAreaInsets();
-  const [sheetIndex, setSheetIndex] = useState(0);
-  const sheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
+  const sheetHostRef = useRef<DetailSheetHostHandle>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const [loaded, setLoaded] = useState(false);
 
@@ -186,8 +183,8 @@ export default function HomeScreen() {
   // mode) before letting the system exit the app from home.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (selectedId) {
-        sheetRef.current?.dismiss();
+      if (sheetOpen) {
+        sheetHostRef.current?.dismiss();
         return true;
       }
       if (sidebarOpen) {
@@ -201,7 +198,7 @@ export default function HomeScreen() {
       return false;
     });
     return () => sub.remove();
-  }, [selectedId, sidebarOpen, reorderMode]);
+  }, [sheetOpen, sidebarOpen, reorderMode]);
 
   // While a batch is actively processing, refetch items every 4s so the
   // gallery populates live as Supabase rows land.
@@ -311,46 +308,22 @@ export default function HomeScreen() {
     replacePinOrder(newPins);
   };
 
-  const onItemDelete = () => {
-    if (!selectedId) return;
-    const item = items.find((it) => it.id === selectedId);
-    sheetRef.current?.dismiss();
-    if (item) undoableRemove(item);
-  };
-
-  // Memoized so the ScreenshotDetail's "auto-mark ai_reviewed on open"
-  // effect doesn't re-fire on every parent render (its deps include
-  // onChange).
-  const onItemChange = useCallback(
-    (patch: Partial<LocalScreenshot>) => {
-      if (!selectedId) return;
-      setItems((prev) => prev.map((it) => (it.id === selectedId ? { ...it, ...patch } : it)));
+  const onItemDelete = useCallback(
+    (id: string) => {
+      const item = items.find((it) => it.id === id);
+      if (item) undoableRemove(item);
     },
-    [selectedId],
+    [items, undoableRemove],
   );
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.4} />
-    ),
+  const onItemChange = useCallback(
+    (id: string, patch: Partial<LocalScreenshot>) => {
+      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+    },
     [],
   );
 
-  const open = (it: LocalScreenshot) => {
-    setSelectedId(it.id);
-    sheetRef.current?.present();
-  };
-
-  const selected = items.find((it) => it.id === selectedId) ?? null;
-  const selectedIndex = selected ? items.findIndex((it) => it.id === selected.id) : -1;
-  const goPrev = useCallback(() => {
-    if (selectedIndex <= 0) return;
-    setSelectedId(items[selectedIndex - 1].id);
-  }, [items, selectedIndex]);
-  const goNext = useCallback(() => {
-    if (selectedIndex < 0 || selectedIndex >= items.length - 1) return;
-    setSelectedId(items[selectedIndex + 1].id);
-  }, [items, selectedIndex]);
+  const open = (it: LocalScreenshot) => sheetHostRef.current?.present(it.id);
 
   // Apply filters (from sidebar) → navigate to filtered grid page (which is /library for now;
   // dedicated /filtered route to be added). For sprint v2 simplicity we stay on home and
@@ -805,37 +778,13 @@ export default function HomeScreen() {
 
       {/* No FAB per spec — upload lives in the sidebar. */}
 
-      {/* Bottom sheet detail */}
-      <BottomSheetModal
-        ref={sheetRef}
-        snapPoints={snapPoints}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: c.parchment }}
-        handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
-        onDismiss={() => setSelectedId(null)}
-        onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        // Keep the sheet's bottom edge ABOVE the Android gesture nav so
-        // the footer (share/delete) is always reachable. Without this,
-        // the 100% snap extends edge-to-edge and the buttons sit behind
-        // the gesture nav bar.
-        bottomInset={insets.bottom}
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
-      >
-        {selected && (
-          <ScreenshotDetail
-            item={selected}
-            onChange={onItemChange}
-            onDelete={onItemDelete}
-            snapIndex={sheetIndex}
-            onPrev={selectedIndex > 0 ? goPrev : undefined}
-            onNext={selectedIndex >= 0 && selectedIndex < items.length - 1 ? goNext : undefined}
-            allItems={items}
-            onSelect={(id) => setSelectedId(id)}
-          />
-        )}
-      </BottomSheetModal>
+      <DetailSheetHost
+        ref={sheetHostRef}
+        items={items}
+        onItemChange={onItemChange}
+        onItemDelete={onItemDelete}
+        onOpenChange={setSheetOpen}
+      />
 
       <SidebarRender
         open={sidebarOpen}
