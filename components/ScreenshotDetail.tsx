@@ -684,21 +684,16 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 120 + insets.bottom },
         ]}
         onScroll={onScroll}
-        onContentSizeChange={(w, h) => {
-
-          console.log('[ScreenshotDetail] content size', { w, h });
-        }}
-        onLayout={(e) => {
-
-          console.log('[ScreenshotDetail] viewport size', e.nativeEvent.layout);
+      >
+      {/* Tap-outside-section catcher — closes edit mode when the user
+          taps in the scroll's empty space. Inner Pressables on chips,
+          inputs, and section headers handle their own taps and don't
+          bubble up here, so editing UI stays interactive. */}
+      <Pressable
+        onPress={() => {
+          if (editingSections.size > 0) closeAllEditing();
         }}
       >
-      {/* Was: Pressable wrapper that closed edit mode when user tapped
-          empty scroll space. Removed because it appeared to cap the
-          BottomSheetScrollView's measured content height — similar row +
-          spacer were unreachable. The "tap to exit edit mode" affordance
-          now lives on the section header's "done editing" link instead. */}
-      <View>
 
 
 
@@ -1241,9 +1236,14 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           (sheet height issue). If they see it, padding/spacer math is
           right and the footer is just below the nav offset.
           (TODO: remove the marker once we've confirmed scroll behavior.) */}
-      <View style={{ height: 4, backgroundColor: 'magenta', marginBottom: 4 }} />
-      <View style={{ height: 250 + insets.bottom }} />
-      </View>
+      {/* Bottom safe-area spacer — explicit View, height matches the
+          measured gap between content end and visible viewport end on
+          edge-to-edge gesture-nav devices. The inline paddingBottom on
+          contentContainerStyle is unreliable (BottomSheetScrollView
+          sometimes ignores it on Android), but a real layout child
+          always works. */}
+      <View style={{ height: 320 + insets.bottom }} />
+      </Pressable>
       </BottomSheetScrollView>
 
       {/* Onboarding overlays */}
