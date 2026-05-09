@@ -1230,7 +1230,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           contentContainerStyle.paddingBottom (BottomSheetScrollView is
           inconsistent with it on Android). 140 is enough to push the
           footer well above the gesture nav indicator. */}
-      <View style={{ height: 260 + insets.bottom }} />
+      <View style={{ height: 320 + insets.bottom }} />
       </View>
       </BottomSheetScrollView>
 
