@@ -104,7 +104,10 @@ export const HomeRow = ({
           <Text style={styles.rowTitle}>{title}</Text>
         </Pressable>
         <Text style={styles.rowCount}>{count}</Text>
-        <View style={{ flex: 1 }} />
+        {/* Dashed connector — fills the space between title/count and the
+            see-all link, sitting on the baseline of the title text.
+            Editorial dashed-underline pattern from the spec. */}
+        <View style={styles.dashedConnector} />
         {reorderMode ? (
           <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
             {onHide && (
@@ -190,6 +193,18 @@ const makeStyles = (c: Palette, f: FontSet) =>
       letterSpacing: 1.6,
       textTransform: 'uppercase',
       color: c.inkMuted,
+    },
+    dashedConnector: {
+      flex: 1,
+      borderBottomWidth: 2,
+      borderStyle: 'dashed',
+      borderColor: c.divider,
+      // Sits on the baseline of the title text. The header uses
+      // alignItems:'baseline' so this 2px line aligns naturally with the
+      // bottom of letters; marginBottom nudges it down a couple pixels so
+      // it reads as an underline rather than a strikethrough.
+      marginBottom: 4,
+      marginHorizontal: 8,
     },
     rowList: { paddingHorizontal: 0 },
     rowCell: { aspectRatio: 4 / 5 },
