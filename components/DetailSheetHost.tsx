@@ -50,12 +50,6 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
     const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
     const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
-    // Open fully expanded by default. With a smaller initial snap (60%/85%),
-    // scroll on content is partially capped because gorhom interprets
-    // drag-up at content-top as 'expand sheet to next snap'. Opening at
-    // 100% sidesteps that — content scrolls normally from the start, and
-    // the user can drag the handle DOWN to peek/dismiss.
-    const initialSnapIndex = 2;
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [sheetIndex, setSheetIndex] = useState(0);
 
@@ -111,14 +105,6 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
       <BottomSheetModal
         ref={sheetRef}
         snapPoints={snapPoints}
-        index={initialSnapIndex}
-        // Disable content-pan-claims-sheet-drag. With it ON (default),
-        // gorhom's pan handler races with BottomSheetScrollView's pan and
-        // caps inner scroll travel so the sheet can transition between
-        // snaps via content drag. Disabling it means the inner scroll is
-        // free — drag content up/down ALWAYS scrolls; sheet snaps change
-        // only via the handle.
-        enableContentPanningGesture={false}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: c.parchment }}
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}

@@ -583,15 +583,19 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
   ];
 
   return (
-    <GestureDetector gesture={imageGesture}>
     <View style={{ flex: 1 }}>
       {/* Parallax image header — sits ABOVE the scroll content (zIndex 1)
           and translates up as the user scrolls. The scroll content has a
           matching paddingTop so the image visually occupies the top
           IMAGE_MAX pixels at scroll=0. Tap at full snap opens lightbox.
           Suppressed in intent-mode (hideImage) since the image is already
-          visible behind the sheet. */}
+          visible behind the sheet.
+
+          GestureDetector wraps ONLY this image header. When it wrapped
+          the entire sheet, the outer Pan racing with BottomSheetScrollView's
+          pan was capping inner scroll travel. */}
       {!hideImage && (
+      <GestureDetector gesture={imageGesture}>
       <Animated.View
         pointerEvents="box-none"
         style={{
@@ -631,6 +635,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
                 overlays were redundant chrome on top of the photo. */}
           </Pressable>
       </Animated.View>
+      </GestureDetector>
       )}
 
       {/* Pending-changes bar — floats just below the image so it doesn't
@@ -674,7 +679,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: insets.bottom + 56 },
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 16 },
         ]}
         onScroll={onScroll}
       >
@@ -1209,8 +1214,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {onSelect && <SimilarRow item={item} allItems={allItems} onSelect={onSelect} />}
 
       {/* Footer actions: share + delete — inline at the bottom of scroll
-          content. Scroll's paddingBottom (= insets.bottom + 12) keeps
-          this above the gesture nav indicator at max scroll. */}
+          content. The explicit View spacer below pushes this above the
+          gesture nav indicator at max scroll. */}
       <View style={styles.footer}>
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
           <Ionicons name="share-outline" size={18} color={c.ink} />
@@ -1222,6 +1227,11 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
+      {/* Explicit bottom spacer — BottomSheetScrollView is unreliable with
+          contentContainerStyle.paddingBottom on Android, so a real layout
+          child enforces the bottom clearance. 300px keeps similar/footer
+          well above the gesture nav indicator. */}
+      <View style={{ height: 300 + insets.bottom }} />
       </View>
       </BottomSheetScrollView>
 
@@ -1248,7 +1258,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         onDismiss={() => setShowZoomHint(false)}
       />
     </View>
-    </GestureDetector>
   );
 };
 
