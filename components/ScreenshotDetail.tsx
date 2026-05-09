@@ -685,11 +685,9 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          // paddingBottom clears the sticky footer + safe-area inset.
-          // Footer is ~80px tall (footerBtn paddingVertical 12+12 = 24, plus
-          // border + minHeight 44, plus inner padding); +insets.bottom is
-          // baked into the footer's `bottom` style so we add it once here.
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 100 + insets.bottom },
+          // Clear the sticky footer (~70px) + safe-area inset so scroll
+          // content can't hide behind it.
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 80 + insets.bottom },
         ]}
         onScroll={onScroll}
       >
@@ -1225,10 +1223,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       </View>
       </BottomSheetScrollView>
 
-      {/* Sticky footer — absolute-positioned over the bottom of the sheet,
-          stays visible regardless of scroll position. The scroll's
-          contentContainerStyle.paddingBottom (FOOTER_HEIGHT + insets.bottom)
-          ensures content above never hides behind it. */}
+      {/* Sticky footer — absolute-positioned at the bottom of the sheet.
+          bottom:0 + internal paddingBottom=insets.bottom anchors the
+          buttons above the gesture nav while parchment fills the safe
+          area underneath (no grid bleed-through on edge-to-edge nav). */}
       <View
         style={[
           styles.footer,
@@ -1236,7 +1234,8 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: insets.bottom,
+            bottom: 0,
+            paddingBottom: insets.bottom + 12,
             backgroundColor: c.parchment,
           },
         ]}
