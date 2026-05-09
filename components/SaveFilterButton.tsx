@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { useToast } from './Toast';
 import { colors } from '@/lib/colors';
@@ -68,9 +68,14 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
         transparent
         animationType="fade"
         onRequestClose={() => setOpen(false)}
+        statusBarTranslucent
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable style={styles.card} onPress={() => {}}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.backdrop}
+        >
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+        <Pressable style={styles.card} onPress={() => {}}>
             <Text style={styles.title}>Save filter</Text>
             <Text style={styles.help}>Name this filter combo so you can come back to it.</Text>
 
@@ -109,8 +114,8 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
                 <Text style={styles.applyText}>{busy ? 'Saving…' : 'Save'}</Text>
               </Pressable>
             </View>
-          </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

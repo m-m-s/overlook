@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Iris } from '@/components/Iris';
@@ -139,9 +139,14 @@ export default function SavedFiltersScreen() {
         transparent
         animationType="fade"
         onRequestClose={() => setRenameTarget(null)}
+        statusBarTranslucent
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setRenameTarget(null)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalBackdrop}
+        >
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setRenameTarget(null)} />
+        <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>Rename filter</Text>
             <TextInput
               value={renameText}
@@ -180,8 +185,8 @@ export default function SavedFiltersScreen() {
                 <Text style={styles.modalBtnSaveText}>save</Text>
               </Pressable>
             </View>
-          </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

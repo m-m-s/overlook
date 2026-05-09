@@ -381,7 +381,10 @@ export default function TriageScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <Animated.View style={{ opacity: cardOpacity, transform: [{ translateX: cardSlide }] }}>
           <Image source={{ uri: current.uri }} style={styles.image} contentFit="contain" />
 
