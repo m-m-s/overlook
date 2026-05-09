@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryIcon } from '@/components/CategoryIcon';
@@ -214,6 +215,36 @@ export default function TriageScreen() {
     advance();
   };
 
+  // Swipe gestures on the card image per spec:
+  //   swipe right → save and next
+  //   swipe left  → skip and next
+  //   swipe up    → delete
+  // Pan thresholds chosen so a deliberate flick triggers but accidental
+  // jitter doesn't. failOffsetX/Y let normal vertical scrolling win when
+  // the user is reading chip rows below.
+  const cardSwipe = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-20, 20])
+        .activeOffsetY([-20, 20])
+        .runOnJS(true)
+        .onEnd((e) => {
+          const tx = e.translationX;
+          const ty = e.translationY;
+          const horizontal = Math.abs(tx) > Math.abs(ty);
+          if (horizontal) {
+            if (tx > 80) onSave();
+            else if (tx < -80) onSkip();
+          } else {
+            if (ty < -80) onDelete();
+          }
+        }),
+    // onSave/onSkip/onDelete are recreated every render but their refs are
+    // stable for the gesture's lifetime; gesture only reads at end.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   const onSave = () => {
     successHaptic();
     advance();
@@ -386,7 +417,11 @@ export default function TriageScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View style={{ opacity: cardOpacity, transform: [{ translateX: cardSlide }] }}>
-          <Image source={{ uri: current.uri }} style={styles.image} contentFit="contain" />
+          {/* Image is the swipe surface — right=save, left=skip, up=delete.
+              Buttons below still work as a discoverable fallback. */}
+          <GestureDetector gesture={cardSwipe}>
+            <Image source={{ uri: current.uri }} style={styles.image} contentFit="contain" />
+          </GestureDetector>
 
           {/* Analyze with AI — only for cards that haven't been analyzed yet
               and aren't local-only. Lets the user retry an upload that
