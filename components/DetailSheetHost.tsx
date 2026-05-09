@@ -49,13 +49,7 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
     const c = useColors();
     const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
-    // Single 100% snap. The 60/85/100 progressive snap pattern was capping
-    // BottomSheetScrollView's scroll travel (at non-100% snaps the sheet
-    // intercepts vertical pans as 'drag to expand' instead of routing them
-    // to the inner scroll). Going straight to full-screen sidesteps the
-    // gesture coordination entirely; user can dismiss via the handle drag-
-    // down or the Android back button.
-    const snapPoints = useMemo(() => ['100%'], []);
+    const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [sheetIndex, setSheetIndex] = useState(0);
 
@@ -119,12 +113,14 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
           onOpenChange?.(false);
         }}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        // bottomInset=0: sheet paints to the very bottom of the screen
-        // including under the gesture nav (no grid bleed-through through
-        // the translucent system bar). Combined with single 100% snap
-        // above, scroll boundaries stay predictable — earlier cap was
-        // caused by the progressive-snap coordination, not bottomInset.
-        bottomInset={0}
+        // bottomInset=insets.bottom: sheet ends ABOVE the gesture nav
+        // indicator (industry-standard sheet behavior — Apple Music,
+        // Maps, Slack all behave this way on edge-to-edge devices). The
+        // dimmed backdrop fills the inset zone so the user sees a slightly-
+        // dimmed grid through the translucent system bar. That's intentional
+        // — the alternative (sheet under the nav) leaves content
+        // unreachable because the nav indicator occludes the sheet bottom.
+        bottomInset={insets.bottom}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
