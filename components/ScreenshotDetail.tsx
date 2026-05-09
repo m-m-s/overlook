@@ -1221,6 +1221,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Ionicons name="share-outline" size={18} color={c.ink} />
           <Text style={styles.footerText}>share</Text>
         </Pressable>
+        <View style={styles.footerDivider} />
         <Pressable onPress={onTrash} style={styles.footerBtn} accessibilityLabel="Delete screenshot">
           <Ionicons name="trash-outline" size={18} color="#C0392B" />
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
@@ -1578,6 +1579,12 @@ const makeStyles = (c: Palette, f: FontSet) =>
       paddingVertical: 12,
       paddingHorizontal: 16,
       minHeight: 44,
+    },
+    footerDivider: {
+      width: StyleSheet.hairlineWidth,
+      alignSelf: 'stretch',
+      backgroundColor: c.divider,
+      marginVertical: 4,
     },
     footerText: {
       color: c.ink,
