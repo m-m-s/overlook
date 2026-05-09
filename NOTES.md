@@ -2,6 +2,50 @@
 
 Running scratchpad of decisions, gotchas, prompt versions, and anything else not in CLAUDE.md / SPRINT.md. Survives the Max → Pro account switch; chat history does not.
 
+## Session 2026-05-08 → 2026-05-09 — features + major bottom-card refactor
+
+### Shipped (features)
+
+- **Notification deep-link** — tapping the new-screenshot push surfaces that exact asset in the popup. ([lib/screenshotWatcher.tsx](lib/screenshotWatcher.tsx))
+- **Calendar integration** — when AI extracts a date (`urgency_date`), an "Add to calendar" pill appears on the urgency row. Android uses the system intent (no permission needed); iOS uses expo-calendar with permission. ([lib/calendar.ts](lib/calendar.ts))
+- **Find similar** — tag-weighted "more like this" thumbnail row in card detail. Tap to swap to that screenshot in-place. ([components/detail/SimilarRow.tsx](components/detail/SimilarRow.tsx))
+- **Triage swipe gestures** — right=save, left=skip, up=delete on the card image. Buttons remain as fallback. ([app/triage.tsx](app/triage.tsx))
+- **Lightbox swipe-away dismissal** — swipe in any direction past 120px or velocity 800 closes the fullscreen image. Plus an explicit X close button in the corner. ([components/ZoomableImage.tsx](components/ZoomableImage.tsx))
+
+### Shipped (fixes)
+
+- **Replay welcome flow** — was silently re-marked complete on next launch when a session existed. Drop the shortcut. ([app/_layout.tsx](app/_layout.tsx))
+- **Calendar import crashed Expo Go** — `expo-calendar` is a native module not bundled in Expo Go; importing it at module top crashed the Android bundle. Now lazy-required only in the iOS branch. ([lib/calendar.ts](lib/calendar.ts))
+- **Bottom card overflow + grid bleeding through nav** — sheet was `bottomInset=insets.bottom` which left a translucent gap below the sheet showing the dimmed grid. Now `bottomInset=0` and the inner scroll pads itself. Parchment paints under the gesture nav, footer + chips stay above. ([components/DetailSheetHost.tsx](components/DetailSheetHost.tsx))
+
+### Shipped (refactors)
+
+- **`<DetailSheetHost>`** — single source for the screenshot detail sheet. Snap points, backdrop, insets, prev/next nav, dismiss callbacks all live in one component. Removed ~120 lines of duplication between `app/index.tsx` and `app/library.tsx`. The bottom-inset bug fix lives here. ([components/DetailSheetHost.tsx](components/DetailSheetHost.tsx))
+- **`<HomeRow>`** — replaces 6 inline FlatList blocks on home (urgent, what's-next, categories, pinned saved-filters, recently-added, untagged) with one parameterized component. Parent decides what to filter; the row renders. `app/index.tsx` 1224 → 939 lines. ([components/HomeRow.tsx](components/HomeRow.tsx))
+- **`<TriageQueues>`** — extracts the queue-picker view from `app/triage.tsx`. Owns its own `incompleteExpanded` state. 820 → 673 lines. ([components/TriageQueues.tsx](components/TriageQueues.tsx))
+- **ScreenshotDetail extractions** — three self-contained pieces pulled out of the 1987-line orchestrator into `components/detail/`: `LinksSection.tsx` (315 lines), `Lightbox.tsx` (52 lines), `SimilarRow.tsx` (62 lines). Now 1575 lines, down from 1987.
+- **Sidebar wordmark** — dropped from sidebar; only the iris remains. Wordmark stays on home page header per Maggie's call. ([components/Sidebar.tsx](components/Sidebar.tsx))
+
+### Cleanup commits (uncommitted backlog from prior sessions)
+
+Long-pending changes that were sitting in the working tree at session start, finally split into focused commits:
+
+- Haptics flag now cached in memory (taps don't pay AsyncStorage on every press)
+- `tagQueries` filter chips (search bar's "+ add filter" promotes to a removable chip)
+- `usePinOrder()` + `useHiddenRows()` for home pinned/hidden row state
+- MediaLibrary hardening: `getAlbumAsync` / `requestPermissionsAsync` wrapped in try/catch (Expo Go's MEDIA_LIBRARY rejection no longer crashes the watcher); `granularPermissions=['photo']` to avoid AUDIO crash; `content://` fallback in `resolveDeviceAsset` for Samsung scoped-storage assets
+- `analyze.ts` now copies `content://` URIs to cache before reading base64 instead of throwing
+- `useBatchState` polls every 2s while a batch is active so the home banner shows live progress
+- Hints respect the "Show tips" preference
+
+### Flagged for review (not done; capture in case I'm not in the next session)
+
+- **`app/upload.tsx`** is still 1003 lines. The five-phase state machine (idle / scanning / pick-batch / review / processing / done) has too much shared async state to split without rewriting `runScan` / `runProcessing` to accept callbacks. Intentionally left as-is; the entry point for a future split would be to extract the JSX of each phase as a presentational component routed by `phase`, with state lifted into a `useUploadFlow()` hook.
+- **`ScreenshotDetail.tsx` metadata sections** — resonance / urgency / status / difficulty / time / category / subject / tags / notes all share the same `pending` patch + `editingSections` set + `Section` long-press wrapper + chip-row render pattern. Extracting them into per-field subcomponents would mean either deep prop drilling or a context provider. Best entry point for a future session: introduce a generic `<EditableMetaSection>` helper that owns the long-press → edit-mode toggle + shake animation + exit affordance, then thread chip rendering via children.
+- **`lib/tagDictionary.ts`** is 588 lines but it's mostly the built-in dictionary data populated via `add(type, [...])` calls. Already organized; splitting wouldn't remove duplication.
+- **`components/Sidebar.tsx`** is 608 lines. The 4 filter sections share a `<Text label>` + `<View chipWrap>` shell but each has different chip rendering (icon chips with CategoryIcon, plain Chip with urgencyColors, Iris icons, Chip with statusColors). A single `<FilterSection>` would need either a render prop or polymorphism — moderate cost for limited benefit.
+- **Bottom card inset fix** is in place but I haven't verified on-device. When you reload the app, chips/footer should stay above the gesture nav and parchment should paint under it (no grid bleeding through translucent system bar).
+
 ## Open TODOs (post-sprint decisions)
 
 - **Email/password auth.** Added 2026-05-07 as a dev fallback while magic-link email delivery was rate-limited. Magic link is primary per spec. **Decide post-sprint:** keep password as a permanent fallback option (good UX for users who lose access to email or can't get the link to bounce back), or remove it (simpler, fewer auth paths to secure). If keeping, gate the "use password" link behind a settings flag so it's not on the main sign-in screen.
