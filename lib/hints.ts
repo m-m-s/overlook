@@ -4,11 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * First-launch hint tracking. Each hint shows at most once per install (per
  * spec: "Each hint triggers exactly once, tracked in local storage").
  *
- * Reset all hints by clearing AsyncStorage or by exposing a "Show tips"
- * setting later.
+ * Hints are gated on the user's "show tips" preference. Toggling it off in
+ * Settings prevents new hints from firing; toggling on (and tapping "reset
+ * all tip hints") restarts the discovery flow.
  */
 
 const KEY = 'overlook.hints_seen';
+const SHOW_TIPS_KEY = 'overlook.settings.showTips';
 
 let cache: Record<string, true> | null = null;
 
@@ -30,6 +32,20 @@ const save = async (next: Record<string, true>): Promise<void> => {
   } catch {
     // best effort
   }
+};
+
+const showTipsEnabled = async (): Promise<boolean> => {
+  // Default-on (showTips defaults to true in settings.ts).
+  const v = await AsyncStorage.getItem(SHOW_TIPS_KEY);
+  if (v === null) return true;
+  return v === '1';
+};
+
+/** Returns true only if the hint has never been shown AND tips are enabled. */
+export const shouldShowHint = async (name: string): Promise<boolean> => {
+  if (!(await showTipsEnabled())) return false;
+  const seen = await load();
+  return !seen[name];
 };
 
 export const wasHintSeen = async (name: string): Promise<boolean> => {
