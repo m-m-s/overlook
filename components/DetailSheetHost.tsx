@@ -113,14 +113,14 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
           onOpenChange?.(false);
         }}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        // bottomInset=insets.bottom: sheet ends ABOVE the gesture nav
-        // indicator (industry-standard sheet behavior — Apple Music,
-        // Maps, Slack all behave this way on edge-to-edge devices). The
-        // dimmed backdrop fills the inset zone so the user sees a slightly-
-        // dimmed grid through the translucent system bar. That's intentional
-        // — the alternative (sheet under the nav) leaves content
-        // unreachable because the nav indicator occludes the sheet bottom.
-        bottomInset={insets.bottom}
+        // bottomInset=0: sheet's parchment background paints all the way
+        // down to the physical bottom of the screen, INCLUDING under the
+        // translucent gesture nav. That's the industry-standard look —
+        // the system bar shows the sheet's content underneath, not the
+        // page underneath the sheet. ScreenshotDetail compensates with
+        // a paddingBottom that keeps the actual content above the nav
+        // indicator's visual zone.
+        bottomInset={0}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"

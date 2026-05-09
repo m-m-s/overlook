@@ -681,11 +681,13 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          // Sheet stops above the gesture nav (bottomInset=insets.bottom
-          // in DetailSheetHost), so the scroll viewport ends at the safe
-          // area edge — content's last child (the share/delete footer)
-          // is naturally reachable. Small breathing room only.
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 24 },
+          // Sheet extends under the gesture nav (bottomInset=0 in
+          // DetailSheetHost). The scroll viewport reaches the physical
+          // bottom of the screen; without enough paddingBottom, the last
+          // children of the scroll (footer, similar) end up hidden behind
+          // the gesture nav indicator. Use insets.bottom (reported safe
+          // area) + 56 buffer for the indicator height.
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: insets.bottom + 56 },
         ]}
         onScroll={onScroll}
       >
