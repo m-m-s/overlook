@@ -119,12 +119,12 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
           onOpenChange?.(false);
         }}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        // bottomInset=insets.bottom: sheet ends ABOVE the gesture nav.
-        // Trades parchment-under-nav (slight grid bleed-through visible
-        // through the translucent system bar) for predictable scroll
-        // boundaries — content's last item naturally lands above the
-        // nav without manual paddingBottom math.
-        bottomInset={insets.bottom}
+        // bottomInset=0: sheet paints to the very bottom of the screen
+        // including under the gesture nav (no grid bleed-through through
+        // the translucent system bar). Combined with single 100% snap
+        // above, scroll boundaries stay predictable — earlier cap was
+        // caused by the progressive-snap coordination, not bottomInset.
+        bottomInset={0}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
