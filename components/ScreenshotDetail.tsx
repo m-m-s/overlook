@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -670,19 +670,20 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </View>
       )}
 
-      <BottomSheetScrollView
+      {/* Regular RN ScrollView, not BottomSheetScrollView. After many
+          iterations, gorhom's wrapper appears to be the source of the
+          recurring scroll-cap issue regardless of snap config or
+          paddingBottom. Plain ScrollView scrolls reliably — tradeoff:
+          drag-down-at-top no longer dismisses the sheet (user uses the
+          handle indicator or Android back button). */}
+      <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          // Sheet extends under the gesture nav (bottomInset=0 in
-          // DetailSheetHost). The scroll viewport reaches the physical
-          // bottom of the screen; without enough paddingBottom, the last
-          // children of the scroll (footer, similar) end up hidden behind
-          // the gesture nav indicator. Use insets.bottom (reported safe
-          // area) + 56 buffer for the indicator height.
           { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: insets.bottom + 56 },
         ]}
         onScroll={onScroll}
+        scrollEventThrottle={16}
       >
       {/* Removed: Pressable wrapping all scroll content. Its presence
           appeared to cap the BottomSheetScrollView's scroll travel —
@@ -1229,7 +1230,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </Pressable>
       </View>
       </View>
-      </BottomSheetScrollView>
+      </ScrollView>
 
       {/* Onboarding overlays */}
       <GhostHint
