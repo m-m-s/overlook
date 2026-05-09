@@ -20,6 +20,7 @@ import { Chip } from '@/components/Chip';
 import { GhostHint } from '@/components/GhostHint';
 import { Iris } from '@/components/Iris';
 import { useToast } from '@/components/Toast';
+import { TriageQueues } from '@/components/TriageQueues';
 import { animDuration, useReduceMotion } from '@/lib/a11y';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
@@ -61,7 +62,6 @@ export default function TriageScreen() {
   const [items, setItems] = useState<LocalScreenshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeQueue, setActiveQueue] = useState<QueueKey | null>(null);
-  const [incompleteExpanded, setIncompleteExpanded] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [queueIds, setQueueIds] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -301,83 +301,14 @@ export default function TriageScreen() {
     );
   }
 
-  // Entry screen — queue selection
-  const allCaughtUp =
-    counts.untagged === 0 &&
-    counts.incomplete === 0 &&
-    counts['ai-unreviewed'] === 0;
-
   if (!activeQueue) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={c.ink} />
-          </Pressable>
-          <Text style={styles.title}>Triage</Text>
-        </View>
-
-        {allCaughtUp && items.length > 0 && (
-          <View style={styles.caughtUp}>
-            <Iris level={3} size={36} color={c.ink} />
-            <Text style={styles.caughtUpTitle}>All caught up</Text>
-            <Text style={styles.caughtUpSub}>Nothing to triage right now</Text>
-          </View>
-        )}
-
-        <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-          <QueueRow
-            label="untagged"
-            hint="needs everything"
-            count={counts.untagged}
-            disabled={counts.untagged === 0}
-            onPress={() => enterQueue('untagged')}
-          />
-          <QueueRow
-            label="incomplete"
-            hint={incompleteExpanded ? 'pick a sub-queue' : 'missing resonance, urgency, or status'}
-            count={counts.incomplete}
-            disabled={counts.incomplete === 0}
-            chevron={incompleteExpanded ? 'chevron-down' : 'chevron-forward'}
-            onPress={() => setIncompleteExpanded((v) => !v)}
-          />
-          {incompleteExpanded && (
-            <View style={styles.subQueues}>
-              <QueueRow
-                label="no resonance"
-                hint="iris not set"
-                count={counts['incomplete-resonance']}
-                disabled={counts['incomplete-resonance'] === 0}
-                onPress={() => enterQueue('incomplete-resonance')}
-                indent
-              />
-              <QueueRow
-                label="no urgency"
-                hint="when-to-act not set"
-                count={counts['incomplete-urgency']}
-                disabled={counts['incomplete-urgency'] === 0}
-                onPress={() => enterQueue('incomplete-urgency')}
-                indent
-              />
-              <QueueRow
-                label="no status"
-                hint="ready / supplies / done not set"
-                count={counts['incomplete-status']}
-                disabled={counts['incomplete-status'] === 0}
-                onPress={() => enterQueue('incomplete-status')}
-                indent
-              />
-            </View>
-          )}
-          <QueueRow
-            label="AI unreviewed"
-            hint="AI tagged but you haven't confirmed"
-            count={counts['ai-unreviewed']}
-            disabled={counts['ai-unreviewed'] === 0}
-            onPress={() => enterQueue('ai-unreviewed')}
-          />
-        </View>
-      </View>
+      <TriageQueues
+        counts={counts}
+        totalItems={items.length}
+        onEnterQueue={enterQueue}
+        onBack={() => router.back()}
+      />
     );
   }
 
@@ -606,41 +537,6 @@ export default function TriageScreen() {
   );
 }
 
-const QueueRow = ({
-  label,
-  hint,
-  count,
-  disabled,
-  onPress,
-  indent,
-  chevron = 'chevron-forward',
-}: {
-  label: string;
-  hint: string;
-  count: number;
-  disabled?: boolean;
-  onPress: () => void;
-  indent?: boolean;
-  chevron?: React.ComponentProps<typeof Ionicons>['name'];
-}) => {
-  const c = useColors();
-  const f = useFonts();
-  const styles = useMemo(() => makeStyles(c, f), [c, f]);
-  return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      style={[styles.queueRow, indent && styles.queueRowIndent, disabled && { opacity: 0.4 }]}
-    >
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.queueLabel, indent && styles.queueLabelIndent]}>{label}</Text>
-        <Text style={styles.queueHint}>{hint}</Text>
-      </View>
-      <Text style={[styles.queueCount, indent && { fontSize: 22 }]}>{count}</Text>
-      <Ionicons name={chevron} size={18} color={c.inkMuted} />
-    </Pressable>
-  );
-};
-
 const FieldRow = ({ label, children }: { label: string; children: React.ReactNode }) => {
   const c = useColors();
   const f = useFonts();
@@ -659,14 +555,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: c.parchment },
     center: { alignItems: 'center', justifyContent: 'center', backgroundColor: c.parchment },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingTop: 56,
-      paddingHorizontal: 20,
-      paddingBottom: 12,
-      gap: 12,
-    },
     swipeHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -683,41 +571,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
     },
     backBtn: { padding: 4 },
     title: { fontFamily: f.displayMedium, fontSize: 26, color: c.ink, letterSpacing: -0.4 },
-    caughtUp: {
-      alignItems: 'center',
-      paddingTop: 60,
-      paddingBottom: 24,
-      gap: 8,
-    },
-    caughtUpTitle: {
-      fontFamily: f.displayMedium,
-      fontSize: 26,
-      color: c.ink,
-      marginTop: 18,
-      letterSpacing: -0.4,
-    },
-    caughtUpSub: {
-      fontFamily: f.italic,
-      fontSize: 14,
-      color: c.inkSoft,
-      textAlign: 'center',
-      marginTop: 4,
-    },
-    queueRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 18,
-      borderBottomWidth: 2,
-      borderStyle: 'dashed',
-      borderColor: c.divider,
-      gap: 12,
-    },
-    queueRowIndent: { paddingLeft: 16, paddingVertical: 12 },
-    queueLabelIndent: { fontSize: 16 },
-    subQueues: { marginLeft: 4 },
-    queueLabel: { fontFamily: f.displayMedium, fontSize: 18, color: c.ink },
-    queueHint: { fontSize: 11, color: c.inkMuted, marginTop: 4 },
-    queueCount: { fontFamily: f.displayMedium, fontSize: 28, color: c.ink },
     image: {
       width: '100%',
       height: 380,
