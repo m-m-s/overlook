@@ -1,11 +1,14 @@
 import {
   BottomSheetBackdrop,
+  BottomSheetFooter,
   BottomSheetModal,
   type BottomSheetBackdropProps,
+  type BottomSheetFooterProps,
 } from '@gorhom/bottom-sheet';
+import * as Sharing from 'expo-sharing';
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DetailFooter } from './detail/DetailFooter';
 import { ScreenshotDetail } from './ScreenshotDetail';
 import { useColors } from '@/lib/themeContext';
 import type { LocalScreenshot } from '@/lib/uploads';
@@ -47,7 +50,6 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
     ref,
   ) {
     const c = useColors();
-    const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
     const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -101,6 +103,26 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
       onItemDelete(selectedId);
     }, [selectedId, onItemDelete]);
 
+    const onShare = useCallback(async () => {
+      if (!selected) return;
+      try {
+        const ok = await Sharing.isAvailableAsync();
+        if (!ok) return;
+        await Sharing.shareAsync(selected.uri, { mimeType: 'image/jpeg' });
+      } catch (err) {
+        console.warn('[share] failed', err);
+      }
+    }, [selected]);
+
+    const renderFooter = useCallback(
+      (props: BottomSheetFooterProps) => (
+        <BottomSheetFooter {...props} bottomInset={0}>
+          <DetailFooter onShare={onShare} onDelete={onDelete} />
+        </BottomSheetFooter>
+      ),
+      [onShare, onDelete],
+    );
+
     return (
       <BottomSheetModal
         ref={sheetRef}
@@ -113,10 +135,13 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
           onOpenChange?.(false);
         }}
         onChange={(idx) => setSheetIndex(idx < 0 ? 0 : idx)}
-        // bottomInset=0 + scroll content padding=insets.bottom puts the
-        // parchment under the gesture nav (no grid bleed-through) and keeps
-        // the footer above it.
+        // bottomInset=0 lets parchment paint to the very bottom of the
+        // screen (no grid bleed-through under the translucent gesture
+        // nav). The sticky footer (renderFooter) lives in BottomSheetFooter
+        // which the sheet automatically reserves space for — so the inner
+        // scroll's max-scroll respects it without manual paddingBottom math.
         bottomInset={0}
+        footerComponent={renderFooter}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"

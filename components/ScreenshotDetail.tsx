@@ -519,28 +519,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
     if (type) void rememberTagType(manualTags[idx].value, type);
   };
 
-  const onTrash = () => {
-    void warnHaptic();
-    // Parent handles optimistic remove + 5-sec undo toast + commit (per spec).
-    onDelete();
-  };
-
-  const onShare = async () => {
-    // expo-sharing uses Android's ACTION_SEND with a proper file stream so
-    // the IMAGE actually attaches. RN's built-in Share.share() ignores the
-    // `url` field on Android and only sends `message` — that's why earlier
-    // shares were sending a title string instead of the screenshot.
-    try {
-      const ok = await Sharing.isAvailableAsync();
-      if (!ok) {
-        toast.error('Sharing not available on this device.');
-        return;
-      }
-      await Sharing.shareAsync(item.uri, { mimeType: 'image/jpeg' });
-    } catch (err) {
-      console.warn('[share] failed', err);
-    }
-  };
+  // Share + delete moved to DetailSheetHost's BottomSheetFooter so they
+  // stay anchored to the bottom of the sheet regardless of scroll. The
+  // `onDelete` prop is kept for any future in-content delete affordance
+  // but isn't currently invoked from inside this component.
 
   // Manual AI re-analyze for cards that haven't been tagged yet (e.g. the
   // initial bulk import had a network failure on this one). Disabled while
@@ -649,17 +631,18 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           displace scroll content when it appears (avoids the awkward
           "page jumps down" feel when the user toggles a field at the
           bottom of the sheet). zIndex 2 keeps it above the parallax. */}
-      {/* Pending-changes bar — anchored to the BOTTOM of the sheet (above
-          the gesture nav inset) so it never floats awkwardly in the
-          middle of the content. Sits above the scroll, always visible
-          while the user has unsaved edits. */}
+      {/* Pending-changes bar — floats just below the image so it doesn't
+          displace scroll content when it appears (avoids the "page jumps
+          down" feel when the user toggles a field at the bottom of the
+          sheet). zIndex 2 keeps it above the parallax. The sticky footer
+          claims the bottom, so this stays anchored at the top. */}
       {pendingCount > 0 && (
         <View
           style={[
             styles.pendingBar,
             {
               position: 'absolute',
-              bottom: insets.bottom + 12,
+              top: hideImage ? 8 : IMAGE_MAX + 8,
               left: 12,
               right: 12,
               zIndex: 2,
@@ -685,9 +668,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          // Clear the sticky footer (~70px) + safe-area inset so scroll
-          // content can't hide behind it.
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 80 + insets.bottom },
+          // gorhom's BottomSheetFooter (in DetailSheetHost) reserves
+          // layout space for the sticky footer automatically — scroll
+          // max-scroll respects it without us padding manually here.
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 16 },
         ]}
         onScroll={onScroll}
       >
@@ -1222,34 +1206,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       {onSelect && <SimilarRow item={item} allItems={allItems} onSelect={onSelect} />}
       </View>
       </BottomSheetScrollView>
-
-      {/* Sticky footer — absolute-positioned at the bottom of the sheet.
-          bottom:0 + internal paddingBottom=insets.bottom anchors the
-          buttons above the gesture nav while parchment fills the safe
-          area underneath (no grid bleed-through on edge-to-edge nav). */}
-      <View
-        style={[
-          styles.footer,
-          {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            paddingBottom: insets.bottom + 12,
-            backgroundColor: c.parchment,
-          },
-        ]}
-      >
-        <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
-          <Ionicons name="share-outline" size={18} color={c.ink} />
-          <Text style={styles.footerText}>share</Text>
-        </Pressable>
-        <View style={styles.footerDivider} />
-        <Pressable onPress={onTrash} style={styles.footerBtn} accessibilityLabel="Delete screenshot">
-          <Ionicons name="trash-outline" size={18} color="#C0392B" />
-          <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
-        </Pressable>
-      </View>
 
       {/* Onboarding overlays */}
       <GhostHint
