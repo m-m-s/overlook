@@ -673,7 +673,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       <BottomSheetScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 80 + insets.bottom },
+          // bottomInset on the sheet is 0 (so parchment paints under the
+          // gesture nav). The scroll's own paddingBottom MUST clear the nav,
+          // so we use 120 as a base + insets.bottom for any extra reported
+          // safe-area. Without the 120 base, devices that report
+          // insets.bottom=0 leave the similar row + footer under the nav.
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 120 + insets.bottom },
         ]}
         onScroll={onScroll}
       >
