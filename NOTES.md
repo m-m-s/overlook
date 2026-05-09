@@ -2,6 +2,28 @@
 
 Running scratchpad of decisions, gotchas, prompt versions, and anything else not in CLAUDE.md / SPRINT.md. Survives the Max → Pro account switch; chat history does not.
 
+## Methodology — spec-driven development (portfolio case study)
+
+This project is built **spec-first**. Before writing any code, I wrote a complete product spec in [CLAUDE.md](CLAUDE.md) — every screen, every gesture, every category, every status/urgency value, every visual rule (parchment palette, dashed underlines, 4:5 grid card ratio, sharp corners on thumbnails, etc.). The spec is the source of truth; the code adapts to it, not the other way around.
+
+The AI assistant (Claude Code) reads CLAUDE.md on every session and treats deviations as bugs unless I explicitly justify them. That makes long autonomous build blocks reliable: I can describe what I want in spec terms (“add an Add to calendar pill to the urgency row when urgency_date is set”) and the implementation lands without re-litigating the design language each time.
+
+**Why this matters for the case study:**
+
+- **Decisions are documented before they get blurry.** Every visual + interaction call (why card thumbnails are square-not-rounded, why typed tags instead of flat tags, why the resonance iris instead of stars, why intent was deleted as a tagging dimension, etc.) is in the spec with the alternatives I considered and the reason I picked one — see "Design decision log" near the bottom of CLAUDE.md. That's portfolio gold: it shows the *thinking*, not just the artifact.
+- **Drift gets caught.** When AI-generated code deviates ("you used `c.divider` for a dashed border but spec says hairline + ink"), it shows up immediately as a spec violation rather than slowly diluting the design language across files.
+- **Refactors stay safe.** When I refactored the bottom card three times in this session, I could re-read the spec for "what should the bottom sheet do" and re-derive the right architecture instead of remembering implementation details.
+- **Onboarding for new collaborators (or future-me) is one file.** Anyone reading the project — Claude in a fresh session, a code reviewer, a future portfolio reader — gets the full mental model from CLAUDE.md without sifting through commits.
+
+**Workflow shape:**
+
+1. **Spec** in CLAUDE.md (product + design + tagging system + gesture map + data model)
+2. **Sprint scope** in SPRINT.md (what to ship now, what's deferred, what's intentionally cut)
+3. **Implementation** — AI assistant + me, treating the spec as the contract
+4. **Decisions log** at the bottom of CLAUDE.md captures any spec evolution mid-build, so the spec stays a living document instead of a stale artifact
+
+This is the methodology to highlight in the portfolio case study: not "I built an app with AI" but "I designed a product with enough rigor that AI could implement it without me re-deciding the design language at every step."
+
 ## Session 2026-05-08 → 2026-05-09 — features + major bottom-card refactor
 
 ### Shipped (features)
