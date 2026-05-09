@@ -1,16 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, BackHandler, Dimensions, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Dimensions, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 
-import { Card, type CardData } from '@/components/Card';
 import { DetailSheetHost, type DetailSheetHostHandle } from '@/components/DetailSheetHost';
 import { EdgeSwipe } from '@/components/EdgeSwipe';
 import { GhostHint } from '@/components/GhostHint';
+import { HomeRow } from '@/components/HomeRow';
 import { Iris } from '@/components/Iris';
 import { Sidebar } from '@/components/Sidebar';
 import { useToast } from '@/components/Toast';
@@ -19,7 +19,7 @@ import { getQueuedIds } from '@/lib/analysisQueue';
 import { signOut, useSession } from '@/lib/auth';
 import { useDemoMode } from '@/lib/demoMode';
 import { heavyHaptic } from '@/lib/haptics';
-import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
+import type { FontSet, Palette } from '@/lib/colors';
 import { setBatchState, useBatchState } from '@/lib/batchState';
 import { applyFilters as applyFiltersToItems, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
@@ -35,15 +35,6 @@ import { useUndoableDelete } from '@/lib/useUndoableDelete';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const URGENT_KEYS = new Set(['today', 'expires_soon', 'this_week']);
-
-const toCardData = (it: LocalScreenshot): CardData => ({
-  id: it.id,
-  uri: it.uri,
-  category: it.category ?? null,
-  status: (it.status as keyof typeof statusColors) ?? null,
-  urgency: (it.urgency as keyof typeof urgencyColors) ?? null,
-  resonance: it.resonance ?? null,
-});
 
 /**
  * Home screen per spec: urgent row, pinned filters (when present), recently
@@ -484,41 +475,23 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Urgent row — auto-hides when nothing urgent (per spec). Hidden
-            entirely during reorder mode so the drag list isn't fighting
-            for screen space with non-reorderable content. */}
         {!reorderMode && urgent.length > 0 && (
-          <Row
+          <HomeRow
             title="urgent"
             count={urgent.length}
+            items={urgent}
+            cellWidth={cellWidth}
+            queuedIds={queuedIds}
+            onCardPress={open}
+            scrollLocked={zoomActive}
             onSeeAll={() => {
               const next = emptyFilters();
               for (const k of URGENT_KEYS) next.urgencies.add(k);
               applyFilterCtx(next);
               router.push('/library');
             }}
-          >
-            <FlatList
-              horizontal
-              scrollEnabled={!zoomActive}
-              data={urgent}
-              keyExtractor={(it) => it.id}
-              showsHorizontalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-              contentContainerStyle={styles.rowList}
-              renderItem={({ item }) => (
-                <View style={[styles.rowCell, { width: cellWidth }]}>
-                  <Card
-                    data={toCardData(item)}
-                    queued={queuedIds.has(item.id)}
-                    onPress={() => open(item)}
-                  />
-                </View>
-              )}
-            />
-          </Row>
+          />
         )}
-        {/* "see what's next" — surfaces when urgent is empty (per spec) */}
         {!reorderMode && urgent.length === 0 && whatsNext.length > 0 && (
           <View style={styles.whatsNextWrap}>
             <Pressable onPress={() => setShowWhatsNext((v) => !v)} hitSlop={6}>
@@ -527,9 +500,14 @@ export default function HomeScreen() {
               </Text>
             </Pressable>
             {showWhatsNext && (
-              <Row
+              <HomeRow
                 title="this month / season"
                 count={whatsNext.length}
+                items={whatsNext}
+                cellWidth={cellWidth}
+                queuedIds={queuedIds}
+                onCardPress={open}
+                scrollLocked={zoomActive}
                 onSeeAll={() => {
                   const next = emptyFilters();
                   next.urgencies.add('this_month');
@@ -540,26 +518,7 @@ export default function HomeScreen() {
                   applyFilterCtx(next);
                   router.push('/library');
                 }}
-              >
-                <FlatList
-                  horizontal
-                  scrollEnabled={!zoomActive}
-                  data={whatsNext}
-                  keyExtractor={(it) => it.id}
-                  showsHorizontalScrollIndicator={false}
-                  ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-                  contentContainerStyle={styles.rowList}
-                  renderItem={({ item }) => (
-                    <View style={[styles.rowCell, { width: cellWidth }]}>
-                      <Card
-                        data={toCardData(item)}
-                        queued={queuedIds.has(item.id)}
-                        onPress={() => open(item)}
-                      />
-                    </View>
-                  )}
-                />
-              </Row>
+              />
             )}
           </View>
         )}
@@ -607,38 +566,25 @@ export default function HomeScreen() {
               return (
                 <ScaleDecorator>
                   <View style={isActive && styles.rowActive}>
-                    <Row
+                    <HomeRow
                       title={title}
                       count={count}
+                      items={cards}
+                      cellWidth={cellWidth}
+                      queuedIds={queuedIds}
+                      // No card press in reorder mode — the FlatList still
+                      // renders cards but taps are absorbed by the drag gesture.
+                      onCardPress={() => {}}
                       onSeeAll={() => {}}
                       onTitleLongPress={drag}
                       reorderMode
-                      onMoveUp={() => {}}
-                      onMoveDown={() => {}}
+                      emptyMessage="No matches yet"
                       onHide={
                         item.kind === 'cat'
                           ? () => hideRow(item.row.category)
                           : undefined
                       }
-                    >
-                      {cards.length === 0 ? (
-                        <Text style={styles.pinnedEmpty}>No matches yet</Text>
-                      ) : (
-                        <FlatList
-                          horizontal
-                          data={cards}
-                          keyExtractor={(it) => it.id}
-                          showsHorizontalScrollIndicator={false}
-                          ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-                          contentContainerStyle={styles.rowList}
-                          renderItem={({ item: card }) => (
-                            <View style={[styles.rowCell, { width: cellWidth }]}>
-                              <Card data={toCardData(card)} queued={queuedIds.has(card.id)} />
-                            </View>
-                          )}
-                        />
-                      )}
-                    </Row>
+                    />
                   </View>
                 </ScaleDecorator>
               );
@@ -646,128 +592,81 @@ export default function HomeScreen() {
           />
         ) : (
           categoryRows.map((row) => (
-            <Row
+            <HomeRow
               key={`cat-${row.category}`}
               title={capitalize(row.category)}
               count={row.items.length}
+              items={row.items}
+              maxItems={30}
+              cellWidth={cellWidth}
+              queuedIds={queuedIds}
+              onCardPress={open}
+              scrollLocked={zoomActive}
+              onTitleLongPress={() => setReorderMode(true)}
               onSeeAll={() => {
                 const next = emptyFilters();
                 next.categories.add(row.category);
                 applyFilterCtx(next);
                 router.push('/library');
               }}
-              onTitleLongPress={() => setReorderMode(true)}
-            >
-              <FlatList
-                horizontal
-                data={row.items.slice(0, 30)}
-                keyExtractor={(it) => it.id}
-                showsHorizontalScrollIndicator={false}
-                ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-                contentContainerStyle={styles.rowList}
-                renderItem={({ item }) => (
-                  <View style={[styles.rowCell, { width: cellWidth }]}>
-                    <Card data={toCardData(item)} queued={queuedIds.has(item.id)} onPress={() => open(item)} />
-                  </View>
-                )}
-              />
-            </Row>
+            />
           ))
         )}
 
-        {/* Pinned saved-filter rows — normal mode only. In reorder mode
-            the merged DraggableFlatList above renders these inline with
-            the categories so they can be drag-swapped freely. */}
         {!reorderMode && orderedPinnedFilters.map((pf) => {
           const matched = applyFiltersToItems(items, pf.filters);
           return (
-            <Row
+            <HomeRow
               key={pf.id}
               title={pf.name}
               count={matched.length}
+              items={matched}
+              maxItems={30}
+              cellWidth={cellWidth}
+              queuedIds={queuedIds}
+              onCardPress={open}
+              scrollLocked={zoomActive}
+              emptyMessage="No matches yet"
+              onTitleLongPress={() => setReorderMode(true)}
               onSeeAll={() => {
                 applyFilterCtx(pf.filters);
                 setSearchQuery(pf.searchQuery ?? '');
                 router.push('/library');
               }}
-              onTitleLongPress={() => setReorderMode(true)}
-            >
-              {matched.length === 0 ? (
-                <Text style={styles.pinnedEmpty}>No matches yet</Text>
-              ) : (
-                <FlatList
-                  horizontal
-                  scrollEnabled={!zoomActive}
-                  data={matched.slice(0, 30)}
-                  keyExtractor={(it) => it.id}
-                  showsHorizontalScrollIndicator={false}
-                  ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-                  contentContainerStyle={styles.rowList}
-                  renderItem={({ item }) => (
-                    <View style={[styles.rowCell, { width: cellWidth }]}>
-                      <Card data={toCardData(item)} queued={queuedIds.has(item.id)} onPress={() => open(item)} />
-                    </View>
-                  )}
-                />
-              )}
-            </Row>
+            />
           );
         })}
 
-        {/* Recently added — horizontal-scroll row to match the other
-            category rows visually. Hidden during reorder mode. */}
         {!reorderMode && (
-          <Row title="recently added" count={recent.length} onSeeAll={() => router.push('/library')}>
-            <FlatList
-              horizontal
-              scrollEnabled={!zoomActive}
-              data={recent}
-              keyExtractor={(it) => it.id}
-              showsHorizontalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-              contentContainerStyle={styles.rowList}
-              renderItem={({ item }) => (
-                <View style={[styles.rowCell, { width: cellWidth }]}>
-                  <Card
-                    data={toCardData(item)}
-                    queued={queuedIds.has(item.id)}
-                    onPress={() => open(item)}
-                  />
-                </View>
-              )}
-            />
-          </Row>
+          <HomeRow
+            title="recently added"
+            count={recent.length}
+            items={recent}
+            cellWidth={cellWidth}
+            queuedIds={queuedIds}
+            onCardPress={open}
+            scrollLocked={zoomActive}
+            onSeeAll={() => router.push('/library')}
+          />
         )}
 
-        {/* Untagged row at bottom — bare dimmed cards */}
         {!reorderMode && untagged.length > 0 && (
-          <Row
+          <HomeRow
             title="untagged"
             count={untagged.length}
-            onSeeAll={() => {
-              // "see all" jumps to the filtered grid (untagged-only view).
-              const next = emptyFilters();
-              applyFilterCtx(next);
-              router.push('/library');
-            }}
+            items={untagged}
+            cellWidth={cellWidth}
+            queuedIds={queuedIds}
+            onCardPress={open}
+            scrollLocked={zoomActive}
+            dimmed
             secondaryLabel="triage ›"
             onSecondary={() => router.push('/triage')}
-          >
-            <FlatList
-              horizontal
-              scrollEnabled={!zoomActive}
-              data={untagged}
-              keyExtractor={(it) => it.id}
-              showsHorizontalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={{ width: 3 }} />}
-              contentContainerStyle={styles.rowList}
-              renderItem={({ item }) => (
-                <View style={[styles.rowCell, styles.untaggedDim, { width: cellWidth }]}>
-                  <Card data={toCardData(item)} queued={queuedIds.has(item.id)} onPress={() => open(item)} />
-                </View>
-              )}
-            />
-          </Row>
+            onSeeAll={() => {
+              applyFilterCtx(emptyFilters());
+              router.push('/library');
+            }}
+          />
         )}
       </ScrollView>
       </GestureDetector>
@@ -811,89 +710,6 @@ export default function HomeScreen() {
     </View>
   );
 }
-
-// Row helper — title bar + see-all + children body. Reorder mode shows
-// up/down arrows on the title bar instead of "see all".
-const Row = ({
-  title,
-  count,
-  onSeeAll,
-  onTitleLongPress,
-  reorderMode,
-  canMoveUp,
-  canMoveDown,
-  onMoveUp,
-  onMoveDown,
-  onHide,
-  onSecondary,
-  secondaryLabel,
-  children,
-}: {
-  title: string;
-  count: number;
-  onSeeAll: () => void;
-  onTitleLongPress?: () => void;
-  reorderMode?: boolean;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  /** Tapping the X in reorder mode hides this row from home. */
-  onHide?: () => void;
-  /** Optional secondary link rendered to the LEFT of "see all" — e.g. a
-   *  triage shortcut on the untagged row. */
-  onSecondary?: () => void;
-  secondaryLabel?: string;
-  children: React.ReactNode;
-}) => {
-  const c = useColors();
-  const f = useFonts();
-  const styles = useMemo(() => makeStyles(c, f), [c, f]);
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowHeader}>
-        <Pressable
-          onLongPress={() => {
-            if (onTitleLongPress) {
-              void heavyHaptic();
-              onTitleLongPress();
-            }
-          }}
-          // Faster long-press recognition so the first attempt actually
-          // starts a drag (DraggableFlatList's internal gesture system
-          // sometimes misses the very first 500ms long-press).
-          delayLongPress={250}
-          hitSlop={6}
-        >
-          <Text style={styles.rowTitle}>{title}</Text>
-        </Pressable>
-        <Text style={styles.rowCount}>{count}</Text>
-        <View style={{ flex: 1 }} />
-        {reorderMode ? (
-          <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-            {onHide && (
-              <Pressable onPress={onHide} hitSlop={8} accessibilityLabel={`Remove ${title} row from home`}>
-                <Ionicons name="close" size={18} color={c.inkMuted} />
-              </Pressable>
-            )}
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            {onSecondary && (
-              <Pressable onPress={onSecondary} hitSlop={6}>
-                <Text style={styles.rowSeeAll}>{secondaryLabel ?? 'open ›'}</Text>
-              </Pressable>
-            )}
-            <Pressable onPress={onSeeAll} hitSlop={6}>
-              <Text style={styles.rowSeeAll}>see all ›</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-      {children}
-    </View>
-  );
-};
 
 // Wraps Sidebar with consistent nav callbacks
 const SidebarRender = ({
@@ -1035,50 +851,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
       textDecorationLine: 'underline',
       includeFontPadding: false,
     },
-    row: { marginBottom: 20 },
-    rowHeader: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      paddingBottom: 8,
-      marginBottom: 8,
-      gap: 8,
-      // Match the page header's paddingHorizontal so titles line up with
-      // the Overlook wordmark and "all" link above.
-      marginHorizontal: 20,
-    },
-    rowTitle: {
-      fontFamily: f.displayMedium,
-      fontSize: 22,
-      color: c.ink,
-      letterSpacing: -0.3,
-      // textTransform:'capitalize' is safe for category titles because we
-      // pass them through capitalize() first — 'tv' → 'TV' via override,
-      // textTransform leaves 'TV' alone. Other titles ('urgent', etc.)
-      // get their first letter uppercased as expected.
-      textTransform: 'capitalize',
-    },
-    rowCount: {
-      fontFamily: f.italic,
-      fontSize: 14,
-      color: c.inkMuted,
-    },
-    rowSeeAll: {
-      fontSize: 11,
-      letterSpacing: 1.6,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-    },
-    rowList: { paddingHorizontal: 0 },
-    rowCell: { width: 140, aspectRatio: 1 },
-    untaggedDim: { opacity: 0.65 },
     whatsNextWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 },
-    pinnedEmpty: {
-      fontFamily: f.italic,
-      fontSize: 14,
-      color: c.inkMuted,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
     reorderBlock: {
       marginVertical: 8,
       paddingVertical: 8,
@@ -1145,13 +918,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       textDecorationLine: 'underline',
       textDecorationStyle: 'dashed',
     },
-    recentGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-    },
-    // Legacy — recently-added is now a horizontal-scroll row using rowCell;
-    // keep recentCell defined in case other rows reference it.
-    recentCell: { width: 140, aspectRatio: 1 },
     batchBanner: {
       flexDirection: 'row',
       alignItems: 'center',

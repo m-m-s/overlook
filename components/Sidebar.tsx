@@ -176,7 +176,6 @@ export const Sidebar = ({
             accessibilityRole={onLogo ? 'button' : undefined}
           >
             <Iris level={3} size={32} color={c.ink} />
-            <Text style={styles.title}>Overlook</Text>
           </Pressable>
           {userEmail && (
             <Text style={styles.email}>signed in · {userEmail}</Text>
