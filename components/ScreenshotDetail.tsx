@@ -685,7 +685,11 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 120 + insets.bottom },
+          // paddingBottom clears the sticky footer + safe-area inset.
+          // Footer is ~80px tall (footerBtn paddingVertical 12+12 = 24, plus
+          // border + minHeight 44, plus inner padding); +insets.bottom is
+          // baked into the footer's `bottom` style so we add it once here.
+          { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 100 + insets.bottom },
         ]}
         onScroll={onScroll}
       >
@@ -1218,9 +1222,25 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       )}
 
       {onSelect && <SimilarRow item={item} allItems={allItems} onSelect={onSelect} />}
+      </View>
+      </BottomSheetScrollView>
 
-      {/* Footer actions: share + delete */}
-      <View style={styles.footer}>
+      {/* Sticky footer — absolute-positioned over the bottom of the sheet,
+          stays visible regardless of scroll position. The scroll's
+          contentContainerStyle.paddingBottom (FOOTER_HEIGHT + insets.bottom)
+          ensures content above never hides behind it. */}
+      <View
+        style={[
+          styles.footer,
+          {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: insets.bottom,
+            backgroundColor: c.parchment,
+          },
+        ]}
+      >
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
           <Ionicons name="share-outline" size={18} color={c.ink} />
           <Text style={styles.footerText}>share</Text>
@@ -1231,14 +1251,6 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
-      {/* Bottom safe-area spacer — sized to clear the gesture nav on
-          edge-to-edge Android. TODO(maggie): this is a fragile hardcoded
-          value. The right fix is moving the footer + analyze + similar
-          blocks into a BottomSheetFooter so they're anchored above the
-          nav by the sheet itself, not padded inside the scroll. */}
-      <View style={{ height: 420 + insets.bottom }} />
-      </View>
-      </BottomSheetScrollView>
 
       {/* Onboarding overlays */}
       <GhostHint
@@ -1571,8 +1583,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
     footer: {
       flexDirection: 'row',
       justifyContent: 'space-around',
-      marginTop: 32,
-      paddingVertical: 14,
+      paddingVertical: 12,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: c.ink,
       borderStyle: 'dashed',
