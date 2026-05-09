@@ -1231,11 +1231,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
-      {/* Bottom safe-area spacer — explicit View instead of relying on
-          contentContainerStyle.paddingBottom (BottomSheetScrollView is
-          inconsistent with it on Android). 140 is enough to push the
-          footer well above the gesture nav indicator. */}
-      <View style={{ height: 380 + insets.bottom }} />
+      {/* Bottom safe-area spacer — sized to clear the gesture nav on
+          edge-to-edge Android. TODO(maggie): this is a fragile hardcoded
+          value. The right fix is moving the footer + analyze + similar
+          blocks into a BottomSheetFooter so they're anchored above the
+          nav by the sheet itself, not padded inside the scroll. */}
+      <View style={{ height: 420 + insets.bottom }} />
       </View>
       </BottomSheetScrollView>
 
