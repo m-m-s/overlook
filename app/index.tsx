@@ -831,6 +831,8 @@ export default function HomeScreen() {
             snapIndex={sheetIndex}
             onPrev={selectedIndex > 0 ? goPrev : undefined}
             onNext={selectedIndex >= 0 && selectedIndex < items.length - 1 ? goNext : undefined}
+            allItems={items}
+            onSelect={(id) => setSelectedId(id)}
           />
         )}
       </BottomSheetModal>

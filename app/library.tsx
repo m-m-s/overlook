@@ -636,6 +636,8 @@ export default function LibraryScreen() {
             onPrev={selIdx > 0 ? goPrev : undefined}
             onNext={selIdx >= 0 && selIdx < visibleItems.length - 1 ? goNext : undefined}
             hideImage={cols === 1}
+            allItems={items}
+            onSelect={(id) => setSelectedId(id)}
           />
         )}
       </BottomSheetModal>

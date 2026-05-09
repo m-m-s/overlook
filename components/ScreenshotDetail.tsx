@@ -21,6 +21,7 @@ import { ZoomableImage } from './ZoomableImage';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { addToCalendar } from '@/lib/calendar';
+import { findSimilar } from '@/lib/similar';
 import { dropFromAnalysisQueue } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
 import { heavyHaptic, successHaptic, tapHaptic, warnHaptic } from '@/lib/haptics';
@@ -59,6 +60,12 @@ type Props = {
    *  intent-mode (1-col) view where the full image is already on screen
    *  behind the sheet, so re-rendering it inside the sheet is redundant. */
   hideImage?: boolean;
+  /** Full library reference so the sheet can compute "find similar".
+   *  When omitted, the similar row hides. */
+  allItems?: LocalScreenshot[];
+  /** Called when the user taps a similar thumbnail — parent should set
+   *  the selectedId so the sheet switches to that item without closing. */
+  onSelect?: (id: string) => void;
 };
 
 /**
@@ -533,7 +540,7 @@ const sortedDisplayTags = (manual: TypedTag[], ai: TypedTag[]): DisplayTag[] => 
   });
 };
 
-export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNext, onPrev, hideImage = false }: Props) => {
+export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNext, onPrev, hideImage = false, allItems, onSelect }: Props) => {
   const { session } = useSession();
   const toast = useToast();
   const c = useColors();
@@ -1578,6 +1585,35 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </Pressable>
       )}
 
+      {/* Similar — tag-based "more like this". Hidden when no allItems was
+          passed (caller didn't opt in) or when nothing scores above zero. */}
+      {(() => {
+        if (!allItems || !onSelect) return null;
+        const similar = findSimilar(item, allItems, 8);
+        if (similar.length === 0) return null;
+        return (
+          <View style={styles.similarWrap}>
+            <Text style={styles.sectionLabel}>similar</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.similarRow}
+            >
+              {similar.map((it) => (
+                <Pressable
+                  key={it.id}
+                  onPress={() => onSelect(it.id)}
+                  style={styles.similarThumbWrap}
+                  accessibilityLabel="Open similar screenshot"
+                >
+                  <Image source={{ uri: it.uri }} style={styles.similarThumb} contentFit="cover" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        );
+      })()}
+
       {/* Footer actions: share + delete */}
       <View style={styles.footer}>
         <Pressable onPress={onShare} style={styles.footerBtn} accessibilityLabel="Share screenshot">
@@ -1769,6 +1805,10 @@ const makeStyles = (c: Palette, f: FontSet) =>
       letterSpacing: 0.2,
       color: c.ink,
     },
+    similarWrap: { marginTop: 24 },
+    similarRow: { gap: 6, paddingTop: 8, paddingRight: 8 },
+    similarThumbWrap: { width: 76, height: 76, backgroundColor: c.parchment },
+    similarThumb: { width: '100%', height: '100%' },
     addTagRow: { marginTop: 8 },
     ambiguousRow: {
       marginTop: 12,
