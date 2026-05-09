@@ -12,6 +12,7 @@ import { CategoryIcon, type Category } from './CategoryIcon';
 import { Chip } from './Chip';
 import { LinksSection } from './detail/LinksSection';
 import { Lightbox } from './detail/Lightbox';
+import { SimilarRow } from './detail/SimilarRow';
 import { GhostHint } from './GhostHint';
 import { Iris } from './Iris';
 import { Shake } from './Shake';
@@ -19,7 +20,6 @@ import { useToast } from './Toast';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { addToCalendar } from '@/lib/calendar';
-import { findSimilar } from '@/lib/similar';
 import { dropFromAnalysisQueue } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
 import { heavyHaptic, successHaptic, tapHaptic, warnHaptic } from '@/lib/haptics';
@@ -1204,34 +1204,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </Pressable>
       )}
 
-      {/* Similar — tag-based "more like this". Hidden when no allItems was
-          passed (caller didn't opt in) or when nothing scores above zero. */}
-      {(() => {
-        if (!allItems || !onSelect) return null;
-        const similar = findSimilar(item, allItems, 8);
-        if (similar.length === 0) return null;
-        return (
-          <View style={styles.similarWrap}>
-            <Text style={styles.sectionLabel}>similar</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.similarRow}
-            >
-              {similar.map((it) => (
-                <Pressable
-                  key={it.id}
-                  onPress={() => onSelect(it.id)}
-                  style={styles.similarThumbWrap}
-                  accessibilityLabel="Open similar screenshot"
-                >
-                  <Image source={{ uri: it.uri }} style={styles.similarThumb} contentFit="cover" />
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        );
-      })()}
+      {onSelect && <SimilarRow item={item} allItems={allItems} onSelect={onSelect} />}
 
       {/* Footer actions: share + delete */}
       <View style={styles.footer}>
@@ -1424,10 +1397,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       letterSpacing: 0.2,
       color: c.ink,
     },
-    similarWrap: { marginTop: 24 },
-    similarRow: { gap: 6, paddingTop: 8, paddingRight: 8 },
-    similarThumbWrap: { width: 76, height: 76, backgroundColor: c.parchment },
-    similarThumb: { width: '100%', height: '100%' },
     addTagRow: { marginTop: 8 },
     ambiguousRow: {
       marginTop: 12,
