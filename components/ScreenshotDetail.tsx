@@ -649,13 +649,17 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           displace scroll content when it appears (avoids the awkward
           "page jumps down" feel when the user toggles a field at the
           bottom of the sheet). zIndex 2 keeps it above the parallax. */}
+      {/* Pending-changes bar — anchored to the BOTTOM of the sheet (above
+          the gesture nav inset) so it never floats awkwardly in the
+          middle of the content. Sits above the scroll, always visible
+          while the user has unsaved edits. */}
       {pendingCount > 0 && (
         <View
           style={[
             styles.pendingBar,
             {
               position: 'absolute',
-              top: hideImage ? 8 : IMAGE_MAX + 8,
+              bottom: insets.bottom + 12,
               left: 12,
               right: 12,
               zIndex: 2,
