@@ -7,6 +7,9 @@ export type SavedFilter = {
   filters: Filters;
   /** Free-text search query saved alongside the filters. */
   searchQuery?: string;
+  /** Optional row icon. Either a category key (renders CategoryIcon) or
+   *  any short string (typically a single emoji) rendered as text. */
+  icon?: string;
   pinned: boolean;
   createdAt: string;
 };
@@ -19,15 +22,23 @@ type SerializedFilters = {
   tagQueries?: string[];
   /** Optional free-text search saved alongside the structured filters. */
   searchQuery?: string;
+  /** Optional row icon (category key or emoji). Stored in the existing
+   *  `filters` jsonb column to avoid a schema migration. */
+  icon?: string;
 };
 
-const serializeFilters = (f: Filters, searchQuery?: string): SerializedFilters => ({
+const serializeFilters = (
+  f: Filters,
+  searchQuery?: string,
+  icon?: string,
+): SerializedFilters => ({
   categories: Array.from(f.categories),
   urgencies: Array.from(f.urgencies),
   statuses: Array.from(f.statuses),
   resonances: Array.from(f.resonances),
   tagQueries: Array.from(f.tagQueries),
   searchQuery: searchQuery?.trim() || undefined,
+  icon: icon?.trim() || undefined,
 });
 
 const deserializeFilters = (s: SerializedFilters | null | undefined): Filters => {

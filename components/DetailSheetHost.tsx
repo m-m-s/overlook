@@ -117,13 +117,6 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
         // parchment under the gesture nav (no grid bleed-through) and keeps
         // the footer above it.
         bottomInset={0}
-        // Disable the sheet's own content-pan gesture: when enabled, the
-        // sheet steals vertical drags from the inner BottomSheetScrollView
-        // and caps the scroll well before the bottom of content (the
-        // similar row + footer end up unreachable). The handle indicator
-        // at the top still drags the sheet between snap points; users can
-        // also flick from the very top of the scroll to dismiss.
-        enableContentPanningGesture={false}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"

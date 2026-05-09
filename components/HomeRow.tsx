@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from './Card';
 import type { CardData } from './Card';
+import { CategoryIcon, type Category } from './CategoryIcon';
 import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
 import { heavyHaptic } from '@/lib/haptics';
 import { useColors, useFonts } from '@/lib/themeContext';
@@ -53,6 +54,11 @@ type Props = {
    *  the untagged row. */
   onSecondary?: () => void;
   secondaryLabel?: string;
+  /** Optional icon shown to the LEFT of the title. Pass a category key
+   *  (one of CATEGORIES) to render its silhouette icon, or any short
+   *  string (typically a single emoji) to render as text. */
+  iconCategory?: Category;
+  iconEmoji?: string;
 };
 
 /**
@@ -81,6 +87,8 @@ export const HomeRow = ({
   onHide,
   onSecondary,
   secondaryLabel,
+  iconCategory,
+  iconEmoji,
 }: Props) => {
   const c = useColors();
   const f = useFonts();
@@ -91,6 +99,14 @@ export const HomeRow = ({
   return (
     <View style={styles.row}>
       <View style={styles.rowHeader}>
+        {iconCategory && (
+          <View style={styles.rowIcon}>
+            <CategoryIcon category={iconCategory} size={20} color={c.ink} />
+          </View>
+        )}
+        {iconEmoji && !iconCategory && (
+          <Text style={styles.rowEmoji}>{iconEmoji}</Text>
+        )}
         <Pressable
           onLongPress={() => {
             if (onTitleLongPress) {
@@ -182,6 +198,16 @@ const makeStyles = (c: Palette, f: FontSet) =>
       color: c.ink,
       letterSpacing: -0.3,
       textTransform: 'capitalize',
+    },
+    rowIcon: {
+      // Nudges down to align baseline-ish with the serif title; the
+      // header itself uses alignItems:'baseline' so without this nudge
+      // the icon floats above the text.
+      transform: [{ translateY: 2 }],
+    },
+    rowEmoji: {
+      fontSize: 20,
+      transform: [{ translateY: 2 }],
     },
     rowCount: {
       fontFamily: f.italic,

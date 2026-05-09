@@ -689,16 +689,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         ]}
         onScroll={onScroll}
       >
-      {/* Tap-outside-section catcher — Pressable wrapper. When the user
-          taps in the scroll's empty space (gaps between sections,
-          padding, etc.) we close all open edit modes. Inner Pressables
-          on chips/inputs/sections handle their own taps and don't bubble
-          here, so editing UI stays interactive. */}
-      <Pressable
-        onPress={() => {
-          if (editingSections.size > 0) closeAllEditing();
-        }}
-      >
+      {/* Was: Pressable wrapper that closed edit mode when user tapped
+          empty scroll space. Removed because it appeared to cap the
+          BottomSheetScrollView's measured content height — similar row +
+          spacer were unreachable. The "tap to exit edit mode" affordance
+          now lives on the section header's "done editing" link instead. */}
+      <View>
 
 
 
@@ -1243,7 +1239,7 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           (TODO: remove the marker once we've confirmed scroll behavior.) */}
       <View style={{ height: 4, backgroundColor: 'magenta', marginBottom: 4 }} />
       <View style={{ height: 250 + insets.bottom }} />
-      </Pressable>
+      </View>
       </BottomSheetScrollView>
 
       {/* Onboarding overlays */}
