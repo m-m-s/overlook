@@ -236,9 +236,9 @@ const styles = StyleSheet.create({
     fontFamily: 'PlayfairDisplay_500Medium',
     color: colors.ink,
     paddingVertical: 10,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
-    borderColor: colors.inkMuted,
+    borderColor: colors.ink,
   },
   iconLabel: {
     fontSize: 11,
@@ -277,9 +277,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 8,
     color: colors.ink,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
-    borderColor: colors.inkMuted,
+    borderColor: colors.ink,
   },
   toggleRow: {
     flexDirection: 'row',

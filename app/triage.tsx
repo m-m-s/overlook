@@ -636,9 +636,9 @@ const makeStyles = (c: Palette, f: FontSet) =>
       color: c.ink,
       paddingVertical: 10,
       paddingHorizontal: 12,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderStyle: 'dashed',
-      borderColor: c.inkMuted,
+      borderColor: c.ink,
       borderRadius: 4,
     },
     tagAddBtn: {

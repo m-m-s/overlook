@@ -264,7 +264,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
       fontSize: 16,
       color: c.ink,
       fontFamily: f.displayMedium,
-      borderBottomWidth: 2,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderStyle: 'dashed',
       borderColor: c.ink,
       paddingVertical: 8,

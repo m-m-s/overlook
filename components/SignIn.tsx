@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   input: {
-    borderBottomWidth: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderStyle: 'dashed',
     borderColor: colors.ink,
     paddingVertical: 12,
