@@ -1,7 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
   uri: string;
@@ -19,6 +21,7 @@ type Props = {
  * apply here because we're not inside a sheet's gesture context.
  */
 export const ZoomableImage = ({ uri, onClose }: Props) => {
+  const insets = useSafeAreaInsets();
   const scale = useRef(new Animated.Value(1)).current;
   const tx = useRef(new Animated.Value(0)).current;
   const ty = useRef(new Animated.Value(0)).current;
@@ -59,14 +62,27 @@ export const ZoomableImage = ({ uri, onClose }: Props) => {
       ty.setValue(savedTy.current + e.translationY);
       movedRef.current = true;
     })
-    .onEnd(() => {
+    .onEnd((e) => {
       const txv = (tx as unknown as { _value: number })._value;
       const tyv = (ty as unknown as { _value: number })._value;
       const sv = (scale as unknown as { _value: number })._value;
-      // Swipe-down to dismiss when not zoomed in: if scale is ~1 and the
-      // user dragged down >120px, close the lightbox.
-      if (sv <= 1.05 && Math.abs(tyv) > 120) {
-        onClose();
+      // Swipe-away to dismiss when not zoomed in: any vertical OR horizontal
+      // swipe past 120px (or fast flick past velocity 800) closes the lightbox.
+      if (sv <= 1.05) {
+        const farEnough =
+          Math.abs(tyv) > 120 ||
+          Math.abs(txv) > 120 ||
+          Math.abs(e.velocityY) > 800 ||
+          Math.abs(e.velocityX) > 800;
+        if (farEnough) {
+          onClose();
+          return;
+        }
+        // Snap back to center if the swipe wasn't far enough.
+        Animated.spring(tx, { toValue: 0, useNativeDriver: true }).start();
+        Animated.spring(ty, { toValue: 0, useNativeDriver: true }).start();
+        savedTx.current = 0;
+        savedTy.current = 0;
         return;
       }
       savedTx.current = txv;
@@ -86,8 +102,8 @@ export const ZoomableImage = ({ uri, onClose }: Props) => {
   const composed = Gesture.Race(tap, Gesture.Simultaneous(pinch, pan));
 
   return (
-    <GestureDetector gesture={composed}>
-      <View style={styles.container}>
+    <View style={styles.container}>
+      <GestureDetector gesture={composed}>
         <Animated.View
           style={{
             width: '100%',
@@ -95,14 +111,20 @@ export const ZoomableImage = ({ uri, onClose }: Props) => {
             transform: [{ translateX: tx }, { translateY: ty }, { scale }],
           }}
         >
-          <Image
-            source={{ uri }}
-            style={styles.image}
-            contentFit="contain"
-          />
+          <Image source={{ uri }} style={styles.image} contentFit="contain" />
         </Animated.View>
-      </View>
-    </GestureDetector>
+      </GestureDetector>
+      {/* Close button — explicit affordance on top of the gesture surface.
+          Tapping the image area (not the X) still closes via the tap gesture. */}
+      <Pressable
+        onPress={onClose}
+        hitSlop={12}
+        style={[styles.closeBtn, { top: insets.top + 12 }]}
+        accessibilityLabel="Close fullscreen image"
+      >
+        <Ionicons name="close" size={22} color="#fff" />
+      </Pressable>
+    </View>
   );
 };
 
@@ -114,5 +136,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   image: { width: '100%', height: '100%' },
+  closeBtn: {
+    position: 'absolute',
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 

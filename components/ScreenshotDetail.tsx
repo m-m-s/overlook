@@ -11,11 +11,11 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { Chip } from './Chip';
 import { LinksSection } from './detail/LinksSection';
+import { Lightbox } from './detail/Lightbox';
 import { GhostHint } from './GhostHint';
 import { Iris } from './Iris';
 import { Shake } from './Shake';
 import { useToast } from './Toast';
-import { ZoomableImage } from './ZoomableImage';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { addToCalendar } from '@/lib/calendar';
@@ -690,33 +690,11 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
 
 
 
-      {/* Fullscreen zoom — pinch-to-zoom + pan via gesture-handler.
-          Tap (no pan) closes. Double-tap not implemented yet. */}
-      <Modal
+      <Lightbox
         visible={zoomOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setZoomOpen(false)}
-        statusBarTranslucent
-      >
-        <ZoomableImage
-          uri={item.uri}
-          onClose={() => setZoomOpen(false)}
-        />
-        <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', paddingBottom: 24 }}>
-          <Text
-            style={{
-              color: c.parchment,
-              fontSize: 11,
-              letterSpacing: 1.4,
-              textTransform: 'uppercase',
-              opacity: 0.6,
-            }}
-          >
-            Tap to close
-          </Text>
-        </View>
-      </Modal>
+        uri={item.uri}
+        onClose={() => setZoomOpen(false)}
+      />
 
 
       {/* Categories → Subject as connected chips. Each part is tappable
