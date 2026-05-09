@@ -1231,8 +1231,9 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           contentContainerStyle.paddingBottom because BottomSheetScrollView
           on Android sometimes ignores it. Sized to clear the gesture nav
           plus a comfortable margin so the footer never sits flush against
-          the nav indicator. */}
-      <View style={{ height: 140 + insets.bottom }} />
+          the nav indicator. Generous 250px so the similar row + footer
+          are reachable on tall screens with edge-to-edge gesture nav. */}
+      <View style={{ height: 250 + insets.bottom }} />
       </Pressable>
       </BottomSheetScrollView>
 
