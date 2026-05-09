@@ -678,16 +678,20 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       )}
 
       <BottomSheetScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={[
           styles.scroll,
-          // bottomInset on the sheet is 0 (so parchment paints under the
-          // gesture nav). The scroll's own paddingBottom MUST clear the nav,
-          // so we use 120 as a base + insets.bottom for any extra reported
-          // safe-area. Without the 120 base, devices that report
-          // insets.bottom=0 leave the similar row + footer under the nav.
           { paddingTop: hideImage ? 12 : IMAGE_MAX + 16, paddingBottom: 120 + insets.bottom },
         ]}
         onScroll={onScroll}
+        onContentSizeChange={(w, h) => {
+
+          console.log('[ScreenshotDetail] content size', { w, h });
+        }}
+        onLayout={(e) => {
+
+          console.log('[ScreenshotDetail] viewport size', e.nativeEvent.layout);
+        }}
       >
       {/* Was: Pressable wrapper that closed edit mode when user tapped
           empty scroll space. Removed because it appeared to cap the
