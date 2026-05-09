@@ -67,6 +67,7 @@ const rowToSaved = (r: Row): SavedFilter => ({
   name: r.name,
   filters: deserializeFilters(r.filters),
   searchQuery: r.filters?.searchQuery,
+  icon: r.filters?.icon,
   pinned: r.pinned,
   createdAt: r.created_at,
 });
