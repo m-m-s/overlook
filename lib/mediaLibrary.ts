@@ -26,21 +26,39 @@ export const fingerprintAsset = (a: ScannedAsset): string =>
  * Find the device's Screenshots album. On Android most phones name this
  * "Screenshots". On iOS, screenshots have a media subtype that we filter
  * separately.
+ *
+ * Wrapped in try/catch because Expo Go on Android no longer grants full
+ * MEDIA_LIBRARY access — getAlbumAsync rejects with "Missing
+ * MEDIA_LIBRARY permissions". A dev build is required for the real flow.
  */
 export const findScreenshotsAlbum = async (): Promise<MediaLibrary.Album | null> => {
-  const candidates = ['Screenshots', 'Screenshot'];
-  for (const name of candidates) {
-    const album = await MediaLibrary.getAlbumAsync(name);
-    if (album) return album;
+  try {
+    const candidates = ['Screenshots', 'Screenshot'];
+    for (const name of candidates) {
+      const album = await MediaLibrary.getAlbumAsync(name);
+      if (album) return album;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[mediaLibrary] getAlbumAsync rejected (Expo Go limitation?)', err);
+    return null;
   }
-  return null;
 };
 
 export const requestMediaPermission = async (): Promise<boolean> => {
-  const { granted, canAskAgain, status } = await MediaLibrary.requestPermissionsAsync(false);
-  if (granted) return true;
-  if (!canAskAgain || status === 'denied') return false;
-  return false;
+  try {
+    // Pass granularPermissions=['photo'] so we don't auto-request AUDIO
+    // (which would crash because AUDIO isn't declared in our AndroidManifest).
+    const { granted, canAskAgain, status } = await MediaLibrary.requestPermissionsAsync(false, [
+      'photo',
+    ]);
+    if (granted) return true;
+    if (!canAskAgain || status === 'denied') return false;
+    return false;
+  } catch (err) {
+    console.warn('[mediaLibrary] requestPermissionsAsync rejected', err);
+    return false;
+  }
 };
 
 /**
@@ -56,13 +74,19 @@ export const scanAssets = async (
   let after: string | undefined;
   let safety = 0;
   while (safety++ < 200) {
-    const page = await MediaLibrary.getAssetsAsync({
-      album: album?.id,
-      mediaType: 'photo',
-      first: 100,
-      after,
-      sortBy: ['creationTime'],
-    });
+    let page;
+    try {
+      page = await MediaLibrary.getAssetsAsync({
+        album: album?.id,
+        mediaType: 'photo',
+        first: 100,
+        after,
+        sortBy: ['creationTime'],
+      });
+    } catch (err) {
+      console.warn('[mediaLibrary] getAssetsAsync rejected (Expo Go limitation?)', err);
+      break;
+    }
     for (const a of page.assets) {
       out.push({
         id: a.id,

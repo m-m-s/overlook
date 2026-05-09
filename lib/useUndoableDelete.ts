@@ -20,7 +20,7 @@ const offerDeleteFromDevice = async (assetIds: string[]): Promise<void> => {
         style: 'destructive',
         onPress: async () => {
           try {
-            const perm = await MediaLibrary.requestPermissionsAsync(true);
+            const perm = await MediaLibrary.requestPermissionsAsync(true, ['photo']);
             if (!perm.granted) {
               return;
             }
