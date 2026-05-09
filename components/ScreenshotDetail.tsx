@@ -685,15 +685,12 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         ]}
         onScroll={onScroll}
       >
-      {/* Tap-outside-section catcher — closes edit mode when the user
-          taps in the scroll's empty space. Inner Pressables on chips,
-          inputs, and section headers handle their own taps and don't
-          bubble up here, so editing UI stays interactive. */}
-      <Pressable
-        onPress={() => {
-          if (editingSections.size > 0) closeAllEditing();
-        }}
-      >
+      {/* Removed: Pressable wrapping all scroll content. Its presence
+          appeared to cap the BottomSheetScrollView's scroll travel —
+          gestures landing on the Pressable were being claimed before
+          they reached the scroll's pan handler. The "tap to exit edit
+          mode" UX now lives on each section's "done editing" link. */}
+      <View>
 
 
 
@@ -1230,10 +1227,10 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         </Pressable>
       </View>
       {/* Bottom safe-area spacer — explicit View instead of relying on
-          contentContainerStyle.paddingBottom (which BottomSheetScrollView
-          sometimes ignores on Android). Generous 600px so similar + footer
-          definitely clear the gesture nav even on tall screens. */}
-      <View style={{ height: 600 + insets.bottom }} />
+          contentContainerStyle.paddingBottom (BottomSheetScrollView is
+          inconsistent with it on Android). 140 is enough to push the
+          footer well above the gesture nav indicator. */}
+      <View style={{ height: 140 + insets.bottom }} />
       </Pressable>
       </BottomSheetScrollView>
 
