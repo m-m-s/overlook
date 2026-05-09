@@ -49,7 +49,13 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
     const c = useColors();
     const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
-    const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
+    // Single 100% snap. The 60/85/100 progressive snap pattern was capping
+    // BottomSheetScrollView's scroll travel (at non-100% snaps the sheet
+    // intercepts vertical pans as 'drag to expand' instead of routing them
+    // to the inner scroll). Going straight to full-screen sidesteps the
+    // gesture coordination entirely; user can dismiss via the handle drag-
+    // down or the Android back button.
+    const snapPoints = useMemo(() => ['100%'], []);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [sheetIndex, setSheetIndex] = useState(0);
 
