@@ -26,7 +26,7 @@ import { handleAuthDeepLink, useSession } from '@/lib/auth';
 import { colors } from '@/lib/colors';
 import { FilterProvider } from '@/lib/filtersContext';
 import { ScreenshotWatcherProvider } from '@/lib/screenshotWatcher';
-import { markOnboardingComplete, useOnboardingComplete } from '@/lib/settings';
+import { useOnboardingComplete } from '@/lib/settings';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { ThemeProvider, useThemeMode } from '@/lib/themeContext';
 
@@ -61,19 +61,9 @@ const RootGate = () => {
 
   // First-launch onboarding — five-step welcome that introduces local-first
   // privacy, asks for photos + notification permissions, and points the
-  // user at upload.
-  //
-  // Only fires when the user is in local-only mode (no supabase) OR doesn't
-  // have a session yet — having a session means they've been here before
-  // (they typed their email and clicked the magic link), so skip the welcome
-  // and silently mark it complete. Replayable from Settings.
+  // user at upload. Replayable from Settings → "Replay welcome flow".
   if (!onboardingDone) {
-    if (session) {
-      void markOnboardingComplete();
-      // fall through to the app while the flag persists in the background
-    } else {
-      return <Onboarding onComplete={() => setOnboardingDone(true)} />;
-    }
+    return <Onboarding onComplete={() => setOnboardingDone(true)} />;
   }
 
   return (
