@@ -1227,12 +1227,14 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
           <Text style={[styles.footerText, { color: '#C0392B' }]}>delete</Text>
         </Pressable>
       </View>
-      {/* Bottom safe-area spacer — explicit View instead of relying on
-          contentContainerStyle.paddingBottom because BottomSheetScrollView
-          on Android sometimes ignores it. Sized to clear the gesture nav
-          plus a comfortable margin so the footer never sits flush against
-          the nav indicator. Generous 250px so the similar row + footer
-          are reachable on tall screens with edge-to-edge gesture nav. */}
+      {/* Bottom safe-area spacer — explicit View, with a visible debug
+          marker so we can verify whether the scroll actually reaches the
+          bottom of content. If the user scrolls all the way down and
+          DOESN'T see the magenta line, scroll is being clipped externally
+          (sheet height issue). If they see it, padding/spacer math is
+          right and the footer is just below the nav offset.
+          (TODO: remove the marker once we've confirmed scroll behavior.) */}
+      <View style={{ height: 4, backgroundColor: 'magenta', marginBottom: 4 }} />
       <View style={{ height: 250 + insets.bottom }} />
       </Pressable>
       </BottomSheetScrollView>
