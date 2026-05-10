@@ -24,6 +24,54 @@ The AI assistant (Claude Code) reads CLAUDE.md on every session and treats devia
 
 This is the methodology to highlight in the portfolio case study: not "I built an app with AI" but "I designed a product with enough rigor that AI could implement it without me re-deciding the design language at every step."
 
+## Session 2026-05-09 (continued) — bottom card saga + UI polish
+
+### Bottom-card scroll architecture (after a LOT of iteration)
+
+Final landing config after settling the recurring 'cant scroll past similar' bug:
+
+- `bottomInset={0}` → sheet's parchment paints under the gesture nav (industry standard).
+- `snapPoints=['60%', '85%', '100%']` → progressive peek-then-expand UX, default 60%.
+- `enableContentPanningGesture` left at default → drag-up-on-content auto-expands sheet between snaps.
+- `imageGesture` (Pan + Pinch) wraps ONLY the absolute-positioned image header, not the whole sheet. Wrapping the whole sheet with an outer Pan was the recurring root cause of scroll caps — RNGH gestures nesting interfered with `BottomSheetScrollView`'s internal pan handler.
+- Inner Pressable-wrapping-content was ALSO eating gestures and capping scroll travel — replaced with plain `<View>`.
+- Inline footer at the end of scroll content. Explicit `<View height={300+insets.bottom}>` spacer pushes footer + similar above the gesture nav indicator. `BottomSheetScrollView`'s `contentContainerStyle.paddingBottom` is unreliable on Android — a real layout child enforces clearance.
+- Lightbox `Modal` cannot host RNGH gestures cleanly without a nested `GestureHandlerRootView`, which crashes on Android. Dropped swipe-to-close inside the lightbox; tap and an explicit X button cover dismissal.
+
+Tradeoff: prev/next horizontal swipe works only on the image, not on the whole card body. Adding it back to the card body requires an outer Pan with strict failOffsetY/activeOffsetX — revisit if it's worth the gesture-coordination cost.
+
+### Shipped (features)
+
+- **`enableContentPanningGesture` lessons captured in code comments** so future-me doesn't re-litigate this.
+- **Saved filter icon picker** — when creating a saved filter, pick a category silhouette OR type any emoji. Stored in the existing `filters` jsonb (no schema migration). Rendered on home pinned-filter rows. ([components/SaveFilterButton.tsx](components/SaveFilterButton.tsx), [components/HomeRow.tsx](components/HomeRow.tsx))
+- **Unpin from home (in reorder mode)** — long-press a row title to enter reorder mode, then tap the X on a pinned saved-filter row to call `togglePinned(false)`. Mirrors the existing X-to-hide-category-row affordance. ([app/index.tsx](app/index.tsx))
+- **Triage auto-advance after AI analyze** — once analysis populates the missing fields, the queue auto-moves to the next card.
+- **Sticky home nav UX** — wordmark navigates home, iris-alone opens sidebar (separated from each other so taps don't conflict). When sidebar closes from home WITH active filters, auto-routes to /library where filtering applies.
+- **Card grid 4:5 portrait** — replaces square thumbnails. Less center-cropping for portrait-shape screenshots, only ~25% taller than square.
+- **Home rows full-bleed dashed underline** — row header titles + see-all link sit above an SVG dashed line stroked at 0.6 width with `'3, 3'` dashArray. RN's CSS `borderStyle:'dashed'` looked dotted, SVG gives full control.
+- **Gallery upload flow** — picked images route through the same post-screenshot popup as watcher-detected screenshots (one-at-a-time review with resonance/urgency/tag chips + Analyze/Add/Dismiss). Removed the bulk-import path.
+
+### Shipped (fixes)
+
+- **AI-tagging toggle autosaves** — was previously staged into the pending-changes bar. Privacy switch is binary; confirmation adds friction.
+- **Library back-navigation** — pops back to where the user came from instead of clearing filters in place. Filters persist across navigation.
+- **Calendar lazy-require** — `expo-calendar` is a native module not in Expo Go; importing at module top crashed the Android bundle. Now lazy-required only inside the iOS branch.
+- **Replay welcome flow** — silently re-marked onboarding complete when a Supabase session was present. Dropped the shortcut.
+
+### Shipped (refactors)
+
+- **`<EditableField>`** — generic helper for the metadata sections in the card detail (long-press → edit → done-editing affordance + shake animation). Resonance / urgency / notes use it. Status/difficulty/time stays inline (multi-field combined toggle doesn't fit the single-field shape). Categories/subject/tags also stay inline (inter-section coupling). ([components/detail/EditableField.tsx](components/detail/EditableField.tsx))
+- **All dashed dividers** unified to hairline + ink color across SaveFilterButton, SignIn, PostScreenshotPopup, Sidebar, BulkTagSheet, app/triage, app/upload, app/saved-filters, ScreenshotDetail. Matches the home-row underline aesthetic.
+
+### Flagged for review (still open)
+
+- **Prev/next horizontal swipe** is image-only (regression from earlier). Outer Pan to put it back on the whole card requires gesture-priority work to avoid breaking scroll.
+- **ScreenshotDetail.tsx** is still ~1600 lines. Resonance/urgency/notes use `<EditableField>` now; the others (status/difficulty/time, tags, category, subject) are inline because they have shape-specific logic.
+- **Editing a saved filter's icon after creation** — saved-filters page allows rename only. Adding an icon-edit affordance there would close the loop.
+- **app/upload.tsx** still 1003 lines (5-phase state machine). Future split needs to extract `runScan` / `runProcessing` business logic into a hook before the JSX can be pulled apart.
+
+---
+
 ## Session 2026-05-08 → 2026-05-09 — features + major bottom-card refactor
 
 ### Shipped (features)
