@@ -10,6 +10,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { Chip } from './Chip';
+import { EditableField } from './detail/EditableField';
 import { LinksSection } from './detail/LinksSection';
 import { Lightbox } from './detail/Lightbox';
 import { SimilarRow } from './detail/SimilarRow';
@@ -893,90 +894,98 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
       })()}
       </Section>
 
-      {/* Resonance */}
-      <Section onToggle={() => toggleEditing('resonance')}>
-      <SectionHeader label="resonance" editing={isEditing('resonance')} onExit={() => toggleEditing('resonance')} />
-      {isEditing('resonance') ? (
-        <Shake trigger={isEditing('resonance')} style={styles.row}>
-          {RESONANCE_LEVELS.map((r) => {
-            const active = view.resonance === r;
-            return (
-              <Pressable
-                key={r}
-                onPress={() => {
-                  tapHaptic();
-                  setResonance(r);
-                }}
-                style={[styles.irisBtn, active && styles.irisBtnActive]}
-              >
-                <Iris level={r} size={22} color={c.ink} filled={active} />
-              </Pressable>
-            );
-          })}
-        </Shake>
-      ) : view.resonance ? (
-        <View style={styles.irisBtn}>
-          <Iris level={view.resonance} size={22} color={c.ink} />
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-      </Section>
+      <EditableField
+        sectionKey="resonance"
+        label="resonance"
+        editing={isEditing('resonance')}
+        onToggle={() => toggleEditing('resonance')}
+        hasValue={view.resonance != null}
+        read={
+          view.resonance ? (
+            <View style={styles.irisBtn}>
+              <Iris level={view.resonance} size={22} color={c.ink} />
+            </View>
+          ) : null
+        }
+        edit={
+          <View style={styles.row}>
+            {RESONANCE_LEVELS.map((r) => {
+              const active = view.resonance === r;
+              return (
+                <Pressable
+                  key={r}
+                  onPress={() => {
+                    tapHaptic();
+                    setResonance(r);
+                  }}
+                  style={[styles.irisBtn, active && styles.irisBtnActive]}
+                >
+                  <Iris level={r} size={22} color={c.ink} filled={active} />
+                </Pressable>
+              );
+            })}
+          </View>
+        }
+      />
 
-      {/* Urgency */}
-      <Section onToggle={() => toggleEditing('urgency')}>
-      <SectionHeader label="urgency" editing={isEditing('urgency')} onExit={() => toggleEditing('urgency')} />
-      {isEditing('urgency') ? (
-        <Shake trigger={isEditing('urgency')} style={[styles.row, styles.wrap]}>
-          {URGENCIES.map((u) => {
-            const active = view.urgency === u.key;
-            return (
+      <EditableField
+        sectionKey="urgency"
+        label="urgency"
+        editing={isEditing('urgency')}
+        onToggle={() => toggleEditing('urgency')}
+        hasValue={!!view.urgency}
+        read={
+          view.urgency ? (
+            <View style={[styles.row, { flexWrap: 'wrap', alignItems: 'center' }]}>
               <Chip
-                key={u.key}
-                label={u.label}
+                label={URGENCIES.find((u) => u.key === view.urgency)?.label ?? view.urgency}
                 variant="meta"
-                selected={active}
-                color={active ? urgencyColors[u.key] : c.inkMuted}
-                onPress={() => setUrgency(u.key)}
+                selected
+                color={urgencyColors[view.urgency] ?? c.ink}
               />
-            );
-          })}
-        </Shake>
-      ) : view.urgency ? (
-        <View style={[styles.row, { flexWrap: 'wrap', alignItems: 'center' }]}>
-          <Chip
-            label={URGENCIES.find((u) => u.key === view.urgency)?.label ?? view.urgency}
-            variant="meta"
-            selected
-            color={urgencyColors[view.urgency] ?? c.ink}
-          />
-          {item.urgencyDate && (
-            <Pressable
-              onPress={async () => {
-                const r = await addToCalendar(
-                  view.subject ?? view.category ?? 'Overlook event',
-                  item.urgencyDate!,
-                  view.notes ?? undefined,
-                );
-                if (r.ok) {
-                  void successHaptic();
-                  toast.show('Opening calendar…');
-                } else {
-                  toast.error(r.error ?? 'Could not open calendar');
-                }
-              }}
-              style={styles.calendarBtn}
-              accessibilityLabel="Add to calendar"
-            >
-              <Ionicons name="calendar-outline" size={14} color={c.ink} />
-              <Text style={styles.calendarBtnText}>Add to calendar</Text>
-            </Pressable>
-          )}
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-      </Section>
+              {item.urgencyDate && (
+                <Pressable
+                  onPress={async () => {
+                    const r = await addToCalendar(
+                      view.subject ?? view.category ?? 'Overlook event',
+                      item.urgencyDate!,
+                      view.notes ?? undefined,
+                    );
+                    if (r.ok) {
+                      void successHaptic();
+                      toast.show('Opening calendar…');
+                    } else {
+                      toast.error(r.error ?? 'Could not open calendar');
+                    }
+                  }}
+                  style={styles.calendarBtn}
+                  accessibilityLabel="Add to calendar"
+                >
+                  <Ionicons name="calendar-outline" size={14} color={c.ink} />
+                  <Text style={styles.calendarBtnText}>Add to calendar</Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null
+        }
+        edit={
+          <View style={[styles.row, styles.wrap]}>
+            {URGENCIES.map((u) => {
+              const active = view.urgency === u.key;
+              return (
+                <Chip
+                  key={u.key}
+                  label={u.label}
+                  variant="meta"
+                  selected={active}
+                  color={active ? urgencyColors[u.key] : c.inkMuted}
+                  onPress={() => setUrgency(u.key)}
+                />
+              );
+            })}
+          </View>
+        }
+      />
 
       {/* Status · difficulty · time-to-complete — combined into one section to
           save vertical space. When read-only, all three values render inline
@@ -1137,24 +1146,24 @@ export const ScreenshotDetail = ({ item, onChange, onDelete, snapIndex = 0, onNe
         }}
       />
 
-      {/* Notes — read mode shows text; edit mode shows multi-line input */}
-      <Section onToggle={() => toggleEditing('notes')}>
-      <SectionHeader label="notes" editing={isEditing('notes')} onExit={() => toggleEditing('notes')} />
-      {isEditing('notes') ? (
-        <BottomSheetTextInput
-          value={view.notes ?? ''}
-          onChangeText={(t) => stage({ notes: t })}
-          multiline
-          placeholder="quick thought, link, anything…"
-          placeholderTextColor={c.inkMuted}
-          style={styles.notesInput}
-        />
-      ) : view.notes ? (
-        <Text style={styles.notesReadOnly}>{view.notes}</Text>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
-      </Section>
+      <EditableField
+        sectionKey="notes"
+        label="notes"
+        editing={isEditing('notes')}
+        onToggle={() => toggleEditing('notes')}
+        hasValue={!!view.notes}
+        read={view.notes ? <Text style={styles.notesReadOnly}>{view.notes}</Text> : null}
+        edit={
+          <BottomSheetTextInput
+            value={view.notes ?? ''}
+            onChangeText={(t) => stage({ notes: t })}
+            multiline
+            placeholder="quick thought, link, anything…"
+            placeholderTextColor={c.inkMuted}
+            style={styles.notesInput}
+          />
+        }
+      />
 
       {/* AI tagging toggle. The DB field is `local_only` (privacy-first
           invariant), but the UI surfaces it as the positive "Allow AI
