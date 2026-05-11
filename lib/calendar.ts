@@ -69,6 +69,7 @@ export const addToCalendar = async (
   try {
     let Calendar: ExpoCalendarModule;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       Calendar = require('expo-calendar') as ExpoCalendarModule;
     } catch {
       return { ok: false, error: 'Calendar module unavailable in this build' };

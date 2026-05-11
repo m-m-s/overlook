@@ -19,7 +19,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
 import { useToast } from '@/components/Toast';
 import { useDemoMode } from '@/lib/demoMode';
-import { applyFilters, filtersActive } from '@/lib/filters';
+import { applyFilters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { searchItems } from '@/lib/search';
 import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';

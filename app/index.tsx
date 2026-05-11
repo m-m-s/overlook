@@ -13,12 +13,10 @@ import { GhostHint } from '@/components/GhostHint';
 import { HomeRow } from '@/components/HomeRow';
 import { Iris } from '@/components/Iris';
 import { Sidebar } from '@/components/Sidebar';
-import { useToast } from '@/components/Toast';
 import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { getQueuedIds } from '@/lib/analysisQueue';
 import { signOut, useSession } from '@/lib/auth';
 import { useDemoMode } from '@/lib/demoMode';
-import { heavyHaptic } from '@/lib/haptics';
 import type { FontSet, Palette } from '@/lib/colors';
 import { setBatchState, useBatchState } from '@/lib/batchState';
 import { applyFilters as applyFiltersToItems, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
@@ -120,8 +118,6 @@ export default function HomeScreen() {
   useEffect(() => {
     void loadItems();
   }, [loadItems, demoOn]);
-
-  const toast = useToast();
 
   // First-time home hint: ghost-hand swipe-right to telegraph the sidebar.
   const [showSwipeHint, setShowSwipeHint] = useState(false);

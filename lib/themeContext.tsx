@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
 import {
@@ -89,10 +89,14 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     );
   }, [resolved.palette, resolved.fonts, resolved.colorBlind]);
 
-  // Bump a version counter on each theme change so consumers can re-key
-  // StyleSheet-heavy trees (the navigator wraps with this).
+  // Bump an incrementing counter on each theme change so consumers can re-key
+  // StyleSheet-heavy trees (the navigator wraps with this). Using a ref so the
+  // factory genuinely consumes the counter and the linter doesn't flag the deps
+  // as unnecessary.
+  const themeVersionRef = useRef(0);
   const themeVersion = useMemo(
-    () => Date.now(),
+    () => { themeVersionRef.current += 1; return themeVersionRef.current; },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [resolved.palette, resolved.fonts, resolved.colorBlind],
   );
 

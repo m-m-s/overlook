@@ -122,6 +122,9 @@ export const ScreenshotWatcherProvider = ({ children }: { children: ReactNode })
     return () => {
       mounted = false;
     };
+    // scan is a stable useCallback (deps are refs); this effect runs once on
+    // mount to pick up screenshots taken while the app was closed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const enqueueAsset = useCallback((a: MediaLibrary.Asset) => {

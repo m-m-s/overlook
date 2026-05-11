@@ -25,21 +25,17 @@ import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
 import { addToCalendar } from '@/lib/calendar';
 import { dropFromAnalysisQueue } from '@/lib/analysisQueue';
 import { useSession } from '@/lib/auth';
-import { heavyHaptic, successHaptic, tapHaptic, warnHaptic } from '@/lib/haptics';
+import { successHaptic, tapHaptic, warnHaptic } from '@/lib/haptics';
 import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
-import {
-  capitalize,
-  RESONANCE_LEVELS,
-  URGENCIES,
-} from '@/lib/options';
+import { RESONANCE_LEVELS, URGENCIES } from '@/lib/options';
 import {
   fetchScreenshotMeta,
   updateScreenshot,
   type TypedTag,
 } from '@/lib/screenshots';
 import { buildTagFromValue, rememberTagType } from '@/lib/tagDictionary';
-import type { ActionLink, LocalScreenshot } from '@/lib/uploads';
+import type { LocalScreenshot } from '@/lib/uploads';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 

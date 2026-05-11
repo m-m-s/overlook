@@ -4,8 +4,6 @@ import {
   type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { ScreenshotDetail } from './ScreenshotDetail';
 import { useColors } from '@/lib/themeContext';
 import type { LocalScreenshot } from '@/lib/uploads';
@@ -47,7 +45,6 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
     ref,
   ) {
     const c = useColors();
-    const insets = useSafeAreaInsets();
     const sheetRef = useRef<BottomSheetModal>(null);
     const snapPoints = useMemo(() => ['60%', '85%', '100%'], []);
     const [selectedId, setSelectedId] = useState<string | null>(null);
