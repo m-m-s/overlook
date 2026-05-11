@@ -38,6 +38,18 @@ type Props = {
   userEmail?: string | null;
 };
 
+const FilterSection = ({ label, children }: { label: string; children: React.ReactNode }) => {
+  const c = useColors();
+  const f = useFonts();
+  const s = useMemo(() => makeStyles(c, f), [c, f]);
+  return (
+    <>
+      <Text style={s.label}>{label}</Text>
+      <View style={[s.chipWrap, s.row]}>{children}</View>
+    </>
+  );
+};
+
 const toggleSet = <T,>(s: Set<T>, v: T): Set<T> => {
   const next = new Set(s);
   if (next.has(v)) next.delete(v);
@@ -262,9 +274,7 @@ export const Sidebar = ({
             )}
           </View>
 
-          {/* Category — icon + label per spec ("Category icon chips") */}
-          <Text style={styles.label}>category</Text>
-          <View style={[styles.chipWrap, styles.row]}>
+          <FilterSection label="category">
             {CATEGORIES.map((cat) => {
               const selected = filters.categories.has(cat);
               return (
@@ -279,27 +289,16 @@ export const Sidebar = ({
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  <CategoryIcon
-                    category={cat}
-                    size={18}
-                    color={selected ? c.parchment : c.ink}
-                  />
-                  <Text
-                    style={[
-                      styles.iconChipText,
-                      { color: selected ? c.parchment : c.ink },
-                    ]}
-                  >
+                  <CategoryIcon category={cat} size={18} color={selected ? c.parchment : c.ink} />
+                  <Text style={[styles.iconChipText, { color: selected ? c.parchment : c.ink }]}>
                     {capitalize(cat)}
                   </Text>
                 </Pressable>
               );
             })}
-          </View>
+          </FilterSection>
 
-          {/* Urgency */}
-          <Text style={styles.label}>urgency</Text>
-          <View style={[styles.chipWrap, styles.row]}>
+          <FilterSection label="urgency">
             {URGENCIES.map((u) => {
               const selected = filters.urgencies.has(u.key);
               return (
@@ -313,37 +312,27 @@ export const Sidebar = ({
                 />
               );
             })}
-          </View>
+          </FilterSection>
 
-          {/* Resonance — iris icon chips per spec */}
-          <Text style={styles.label}>resonance</Text>
-          <View style={[styles.chipWrap, styles.row]}>
+          <FilterSection label="resonance">
             {RESONANCE_LEVELS.map((r) => {
               const selected = filters.resonances.has(r);
               return (
                 <Pressable
                   key={r}
-                  onPress={() =>
-                    onFiltersChange({ ...filters, resonances: toggleSet(filters.resonances, r) })
-                  }
+                  onPress={() => onFiltersChange({ ...filters, resonances: toggleSet(filters.resonances, r) })}
                   style={[styles.iconChip, selected && styles.iconChipOn]}
                   accessibilityLabel={`Filter by resonance level ${r}`}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                 >
-                  <Iris
-                    level={r}
-                    size={22}
-                    color={selected ? c.parchment : c.ink}
-                  />
+                  <Iris level={r} size={22} color={selected ? c.parchment : c.ink} />
                 </Pressable>
               );
             })}
-          </View>
+          </FilterSection>
 
-          {/* Status */}
-          <Text style={styles.label}>status</Text>
-          <View style={[styles.chipWrap, styles.row]}>
+          <FilterSection label="status">
             {STATUSES.map((s) => {
               const selected = filters.statuses.has(s.key);
               return (
@@ -357,7 +346,7 @@ export const Sidebar = ({
                 />
               );
             })}
-          </View>
+          </FilterSection>
 
           <View style={styles.divider} />
 
