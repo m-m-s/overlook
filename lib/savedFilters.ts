@@ -150,3 +150,17 @@ export const renameSavedFilter = async (id: string, name: string): Promise<void>
     .eq('id', id);
   if (error) console.warn('[savedFilters] rename failed', error);
 };
+
+export const updateSavedFilterIcon = async (
+  id: string,
+  icon: string | undefined,
+  filters: Filters,
+  searchQuery?: string,
+): Promise<void> => {
+  if (!isSupabaseConfigured) return;
+  const { error } = await supabase
+    .from('saved_filters')
+    .update({ filters: serializeFilters(filters, searchQuery, icon) })
+    .eq('id', id);
+  if (error) console.warn('[savedFilters] update icon failed', error);
+};

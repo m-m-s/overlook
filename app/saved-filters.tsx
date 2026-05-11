@@ -1,21 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CategoryIcon, type Category } from '@/components/CategoryIcon';
 import { Iris } from '@/components/Iris';
 import { useToast } from '@/components/Toast';
 import type { FontSet, Palette } from '@/lib/colors';
 import { filtersActive } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { heavyHaptic } from '@/lib/haptics';
+import { CATEGORIES } from '@/lib/options';
 import { useColors, useFonts } from '@/lib/themeContext';
 import {
   deleteSavedFilter,
   listSavedFilters,
   renameSavedFilter,
   togglePinned,
+  updateSavedFilterIcon,
   type SavedFilter,
 } from '@/lib/savedFilters';
 
@@ -27,6 +30,17 @@ export default function SavedFiltersScreen() {
   const insets = useSafeAreaInsets();
   const [renameTarget, setRenameTarget] = useState<SavedFilter | null>(null);
   const [renameText, setRenameText] = useState('');
+  const [editIcon, setEditIcon] = useState('');
+  const [editEmojiDraft, setEditEmojiDraft] = useState('');
+
+  useEffect(() => {
+    if (renameTarget) {
+      const icon = renameTarget.icon ?? '';
+      setEditIcon(icon);
+      const isCategory = icon && (CATEGORIES as readonly string[]).includes(icon);
+      setEditEmojiDraft(isCategory ? '' : icon);
+    }
+  }, [renameTarget]);
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
@@ -60,7 +74,7 @@ export default function SavedFiltersScreen() {
     Alert.alert(sf.name, 'Manage saved filter', [
       { text: 'cancel', style: 'cancel' },
       {
-        text: 'rename',
+        text: 'edit',
         onPress: () => {
           setRenameTarget(sf);
           setRenameText(sf.name);
@@ -106,12 +120,22 @@ export default function SavedFiltersScreen() {
           contentContainerStyle={{ paddingBottom: 60 + insets.bottom }}
           renderItem={({ item }) => {
             const count = filtersActive(item.filters);
+            const iconIsCategory = item.icon && (CATEGORIES as readonly string[]).includes(item.icon);
             return (
               <Pressable
                 onPress={() => onApply(item)}
                 onLongPress={() => onLongPress(item)}
                 style={styles.row}
               >
+                <View style={styles.rowIcon}>
+                  {iconIsCategory ? (
+                    <CategoryIcon category={item.icon as Category} size={20} color={c.ink} />
+                  ) : item.icon ? (
+                    <Text style={styles.rowEmoji}>{item.icon}</Text>
+                  ) : (
+                    <Ionicons name="bookmark-outline" size={18} color={c.inkMuted} />
+                  )}
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowName}>{item.name}</Text>
                   <Text style={styles.rowMeta}>
@@ -132,8 +156,8 @@ export default function SavedFiltersScreen() {
         />
       )}
 
-      {/* Rename modal — Alert.prompt is iOS-only, so we render a simple
-          centered modal with a text input that works on both platforms. */}
+      {/* Edit modal — name + icon picker. Alert.prompt is iOS-only so we
+          render a cross-platform modal. */}
       <Modal
         visible={renameTarget !== null}
         transparent
@@ -147,7 +171,7 @@ export default function SavedFiltersScreen() {
         >
         <Pressable style={StyleSheet.absoluteFill} onPress={() => setRenameTarget(null)} />
         <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Rename filter</Text>
+            <Text style={styles.modalTitle}>Edit filter</Text>
             <TextInput
               value={renameText}
               onChangeText={setRenameText}
@@ -156,6 +180,51 @@ export default function SavedFiltersScreen() {
               autoFocus
               style={styles.modalInput}
             />
+
+            <Text style={styles.iconLabel}>Icon (optional)</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.iconRow}
+            >
+              <Pressable
+                onPress={() => { setEditIcon(''); setEditEmojiDraft(''); }}
+                style={[styles.iconChip, !editIcon && styles.iconChipOn]}
+                accessibilityLabel="No icon"
+              >
+                <Text style={[styles.iconChipText, !editIcon && { color: c.parchment }]}>none</Text>
+              </Pressable>
+              {CATEGORIES.map((cat) => {
+                const selected = editIcon === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => { setEditIcon(cat); setEditEmojiDraft(''); }}
+                    style={[styles.iconChip, selected && styles.iconChipOn]}
+                    accessibilityLabel={`Use ${cat} icon`}
+                  >
+                    <CategoryIcon
+                      category={cat as Category}
+                      size={18}
+                      color={selected ? c.parchment : c.ink}
+                    />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <TextInput
+              value={editEmojiDraft}
+              onChangeText={(v) => {
+                setEditEmojiDraft(v);
+                const first = Array.from(v)[0] ?? '';
+                setEditIcon(first);
+              }}
+              placeholder="…or type an emoji"
+              placeholderTextColor={c.inkMuted}
+              maxLength={4}
+              style={styles.emojiInput}
+            />
+
             <View style={styles.modalBtnRow}>
               <Pressable
                 onPress={() => setRenameTarget(null)}
@@ -167,17 +236,28 @@ export default function SavedFiltersScreen() {
                 onPress={async () => {
                   if (!renameTarget) return;
                   const trimmed = renameText.trim();
-                  if (!trimmed || trimmed === renameTarget.name) {
-                    setRenameTarget(null);
-                    return;
+                  const newIcon = editIcon || undefined;
+                  const nameChanged = trimmed && trimmed !== renameTarget.name;
+                  const iconChanged = newIcon !== (renameTarget.icon || undefined);
+                  if (nameChanged) await renameSavedFilter(renameTarget.id, trimmed);
+                  if (iconChanged) {
+                    await updateSavedFilterIcon(
+                      renameTarget.id,
+                      newIcon,
+                      renameTarget.filters,
+                      renameTarget.searchQuery,
+                    );
                   }
-                  await renameSavedFilter(renameTarget.id, trimmed);
-                  setItems((prev) =>
-                    prev.map((it) =>
-                      it.id === renameTarget.id ? { ...it, name: trimmed } : it,
-                    ),
-                  );
-                  toast.show('renamed');
+                  if (nameChanged || iconChanged) {
+                    setItems((prev) =>
+                      prev.map((it) =>
+                        it.id === renameTarget.id
+                          ? { ...it, name: trimmed || it.name, icon: newIcon }
+                          : it,
+                      ),
+                    );
+                    toast.show('saved');
+                  }
                   setRenameTarget(null);
                 }}
                 style={[styles.modalBtn, styles.modalBtnSave]}
@@ -240,6 +320,43 @@ const makeStyles = (c: Palette, f: FontSet) =>
     },
     pinBtn: { padding: 6 },
     sep: { height: 1, backgroundColor: c.divider, marginHorizontal: 20 },
+    rowIcon: { width: 32, alignItems: 'center', justifyContent: 'center' },
+    rowEmoji: { fontSize: 20 },
+    iconLabel: {
+      fontSize: 11,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: c.inkMuted,
+      marginTop: 18,
+      marginBottom: 8,
+    },
+    iconRow: { flexDirection: 'row', gap: 6, paddingRight: 8 },
+    iconChip: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: c.ink,
+      borderRadius: 4,
+      paddingHorizontal: 8,
+    },
+    iconChipOn: { backgroundColor: c.ink },
+    iconChipText: {
+      fontSize: 11,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: c.ink,
+    },
+    emojiInput: {
+      fontSize: 20,
+      paddingVertical: 8,
+      marginTop: 8,
+      color: c.ink,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderStyle: 'dashed',
+      borderColor: c.ink,
+    },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.45)',
