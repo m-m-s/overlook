@@ -46,21 +46,19 @@ export const EditableField = ({
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
   return (
-    <Pressable
-      onLongPress={() => {
-        void heavyHaptic();
-        onToggle();
-      }}
-      delayLongPress={350}
-    >
-      <View style={styles.head}>
+    <View>
+      <Pressable
+        onLongPress={() => { void heavyHaptic(); onToggle(); }}
+        delayLongPress={350}
+        style={styles.head}
+      >
         <Text style={styles.label}>{label}</Text>
         {editing && (
           <Pressable onPress={onToggle} hitSlop={8} style={styles.exit}>
             <Text style={styles.exitText}>done editing</Text>
           </Pressable>
         )}
-      </View>
+      </Pressable>
       {editing ? (
         <Shake trigger={editing}>{edit}</Shake>
       ) : hasValue ? (
@@ -68,7 +66,7 @@ export const EditableField = ({
       ) : (
         <Text style={styles.empty}>not set</Text>
       )}
-    </Pressable>
+    </View>
   );
 };
 

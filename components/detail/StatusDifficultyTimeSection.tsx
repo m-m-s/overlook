@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
-import { LayoutAnimation, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from '../Chip';
-import { Section } from './SectionHelpers';
 import { capitalize, DIFFICULTIES, STATUSES, TIMES_TO_COMPLETE } from '@/lib/options';
 import { statusColors } from '@/lib/colors';
 import type { FontSet, Palette } from '@/lib/colors';
@@ -56,13 +55,13 @@ export const StatusDifficultyTimeSection = ({
   };
 
   return (
-    <Section onToggle={toggle}>
-      <View style={styles.head}>
+    <View>
+      <Pressable onLongPress={toggle} delayLongPress={350} style={styles.head}>
         <Text style={styles.label}>
           status · difficulty · time
           {editing && <Text style={styles.labelEditing}>  · editing</Text>}
         </Text>
-      </View>
+      </Pressable>
 
       {editing ? (
         <View style={{ gap: 12 }}>
@@ -152,7 +151,7 @@ export const StatusDifficultyTimeSection = ({
       ) : (
         <Text style={styles.emptyHint}>not set</Text>
       )}
-    </Section>
+    </View>
   );
 };
 

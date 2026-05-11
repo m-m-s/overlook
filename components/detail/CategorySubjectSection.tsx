@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Chip } from '../Chip';
 import { CategoryIcon, type Category } from '../CategoryIcon';
 import { Shake } from '../Shake';
-import { Section, SectionHeader } from './SectionHelpers';
+import { SectionHeader } from './SectionHelpers';
 import { capitalize, CATEGORIES } from '@/lib/options';
 import type { FontSet, Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
@@ -82,8 +82,8 @@ export const CategorySubjectSection = ({
 
       {/* Category edit — only when editing or nothing is set */}
       {(isEditingCategory || (!category && !subject)) && (
-        <Section onToggle={onToggleCategory}>
-          <SectionHeader label="category" editing={isEditingCategory} onExit={onToggleCategory} />
+        <View>
+          <SectionHeader label="category" editing={isEditingCategory} onExit={onToggleCategory} onToggle={onToggleCategory} />
           {isEditingCategory ? (
             <Shake trigger={isEditingCategory} style={styles.chipRow}>
               {CATEGORIES.map((cat) => {
@@ -110,13 +110,13 @@ export const CategorySubjectSection = ({
           ) : (
             <Text style={styles.emptyHint}>not set</Text>
           )}
-        </Section>
+        </View>
       )}
 
       {/* Subject edit — only when editing or nothing is set */}
       {(isEditingSubject || (!subject && !category)) && (
-        <Section onToggle={onToggleSubject}>
-          <SectionHeader label="subject" editing={isEditingSubject} onExit={onToggleSubject} />
+        <View>
+          <SectionHeader label="subject" editing={isEditingSubject} onExit={onToggleSubject} onToggle={onToggleSubject} />
           {isEditingSubject ? (
             <>
               {aiSubjects.length > 0 && !subject && (
@@ -143,7 +143,7 @@ export const CategorySubjectSection = ({
           ) : (
             <Text style={styles.emptyHint}>not set</Text>
           )}
-        </Section>
+        </View>
       )}
     </>
   );

@@ -7,39 +7,27 @@ import { useColors, useFonts } from '@/lib/themeContext';
 import type { TypedTag } from '@/lib/screenshots';
 import { TAG_TYPES } from '@/lib/options';
 
-/** Long-press wrapper that toggles a section's edit mode. */
-export const Section = ({
-  onToggle,
-  children,
-}: {
-  onToggle: () => void;
-  children: React.ReactNode;
-}) => (
-  <Pressable
-    onLongPress={() => {
-      void heavyHaptic();
-      onToggle();
-    }}
-    delayLongPress={350}
-  >
-    {children}
-  </Pressable>
-);
-
-/** Section label row with optional "done editing" exit link. */
+/**
+ * Section label row. When onToggle is provided, the label row itself is the
+ * long-press target for entering edit mode — NOT the full section body.
+ * Scoping the Pressable here (rather than wrapping the whole section) prevents
+ * it from competing with BottomSheetScrollView's RNGH gesture and capping scroll.
+ */
 export const SectionHeader = ({
   label,
   editing,
   onExit,
+  onToggle,
 }: {
   label: string;
   editing: boolean;
   onExit?: () => void;
+  onToggle?: () => void;
 }) => {
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
-  return (
+  const inner = (
     <View style={styles.sectionHead}>
       <Text style={styles.sectionLabel}>{label}</Text>
       {editing && onExit && (
@@ -48,6 +36,15 @@ export const SectionHeader = ({
         </Pressable>
       )}
     </View>
+  );
+  if (!onToggle) return inner;
+  return (
+    <Pressable
+      onLongPress={() => { void heavyHaptic(); onToggle(); }}
+      delayLongPress={350}
+    >
+      {inner}
+    </Pressable>
   );
 };
 

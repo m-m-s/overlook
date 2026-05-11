@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from '../Chip';
-import { Section, SectionHeader, sortedDisplayTags } from './SectionHelpers';
+import { SectionHeader, sortedDisplayTags } from './SectionHelpers';
 import { formatTagValue, TAG_TYPES } from '@/lib/options';
 import type { TypedTag } from '@/lib/screenshots';
 import type { FontSet, Palette } from '@/lib/colors';
@@ -42,8 +42,8 @@ export const TagsSection = ({
   const sorted = sortedDisplayTags(manualTags, aiTags);
 
   return (
-    <Section onToggle={onToggle}>
-      <SectionHeader label="tags" editing={isEditing} onExit={onToggle} />
+    <View>
+      <SectionHeader label="tags" editing={isEditing} onExit={onToggle} onToggle={onToggle} />
       {sorted.length === 0 && !isEditing ? (
         <Text style={styles.emptyHint}>not set</Text>
       ) : (
@@ -122,7 +122,7 @@ export const TagsSection = ({
           )}
         </>
       )}
-    </Section>
+    </View>
   );
 };
 
