@@ -192,29 +192,31 @@ export const ScreenshotDetail = ({
     })();
   }, [hideImage]);
 
-  // Horizontal swipe on the image header for prev/next navigation.
-  const swipeGesture = useMemo(
+  // Card-wide horizontal swipe for prev/next navigation.
+  // failOffsetY must be tight so the Pan gives up quickly on vertical
+  // movement and hands the gesture to BottomSheetScrollView. Previously
+  // this was scoped to the image header only to avoid scroll caps; now
+  // that Pressable wrappers have been removed from scroll content, RNGH
+  // has clean ownership and this outer gesture coexists safely.
+  const cardSwipeGesture = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-8, 8])
-        .failOffsetY([-40, 40])
+        .activeOffsetX([-20, 20])
+        .failOffsetY([-10, 10])
         .runOnJS(true)
         .onEnd((e) => {
-          const flick = Math.abs(e.velocityX) > 600;
-          if ((e.translationX < -50 || (flick && e.translationX < -20)) && onNext) onNext();
-          else if ((e.translationX > 50 || (flick && e.translationX > 20)) && onPrev) onPrev();
+          const flick = Math.abs(e.velocityX) > 500;
+          if ((e.translationX < -40 || (flick && e.translationX < -15)) && onNext) onNext();
+          else if ((e.translationX > 40 || (flick && e.translationX > 15)) && onPrev) onPrev();
         }),
     [onNext, onPrev],
   );
 
+  // Image-only gesture: pinch-to-zoom. Swipe is now handled by the outer
+  // card gesture above, so the image gesture is pinch-only.
   const pinchToZoomGesture = useMemo(
     () => Gesture.Pinch().runOnJS(true).onStart(() => setZoomOpen(true)),
     [],
-  );
-
-  const imageGesture = useMemo(
-    () => Gesture.Simultaneous(swipeGesture, pinchToZoomGesture),
-    [swipeGesture, pinchToZoomGesture],
   );
 
   // Hydrate tags + notes from server on open.
@@ -361,11 +363,12 @@ export const ScreenshotDetail = ({
   ];
 
   return (
+    <GestureDetector gesture={cardSwipeGesture}>
     <View style={{ flex: 1 }}>
-      {/* Parallax image header — GestureDetector scoped to just this element.
-          Wrapping the whole sheet caused BottomSheetScrollView scroll caps. */}
+      {/* Parallax image header — inner GestureDetector handles pinch-to-zoom only.
+          Card-wide horizontal swipe is handled by the outer GestureDetector above. */}
       {!hideImage && (
-        <GestureDetector gesture={imageGesture}>
+        <GestureDetector gesture={pinchToZoomGesture}>
           <Animated.View
             pointerEvents="box-none"
             style={{
@@ -661,6 +664,7 @@ export const ScreenshotDetail = ({
         onDismiss={() => setShowZoomHint(false)}
       />
     </View>
+    </GestureDetector>
   );
 };
 
