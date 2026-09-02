@@ -19,6 +19,8 @@ type SerializedFilters = {
   urgencies?: string[];
   statuses?: string[];
   resonances?: number[];
+  difficulties?: string[];
+  timesToComplete?: string[];
   tagQueries?: string[];
   /** Optional free-text search saved alongside the structured filters. */
   searchQuery?: string;
@@ -36,6 +38,8 @@ const serializeFilters = (
   urgencies: Array.from(f.urgencies),
   statuses: Array.from(f.statuses),
   resonances: Array.from(f.resonances),
+  difficulties: Array.from(f.difficulties),
+  timesToComplete: Array.from(f.timesToComplete),
   tagQueries: Array.from(f.tagQueries),
   searchQuery: searchQuery?.trim() || undefined,
   icon: icon?.trim() || undefined,
@@ -50,6 +54,8 @@ const deserializeFilters = (s: SerializedFilters | null | undefined): Filters =>
   for (const r of s.resonances ?? []) {
     if (r === 1 || r === 2 || r === 3) f.resonances.add(r);
   }
+  for (const d of s.difficulties ?? []) f.difficulties.add(d);
+  for (const t of s.timesToComplete ?? []) f.timesToComplete.add(t);
   for (const q of s.tagQueries ?? []) f.tagQueries.add(q);
   return f;
 };

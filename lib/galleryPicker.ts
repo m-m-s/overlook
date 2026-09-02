@@ -21,7 +21,7 @@ export const pickGalleryImages = async (opts?: {
   allowsMultipleSelection?: boolean;
 }): Promise<ScannedAsset[]> => {
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ['images'],
     allowsMultipleSelection: opts?.allowsMultipleSelection ?? true,
     selectionLimit: 50,
     quality: 1,

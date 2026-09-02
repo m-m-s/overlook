@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { CategoryIcon } from './CategoryIcon';
 import { Iris } from './Iris';
@@ -73,18 +74,20 @@ const CardImpl = ({ data, analyzing, inSelectMode, selected, queued, mode = 'gri
     urgencyColor ?? 'rgba(0,0,0,0)',
   ];
 
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   return (
+    <Reanimated.View style={[styles.cardWrap, animStyle]}>
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
+      onPressIn={onPress ? () => { scale.value = withSpring(0.96, { damping: 15, stiffness: 300 }); } : undefined}
+      onPressOut={() => { scale.value = withSpring(1, { damping: 15, stiffness: 300 }); }}
       accessibilityLabel={labelFor(data)}
       accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.card,
-        mode === 'intent' && styles.cardIntent,
-        pressed && { opacity: 0.92 },
-      ]}
+      style={[styles.card, mode === 'intent' && styles.cardIntent]}
     >
       <Image source={{ uri: data.uri }} style={styles.image} contentFit="cover" />
 
@@ -153,6 +156,7 @@ const CardImpl = ({ data, analyzing, inSelectMode, selected, queued, mode = 'gri
         </View>
       )}
     </Pressable>
+    </Reanimated.View>
   );
 };
 
@@ -172,6 +176,7 @@ const ICON_SHADOW = {
 
 const makeStyles = (c: Palette) =>
   StyleSheet.create({
+    cardWrap: { flex: 1 },
     card: {
       flex: 1,
       // 4:5 portrait — taller than wide so screenshots crop less. The

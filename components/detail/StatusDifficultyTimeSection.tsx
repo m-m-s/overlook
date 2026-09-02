@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Chip } from '../Chip';
 import { capitalize, DIFFICULTIES, STATUSES, TIMES_TO_COMPLETE } from '@/lib/options';
 import { statusColors } from '@/lib/colors';
 import type { FontSet, Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
-import { heavyHaptic } from '@/lib/haptics';
 
 type Props = {
   status: string | null | undefined;
@@ -17,6 +17,10 @@ type Props = {
   onSetStatus: (s: string | null) => void;
   onSetDifficulty: (d: 'beginner' | 'intermediate' | 'advanced' | null) => void;
   onSetTimeToComplete: (t: 'quick' | 'afternoon' | 'full_day' | 'multi_day' | 'long_term' | null) => void;
+  onApply?: () => void;
+  onFilterByStatus?: (status: string) => void;
+  onFilterByDifficulty?: (difficulty: string) => void;
+  onFilterByTimeToComplete?: (time: string) => void;
 };
 
 export const StatusDifficultyTimeSection = ({
@@ -28,6 +32,10 @@ export const StatusDifficultyTimeSection = ({
   onSetStatus,
   onSetDifficulty,
   onSetTimeToComplete,
+  onApply,
+  onFilterByStatus,
+  onFilterByDifficulty,
+  onFilterByTimeToComplete,
 }: Props) => {
   const c = useColors();
   const f = useFonts();
@@ -36,35 +44,40 @@ export const StatusDifficultyTimeSection = ({
   const editing = editingSections.has('status') || editingSections.has('difficulty') || editingSections.has('time');
 
   const toggle = () => {
-    void heavyHaptic();
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setEditingSections((prev) => {
-      const next = new Set(prev);
-      const was = next.has('status') || next.has('difficulty') || next.has('time');
-      if (was) {
-        next.delete('status');
-        next.delete('difficulty');
-        next.delete('time');
-      } else {
+    if (editing) {
+      onApply?.();
+    } else {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setEditingSections((prev) => {
+        const next = new Set(prev);
         next.add('status');
         next.add('difficulty');
         next.add('time');
-      }
-      return next;
-    });
+        return next;
+      });
+    }
   };
 
   return (
     <View>
-      <Pressable onLongPress={toggle} delayLongPress={350} style={styles.head}>
+      <Pressable onPress={toggle} hitSlop={8} style={({ pressed }) => [styles.head, pressed && { opacity: 0.75 }]}>
         <Text style={styles.label}>
           status · difficulty · time
-          {editing && <Text style={styles.labelEditing}>  · editing</Text>}
+          {editing
+            ? <Text style={styles.labelEditing}>  · editing</Text>
+            : (!status && !difficulty && !timeToComplete)
+              ? <Text style={styles.labelAdd}>  +</Text>
+              : null}
         </Text>
+        {editing && (
+          <Pressable onPress={() => onApply?.()} hitSlop={8} style={styles.exit}>
+            <Text style={styles.exitText}>done editing</Text>
+          </Pressable>
+        )}
       </Pressable>
 
       {editing ? (
-        <View style={{ gap: 12 }}>
+        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(110)} style={{ gap: 12 }}>
           <View>
             <Text style={styles.subLabel}>status</Text>
             <View style={styles.chipRow}>
@@ -125,19 +138,26 @@ export const StatusDifficultyTimeSection = ({
               })}
             </View>
           </View>
-        </View>
+        </Reanimated.View>
       ) : status || difficulty || timeToComplete ? (
-        <View style={styles.chipRow}>
+        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(110)} style={styles.chipRow}>
           {status && (
             <Chip
               label={STATUSES.find((s) => s.key === status)?.label ?? status}
               variant="meta"
               selected
               color={statusColors[status] ?? c.ink}
+              onPress={onFilterByStatus ? () => onFilterByStatus(status) : undefined}
             />
           )}
           {difficulty && (
-            <Chip label={capitalize(difficulty)} variant="meta" selected color={c.ink} />
+            <Chip
+              label={capitalize(difficulty)}
+              variant="meta"
+              selected
+              color={c.ink}
+              onPress={onFilterByDifficulty ? () => onFilterByDifficulty(difficulty) : undefined}
+            />
           )}
           {timeToComplete && (
             <Chip
@@ -145,19 +165,23 @@ export const StatusDifficultyTimeSection = ({
               variant="meta"
               selected
               color={c.ink}
+              onPress={onFilterByTimeToComplete ? () => onFilterByTimeToComplete(timeToComplete) : undefined}
             />
           )}
-        </View>
-      ) : (
-        <Text style={styles.emptyHint}>not set</Text>
-      )}
+        </Reanimated.View>
+      ) : null}
     </View>
   );
 };
 
 const makeStyles = (c: Palette, f: FontSet) =>
   StyleSheet.create({
-    head: { marginTop: 6, marginBottom: 2 },
+    head: { marginTop: 6, marginBottom: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    exit: { paddingHorizontal: 4, paddingVertical: 2 },
+    exitText: {
+      fontSize: 10, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.inkMuted, textDecorationLine: 'underline', textDecorationStyle: 'dashed',
+    },
     label: {
       fontSize: 11,
       letterSpacing: 1.8,
@@ -167,6 +191,7 @@ const makeStyles = (c: Palette, f: FontSet) =>
       marginBottom: 4,
     },
     labelEditing: { color: c.ink, fontWeight: '700' },
+    labelAdd: { color: c.inkMuted, fontWeight: '300', letterSpacing: 0 },
     subLabel: {
       fontSize: 10,
       letterSpacing: 1.4,
@@ -175,5 +200,4 @@ const makeStyles = (c: Palette, f: FontSet) =>
       marginBottom: 6,
     },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, rowGap: 8 },
-    emptyHint: { fontSize: 12, color: c.inkMuted, fontStyle: 'italic' },
   });

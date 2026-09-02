@@ -127,6 +127,7 @@ export const DetailSheetHost = forwardRef<DetailSheetHostHandle, Props>(
             item={selected}
             onChange={onPatch}
             onDelete={onDelete}
+            onClose={() => sheetRef.current?.dismiss()}
             snapIndex={sheetIndex}
             onPrev={selectedIndex > 0 ? goPrev : undefined}
             onNext={

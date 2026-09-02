@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing } from 'react-native';
+import Reanimated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Circle, Line, Svg } from 'react-native-svg';
 
 import { lightPalette } from '@/lib/colors';
@@ -40,6 +41,20 @@ export const Iris = ({
   accessibilityLabel,
 }: Props) => {
   const spin = useRef(new Animated.Value(0)).current;
+  const pulseScale = useSharedValue(1);
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }] }));
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    if (filled) {
+      pulseScale.value = withSpring(1.2, { damping: 6, stiffness: 350 }, () => {
+        pulseScale.value = withSpring(1, { damping: 10, stiffness: 250 });
+      });
+    }
+  // pulseScale is a stable ref
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filled]);
 
   useEffect(() => {
     if (!spinning) return;
@@ -63,6 +78,7 @@ export const Iris = ({
     : undefined;
 
   return (
+    <Reanimated.View style={pulseStyle}>
     <Animated.View
       accessible
       accessibilityLabel={accessibilityLabel ?? LEVEL_LABELS[level]}
@@ -110,5 +126,6 @@ export const Iris = ({
         )}
       </Svg>
     </Animated.View>
+    </Reanimated.View>
   );
 };

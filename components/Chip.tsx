@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Reanimated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { tapHaptic } from '@/lib/haptics';
 import { useColors } from '@/lib/themeContext';
@@ -29,6 +30,9 @@ export const Chip = ({ label, selected, variant = 'manual', onPress, onRemove, c
   const baseStyle = isOutlined ? styles.outlined : styles.filled;
   const tint = color ?? c.ink;
 
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
   // Tap the chip body = onPress (e.g. open sidebar to modify the filter).
   // The trailing × is the dedicated remove affordance — a separate hit
   // target so the press/remove intents don't collide.
@@ -52,15 +56,18 @@ export const Chip = ({ label, selected, variant = 'manual', onPress, onRemove, c
     : undefined;
 
   return (
+    <Reanimated.View style={animStyle}>
     <Pressable
       onPress={handleTap}
-      style={({ pressed }) => [
+      onPressIn={handleTap ? () => { scale.value = withSpring(0.92, { damping: 15, stiffness: 400 }); } : undefined}
+      onPressOut={() => { scale.value = withSpring(1, { damping: 15, stiffness: 400 }); }}
+      hitSlop={{ top: 9, bottom: 9, left: 4, right: 4 }}
+      style={[
         styles.chip,
         baseStyle,
         variant === 'add' && styles.dashed,
         isOutlined && { borderColor: tint },
         !isOutlined && { backgroundColor: tint },
-        pressed && { opacity: 0.7 },
       ]}
     >
       {leading}
@@ -78,6 +85,7 @@ export const Chip = ({ label, selected, variant = 'manual', onPress, onRemove, c
         </Pressable>
       ) : null}
     </Pressable>
+    </Reanimated.View>
   );
 };
 
@@ -98,7 +106,6 @@ const styles = StyleSheet.create({
   },
   dashed: { borderStyle: 'dashed' },
   label: { fontSize: 14, fontWeight: '500', letterSpacing: 0.3 },
-  x: { paddingHorizontal: 2 },
   xHit: { paddingHorizontal: 2, marginLeft: 2 },
   xText: { fontSize: 16, lineHeight: 16, fontWeight: '600' },
 });

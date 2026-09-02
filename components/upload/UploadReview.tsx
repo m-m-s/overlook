@@ -67,7 +67,7 @@ export const UploadReview = ({
         renderItem={({ item }) => {
           const state = stateMap.get(item.id) ?? 'include';
           return (
-            <Pressable onPress={() => onCycleState(item.id)} style={styles.reviewCell}>
+            <Pressable onPress={() => onCycleState(item.id)} style={({ pressed }) => [styles.reviewCell, pressed && { opacity: 0.85 }]}>
               <Image source={{ uri: item.uri }} style={styles.reviewImg} contentFit="cover" />
               {state === 'no-ai' && (
                 <View style={[styles.reviewOverlay, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
@@ -87,15 +87,15 @@ export const UploadReview = ({
 
       <View style={[styles.reviewFooter, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.selectAllRow}>
-          <Pressable onPress={() => onSetAllState('include')} hitSlop={6}>
+          <Pressable onPress={() => onSetAllState('include')} hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.75 }}>
             <Text style={styles.selectAllLink}>select all</Text>
           </Pressable>
           <Text style={styles.selectAllSep}>·</Text>
-          <Pressable onPress={() => onSetAllState('exclude')} hitSlop={6}>
+          <Pressable onPress={() => onSetAllState('exclude')} hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.75 }}>
             <Text style={styles.selectAllLink}>deselect all</Text>
           </Pressable>
           <Text style={styles.selectAllSep}>·</Text>
-          <Pressable onPress={() => onSetAllState('no-ai')} hitSlop={6}>
+          <Pressable onPress={() => onSetAllState('no-ai')} hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.75 }}>
             <Text style={styles.selectAllLink}>all → no AI</Text>
           </Pressable>
         </View>

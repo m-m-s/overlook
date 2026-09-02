@@ -1,14 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { useToast } from './Toast';
-import { colors } from '@/lib/colors';
 import { type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { CATEGORIES } from '@/lib/options';
 import { createSavedFilter, type SavedFilter } from '@/lib/savedFilters';
+import { useColors } from '@/lib/themeContext';
 
 type Props = {
   filters: Filters;
@@ -24,6 +24,32 @@ type Props = {
 export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
   const toast = useToast();
   const { searchQuery } = useFilters();
+  const c = useColors();
+  const styles = useMemo(() => StyleSheet.create({
+    compactLink: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted, textDecorationLine: 'underline' },
+    btn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: c.ink, borderRadius: 3 },
+    btnText: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.ink, fontWeight: '600' },
+    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+    card: { width: '100%', maxWidth: 360, backgroundColor: c.parchment, borderRadius: 8, padding: 24 },
+    title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: c.ink, marginBottom: 4 },
+    help: { fontSize: 12, color: c.inkMuted, marginBottom: 18, lineHeight: 17 },
+    input: { fontSize: 16, fontFamily: 'PlayfairDisplay_500Medium', color: c.ink, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderColor: c.ink },
+    iconLabel: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted, marginTop: 18, marginBottom: 8 },
+    iconRow: { flexDirection: 'row', gap: 6, paddingRight: 8 },
+    iconChip: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.ink, borderRadius: 4, paddingHorizontal: 8 },
+    iconChipOn: { backgroundColor: c.ink },
+    iconChipText: { fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', color: c.ink },
+    emojiInput: { fontSize: 20, paddingVertical: 8, marginTop: 8, color: c.ink, borderBottomWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderColor: c.ink },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 22, paddingVertical: 8 },
+    toggleLabel: { fontSize: 13, color: c.ink, marginBottom: 2 },
+    toggleHint: { fontSize: 11, color: c.inkMuted },
+    btnRow: { flexDirection: 'row', gap: 10, marginTop: 22 },
+    modalBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 4 },
+    cancelBtn: { borderWidth: 1, borderColor: c.ink },
+    cancelText: { fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', color: c.ink },
+    applyBtn: { backgroundColor: c.ink },
+    applyText: { fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', color: c.parchment, fontWeight: '600' },
+  }), [c]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [pinned, setPinned] = useState(false);
@@ -67,12 +93,12 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
   return (
     <>
       {compact ? (
-        <Pressable onPress={() => setOpen(true)} hitSlop={6}>
+        <Pressable onPress={() => setOpen(true)} hitSlop={12}>
           <Text style={styles.compactLink}>save as album</Text>
         </Pressable>
       ) : (
-        <Pressable onPress={() => setOpen(true)} hitSlop={6} style={styles.btn}>
-          <Ionicons name="bookmark-outline" size={14} color={colors.ink} />
+        <Pressable onPress={() => setOpen(true)} hitSlop={8} style={styles.btn}>
+          <Ionicons name="bookmark-outline" size={14} color={c.ink} />
           <Text style={styles.btnText}>save</Text>
         </Pressable>
       )}
@@ -97,7 +123,7 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
               value={name}
               onChangeText={setName}
               placeholder="e.g. gift ideas for Anton, fall craft inspo"
-              placeholderTextColor={colors.inkMuted}
+              placeholderTextColor={c.inkMuted}
               autoCapitalize="none"
               autoFocus
               style={styles.input}
@@ -116,10 +142,11 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
                   setIcon('');
                   setEmojiDraft('');
                 }}
+                hitSlop={4}
                 style={[styles.iconChip, !icon && styles.iconChipOn]}
                 accessibilityLabel="No icon"
               >
-                <Text style={[styles.iconChipText, !icon && { color: colors.parchment }]}>
+                <Text style={[styles.iconChipText, !icon && { color: c.parchment }]}>
                   none
                 </Text>
               </Pressable>
@@ -132,13 +159,14 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
                       setIcon(cat);
                       setEmojiDraft('');
                     }}
+                    hitSlop={4}
                     style={[styles.iconChip, selected && styles.iconChipOn]}
                     accessibilityLabel={`Use ${cat} icon`}
                   >
                     <CategoryIcon
                       category={cat as Category}
                       size={18}
-                      color={selected ? colors.parchment : colors.ink}
+                      color={selected ? c.parchment : c.ink}
                     />
                   </Pressable>
                 );
@@ -153,7 +181,7 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
                 setIcon(first);
               }}
               placeholder="…or type an emoji"
-              placeholderTextColor={colors.inkMuted}
+              placeholderTextColor={c.inkMuted}
               maxLength={4}
               style={styles.emojiInput}
             />
@@ -166,8 +194,8 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
               <Switch
                 value={pinned}
                 onValueChange={setPinned}
-                trackColor={{ false: colors.divider, true: colors.ink }}
-                thumbColor={colors.parchment}
+                trackColor={{ false: c.divider, true: c.ink }}
+                thumbColor={c.parchment}
               />
             </View>
 
@@ -190,124 +218,3 @@ export const SaveFilterButton = ({ filters, onSaved, compact }: Props) => {
   );
 };
 
-const styles = StyleSheet.create({
-  compactLink: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    textDecorationLine: 'underline',
-  },
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: 3,
-  },
-  btnText: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-    fontWeight: '600',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: colors.parchment,
-    borderRadius: 8,
-    padding: 24,
-  },
-  title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: colors.ink, marginBottom: 4 },
-  help: { fontSize: 12, color: colors.inkMuted, marginBottom: 18, lineHeight: 17 },
-  input: {
-    fontSize: 16,
-    fontFamily: 'PlayfairDisplay_500Medium',
-    color: colors.ink,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-    borderColor: colors.ink,
-  },
-  iconLabel: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    marginTop: 18,
-    marginBottom: 8,
-  },
-  iconRow: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingRight: 8,
-  },
-  iconChip: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-  },
-  iconChipOn: {
-    backgroundColor: colors.ink,
-  },
-  iconChipText: {
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.ink,
-  },
-  emojiInput: {
-    fontSize: 20,
-    paddingVertical: 8,
-    marginTop: 8,
-    color: colors.ink,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-    borderColor: colors.ink,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 22,
-    paddingVertical: 8,
-  },
-  toggleLabel: {
-    fontSize: 13,
-    color: colors.ink,
-    marginBottom: 2,
-  },
-  toggleHint: { fontSize: 11, color: colors.inkMuted },
-  btnRow: { flexDirection: 'row', gap: 10, marginTop: 22 },
-  modalBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 4 },
-  cancelBtn: { borderWidth: 1, borderColor: colors.ink },
-  cancelText: {
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-  },
-  applyBtn: { backgroundColor: colors.ink },
-  applyText: {
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.parchment,
-    fontWeight: '600',
-  },
-});

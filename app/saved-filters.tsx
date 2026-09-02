@@ -95,7 +95,7 @@ export default function SavedFiltersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}>
           <Ionicons name="arrow-back" size={22} color={c.ink} />
         </Pressable>
         <Text style={styles.title}>Saved filters</Text>
@@ -125,7 +125,7 @@ export default function SavedFiltersScreen() {
               <Pressable
                 onPress={() => onApply(item)}
                 onLongPress={() => onLongPress(item)}
-                style={styles.row}
+                style={({ pressed }) => [styles.row, pressed && { opacity: 0.75 }]}
               >
                 <View style={styles.rowIcon}>
                   {iconIsCategory ? (
@@ -189,7 +189,8 @@ export default function SavedFiltersScreen() {
             >
               <Pressable
                 onPress={() => { setEditIcon(''); setEditEmojiDraft(''); }}
-                style={[styles.iconChip, !editIcon && styles.iconChipOn]}
+                hitSlop={4}
+                style={({ pressed }) => [styles.iconChip, !editIcon && styles.iconChipOn, pressed && { opacity: 0.75 }]}
                 accessibilityLabel="No icon"
               >
                 <Text style={[styles.iconChipText, !editIcon && { color: c.parchment }]}>none</Text>
@@ -200,7 +201,8 @@ export default function SavedFiltersScreen() {
                   <Pressable
                     key={cat}
                     onPress={() => { setEditIcon(cat); setEditEmojiDraft(''); }}
-                    style={[styles.iconChip, selected && styles.iconChipOn]}
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.iconChip, selected && styles.iconChipOn, pressed && { opacity: 0.75 }]}
                     accessibilityLabel={`Use ${cat} icon`}
                   >
                     <CategoryIcon

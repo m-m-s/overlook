@@ -20,11 +20,11 @@ export const PageHeader = ({
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
   return (
     <View style={styles.pageHeader}>
-      <Pressable onPress={onBack} hitSlop={12} style={{ padding: 4 }}>
+      <Pressable onPress={onBack} hitSlop={12} style={({ pressed }) => [{ padding: 4 }, pressed && { opacity: 0.75 }]}>
         <Ionicons name="arrow-back" size={22} color={c.ink} />
       </Pressable>
       <View style={{ flex: 1 }}>
-        <Text style={styles.h2}>{title}</Text>
+        <Text style={styles.h1}>{title}</Text>
         {subtitle ? <Text style={styles.reviewSub}>{subtitle}</Text> : null}
       </View>
     </View>
@@ -50,7 +50,7 @@ export const BatchSlider = ({
         {BATCH_OPTIONS.map((n, i) => {
           const selected = i === idx;
           return (
-            <Pressable key={n} onPress={() => onChange(n)} hitSlop={16} style={styles.sliderDotHit}>
+            <Pressable key={n} onPress={() => onChange(n)} hitSlop={16} style={({ pressed }) => [styles.sliderDotHit, pressed && { opacity: 0.75 }]}>
               <View style={[styles.sliderDot, selected && styles.sliderDotOn]} />
               <Text style={[styles.sliderDotLabel, selected && styles.sliderDotLabelOn]}>{n}</Text>
             </Pressable>
@@ -66,7 +66,6 @@ export const makeStyles = (c: Palette, f: FontSet) =>
     center: { alignItems: 'center', justifyContent: 'center', backgroundColor: c.parchment },
 
     h1: { fontFamily: f.displayMedium, fontSize: 26, color: c.ink, letterSpacing: -0.4 },
-    h2: { fontFamily: f.displayMedium, fontSize: 26, color: c.ink, letterSpacing: -0.4 },
     body: { fontSize: 14, color: c.ink, marginTop: 12, textAlign: 'center' },
     subtle: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted, marginTop: 6 },
     subtleSmall: { fontSize: 11, color: c.inkMuted, marginTop: 24, fontStyle: 'italic' },

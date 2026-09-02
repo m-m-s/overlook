@@ -1,35 +1,39 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { heavyHaptic } from '@/lib/haptics';
 import type { FontSet, Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
 import type { TypedTag } from '@/lib/screenshots';
 import { TAG_TYPES } from '@/lib/options';
 
 /**
- * Section label row. When onToggle is provided, the label row itself is the
- * long-press target for entering edit mode — NOT the full section body.
- * Scoping the Pressable here (rather than wrapping the whole section) prevents
- * it from competing with BottomSheetScrollView's RNGH gesture and capping scroll.
+ * Section label row. When onToggle is provided, the label row is the tap
+ * target for toggling edit mode. Scoping the Pressable to the header row
+ * (rather than the whole section body) prevents it from competing with
+ * BottomSheetScrollView's gesture handler.
  */
 export const SectionHeader = ({
   label,
   editing,
   onExit,
   onToggle,
+  showAdd,
 }: {
   label: string;
   editing: boolean;
   onExit?: () => void;
   onToggle?: () => void;
+  showAdd?: boolean;
 }) => {
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
   const inner = (
     <View style={styles.sectionHead}>
-      <Text style={styles.sectionLabel}>{label}</Text>
+      <Text style={styles.sectionLabel}>
+        {label}
+        {showAdd && !editing && <Text style={styles.sectionLabelAdd}>  +</Text>}
+      </Text>
       {editing && onExit && (
         <Pressable onPress={onExit} hitSlop={8} style={styles.sectionExit}>
           <Text style={styles.sectionExitText}>Done editing</Text>
@@ -39,10 +43,7 @@ export const SectionHeader = ({
   );
   if (!onToggle) return inner;
   return (
-    <Pressable
-      onLongPress={() => { void heavyHaptic(); onToggle(); }}
-      delayLongPress={350}
-    >
+    <Pressable onPress={onToggle} hitSlop={8} style={({ pressed }) => pressed && { opacity: 0.75 }}>
       {inner}
     </Pressable>
   );
@@ -92,6 +93,12 @@ const makeStyles = (c: Palette, f: FontSet) =>
       justifyContent: 'space-between',
     },
     sectionExit: { paddingHorizontal: 4, paddingVertical: 2 },
+    sectionLabelAdd: {
+      fontSize: 11,
+      letterSpacing: 0,
+      color: c.inkMuted,
+      fontWeight: '300',
+    },
     sectionExitText: {
       fontSize: 10,
       letterSpacing: 1.4,

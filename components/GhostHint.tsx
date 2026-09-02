@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors } from '@/lib/colors';
 import { useReduceMotion } from '@/lib/a11y';
+import { useColors } from '@/lib/themeContext';
 
 type Variant =
   | 'swipe-right' // home: ghost hand glides right from left edge
@@ -37,6 +37,37 @@ const HAND_SIZE = 32;
  */
 export const GhostHint = ({ visible, variant, label, onDismiss, topOffset }: Props) => {
   const reduceMotion = useReduceMotion();
+  const c = useColors();
+  const styles = useMemo(() => StyleSheet.create({
+    layer: { position: 'absolute', left: 0, right: 0 },
+    swipeRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16, gap: 14 },
+    center: { alignItems: 'center', gap: 12 },
+    centerBig: { alignItems: 'center', gap: 18 },
+    triageWrap: { alignItems: 'center', gap: 14 },
+    pinchAnchor: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
+    hand: { width: HAND_SIZE, height: HAND_SIZE, borderRadius: HAND_SIZE / 2, backgroundColor: c.ink, opacity: 0.32 },
+    dot: { position: 'absolute', width: 22, height: 22, borderRadius: 11, backgroundColor: c.ink, opacity: 0.36 },
+    label: {
+      fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.ink, backgroundColor: c.parchment, paddingHorizontal: 8, paddingVertical: 4,
+    },
+    labelCenter: {
+      fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.ink, backgroundColor: c.parchment, paddingHorizontal: 10, paddingVertical: 4, textAlign: 'center',
+    },
+    arrowLeft: {
+      fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.ink, backgroundColor: c.parchment, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start',
+    },
+    arrowRight: {
+      fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.ink, backgroundColor: c.parchment, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-end',
+    },
+    arrowUp: {
+      fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.ink, backgroundColor: c.parchment, paddingHorizontal: 8, paddingVertical: 4,
+    },
+  }), [c]);
   const fade = useRef(new Animated.Value(0)).current;
   const tx = useRef(new Animated.Value(0)).current;
   const ty = useRef(new Animated.Value(0)).current;
@@ -205,79 +236,3 @@ export const GhostHint = ({ visible, variant, label, onDismiss, topOffset }: Pro
   );
 };
 
-const styles = StyleSheet.create({
-  layer: { position: 'absolute', left: 0, right: 0 },
-  swipeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 16,
-    gap: 14,
-  },
-  center: { alignItems: 'center', gap: 12 },
-  centerBig: { alignItems: 'center', gap: 18 },
-  triageWrap: { alignItems: 'center', gap: 14 },
-  pinchAnchor: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
-  hand: {
-    width: HAND_SIZE,
-    height: HAND_SIZE,
-    borderRadius: HAND_SIZE / 2,
-    backgroundColor: colors.ink,
-    opacity: 0.32,
-  },
-  dot: {
-    position: 'absolute',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.ink,
-    opacity: 0.36,
-  },
-  label: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-    backgroundColor: colors.parchment,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  labelCenter: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-    backgroundColor: colors.parchment,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    textAlign: 'center',
-  },
-  arrowLeft: {
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-    backgroundColor: colors.parchment,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignSelf: 'flex-start',
-  },
-  arrowRight: {
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-    backgroundColor: colors.parchment,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignSelf: 'flex-end',
-  },
-  arrowUp: {
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.ink,
-    backgroundColor: colors.parchment,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-});

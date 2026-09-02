@@ -13,78 +13,59 @@ import { GhostHint } from '@/components/GhostHint';
 import { HomeRow } from '@/components/HomeRow';
 import { Iris } from '@/components/Iris';
 import { Sidebar } from '@/components/Sidebar';
-import { markHintSeen, wasHintSeen } from '@/lib/hints';
-import { getQueuedIds } from '@/lib/analysisQueue';
-import { signOut, useSession } from '@/lib/auth';
-import { useDemoMode } from '@/lib/demoMode';
 import type { FontSet, Palette } from '@/lib/colors';
-import { setBatchState, useBatchState } from '@/lib/batchState';
+import { signOut } from '@/lib/auth';
+import { setBatchState } from '@/lib/batchState';
+import { useDemoMode } from '@/lib/demoMode';
 import { applyFilters as applyFiltersToItems, emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
 import { pickGalleryImages } from '@/lib/galleryPicker';
 import { useScreenshotWatcher } from '@/lib/screenshotWatcher';
 import { capitalize, CATEGORIES } from '@/lib/options';
 import type { Category } from '@/components/CategoryIcon';
-import { mergeWithDefaults, useHiddenRows, usePinOrder, useRowOrder } from '@/lib/rowOrder';
 import { useColors, useFonts } from '@/lib/themeContext';
-import { listPinnedFilters, togglePinned, type SavedFilter } from '@/lib/savedFilters';
-import { fetchScreenshots } from '@/lib/screenshots';
-import type { LocalScreenshot } from '@/lib/uploads';
+import { useHomeData } from '@/lib/useHomeData';
+import { useHomeHints } from '@/lib/useHomeHints';
+import { useHomeReorder, type ReorderItem } from '@/lib/useHomeReorder';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
+import type { SavedFilter } from '@/lib/savedFilters';
+import type { LocalScreenshot } from '@/lib/uploads';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const ROW_GAP = 3;
 
-const URGENT_KEYS = new Set(['today', 'expires_soon', 'this_week']);
-
-/**
- * Home screen per spec: urgent row, pinned filters (when present), recently
- * added grid, untagged row at bottom. Auto-surfaced category rows are
- * deferred per Maggie's call.
- */
 export default function HomeScreen() {
-  const { session } = useSession();
-  const [items, setItems] = useState<LocalScreenshot[]>([]);
-  const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set());
-  const [showWhatsNext, setShowWhatsNext] = useState(false);
-  const [pinnedFilters, setPinnedFilters] = useState<SavedFilter[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [batchRefreshKey, setBatchRefreshKey] = useState(0);
-  const batchState = useBatchState(batchRefreshKey);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { filters, setFilters, applyFilters: applyFilterCtx, setSearchQuery } = useFilters();
-  const { remove: undoableRemove } = useUndoableDelete(setItems);
-  const [reorderMode, setReorderMode] = useState(false);
-  const { order: rowOrder, replace: replaceRowOrder } = useRowOrder();
-  const { order: pinOrder, replace: replacePinOrder } = usePinOrder();
-  const { hidden: hiddenRows, hide: hideRow, clear: clearHidden } = useHiddenRows();
-  const [demoOn, setDemoOn] = useDemoMode();
-  const insets = useSafeAreaInsets();
-  const sheetHostRef = useRef<DetailSheetHostHandle>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  const [loaded, setLoaded] = useState(false);
-
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
+  const insets = useSafeAreaInsets();
+  const [demoOn, setDemoOn] = useDemoMode();
+  const { filters, setFilters, applyFilters: applyFilterCtx, setSearchQuery } = useFilters();
 
-  // Home pinch-zoom: how many cards visible per row width.
-  // 2 = bigger, 3 = default, 4 = smaller. Gallery is full-bleed (no edge
-  // padding) so cellWidth divides the entire screen width.
+  const {
+    session, items, setItems, queuedIds, pinnedFilters, setPinnedFilters,
+    refreshing, loaded, loadItems, onRefresh, batchState,
+    urgent, whatsNext, recent, untagged,
+  } = useHomeData();
+
+  const {
+    reorderMode, enterReorder, exitReorder,
+    categoryRows, orderedPinnedFilters, mergedReorderItems,
+    onMergedReorderEnd, hideCategory, unpinFilter,
+  } = useHomeReorder(items, pinnedFilters, setPinnedFilters);
+
+  const { showSwipeHint, setShowSwipeHint, showPinchHint, setShowPinchHint,
+          showSelectHint, setShowSelectHint } = useHomeHints(loaded, items.length);
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { remove: undoableRemove } = useUndoableDelete(setItems);
+  const sheetHostRef = useRef<DetailSheetHostHandle>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const [homeCols, setHomeCols] = useState<2 | 3 | 4>(3);
-  // Tracks whether a 2-finger pinch is in flight; while true we disable
-  // the horizontal-scroll galleries so the pinch isn't fighting the
-  // FlatList scroll handler.
   const [zoomActive, setZoomActive] = useState(false);
-  const ROW_GAP = 3;
-  const cellWidth = Math.floor(
-    (SCREEN_WIDTH - ROW_GAP * (homeCols - 1)) / homeCols,
-  );
+  const cellWidth = Math.floor((SCREEN_WIDTH - ROW_GAP * (homeCols - 1)) / homeCols);
 
-  // Pinch gesture wrapping the home ScrollView. Pinch out (>1.3) bumps to a
-  // bigger card size; pinch in (<0.75) shrinks. onStart fires on the
-  // 2-finger gesture activation — we flip zoomActive so the gallery
-  // FlatLists stop consuming the gesture, and flip it back on end.
   const pinchGesture = useMemo(
     () =>
       Gesture.Pinch()
@@ -93,209 +74,40 @@ export default function HomeScreen() {
         .onEnd((e) => {
           setZoomActive(false);
           if (e.scale > 1.3) {
-            setHomeCols((c) => (c === 4 ? 3 : c === 3 ? 2 : 2));
+            setHomeCols((col) => (col === 4 ? 3 : col === 3 ? 2 : 2));
           } else if (e.scale < 0.75) {
-            setHomeCols((c) => (c === 2 ? 3 : c === 3 ? 4 : 4));
+            setHomeCols((col) => (col === 2 ? 3 : col === 3 ? 4 : 4));
           }
         })
         .onFinalize(() => setZoomActive(false)),
     [],
   );
 
-  const loadItems = useCallback(async () => {
-    if (!session) return;
-    const [rows, pinned, queued] = await Promise.all([
-      fetchScreenshots(),
-      listPinnedFilters(),
-      getQueuedIds(),
-    ]);
-    setItems(rows);
-    setPinnedFilters(pinned);
-    setQueuedIds(queued);
-    setLoaded(true);
-  }, [session]);
-
-  useEffect(() => {
-    void loadItems();
-  }, [loadItems, demoOn]);
-
-  // First-time home hint: ghost-hand swipe-right to telegraph the sidebar.
-  const [showSwipeHint, setShowSwipeHint] = useState(false);
-  useEffect(() => {
-    if (!loaded || items.length === 0) return;
-    void (async () => {
-      if (!(await wasHintSeen('home-swipe-filter'))) {
-        setShowSwipeHint(true);
-        await markHintSeen('home-swipe-filter');
-      }
-    })();
-  }, [loaded, items.length]);
-
-  // Pinch-zoom hint — fires after the swipe hint has had its moment.
-  const [showPinchHint, setShowPinchHint] = useState(false);
-  useEffect(() => {
-    if (!loaded || items.length === 0) return;
-    if (showSwipeHint) return; // don't stack
-    void (async () => {
-      if (!(await wasHintSeen('home-pinch-zoom'))) {
-        const t = setTimeout(async () => {
-          setShowPinchHint(true);
-          await markHintSeen('home-pinch-zoom');
-        }, 4000);
-        return () => clearTimeout(t);
-      }
-    })();
-  }, [loaded, items.length, showSwipeHint]);
-
-  // Bulletproof sidebar reset: useFocusEffect alone wasn't reliable across
-  // every navigation flow (esp. via router.replace). Layering a pathname
-  // watcher means any time we land on home, sidebar is forced closed.
   const pathname = usePathname();
   useEffect(() => {
     if (pathname === '/') {
       setSidebarOpen(false);
-      setReorderMode(false);
+      exitReorder();
     }
   }, [pathname]);
 
-  // Re-fetch items + pinned filters on focus so changes made elsewhere
-  // (e.g. saving a new pinned album) are reflected immediately on return.
   useFocusEffect(
     useCallback(() => {
       setSidebarOpen(false);
-      setReorderMode(false);
+      exitReorder();
       void loadItems();
     }, [loadItems]),
   );
 
-  // Android hardware back: close overlays first (sheet > sidebar > reorder
-  // mode) before letting the system exit the app from home.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (sheetOpen) {
-        sheetHostRef.current?.dismiss();
-        return true;
-      }
-      if (sidebarOpen) {
-        setSidebarOpen(false);
-        return true;
-      }
-      if (reorderMode) {
-        setReorderMode(false);
-        return true;
-      }
+      if (sheetOpen) { sheetHostRef.current?.dismiss(); return true; }
+      if (sidebarOpen) { setSidebarOpen(false); return true; }
+      if (reorderMode) { exitReorder(); return true; }
       return false;
     });
     return () => sub.remove();
   }, [sheetOpen, sidebarOpen, reorderMode]);
-
-  // While a batch is actively processing, refetch items every 4s so the
-  // gallery populates live as Supabase rows land.
-  useEffect(() => {
-    const active = batchState && batchState.processed < batchState.total;
-    if (!active) return;
-    const id = setInterval(() => {
-      void loadItems();
-    }, 4000);
-    return () => clearInterval(id);
-  }, [batchState, loadItems]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await loadItems();
-      setBatchRefreshKey((k) => k + 1);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const urgent = useMemo(
-    () => items.filter((it) => it.urgency && URGENT_KEYS.has(it.urgency)),
-    [items],
-  );
-  // Per spec: when urgent is empty, "see what's next" surfaces month/season items.
-  const whatsNext = useMemo(
-    () =>
-      items.filter((it) =>
-        it.urgency &&
-        (it.urgency === 'this_month' ||
-          it.urgency === 'this_spring' ||
-          it.urgency === 'this_summer' ||
-          it.urgency === 'this_autumn' ||
-          it.urgency === 'this_winter'),
-      ),
-    [items],
-  );
-  const recent = useMemo(() => items.slice(0, 24), [items]);
-  // Categories for an item — prefer the multi-value `categories` array;
-  // fall back to wrapping the singular `category` for legacy rows.
-  const itemCategories = (it: LocalScreenshot): string[] =>
-    it.categories && it.categories.length > 0
-      ? it.categories
-      : it.category
-        ? [it.category]
-        : [];
-  const untagged = useMemo(
-    () => items.filter((it) => itemCategories(it).length === 0),
-    [items],
-  );
-
-  // Auto-surfaced category rows: top 5 by count, then re-ordered by user's
-  // saved row order if any. Long-press a row title -> reorder mode.
-  // With multi-category support, an item is counted (and appears in) EVERY
-  // category it belongs to.
-  const categoryRows = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const it of items) {
-      for (const cat of itemCategories(it)) {
-        counts.set(cat, (counts.get(cat) ?? 0) + 1);
-      }
-    }
-    // Drop user-hidden categories before picking the top-5 so a hidden
-    // row doesn't keep "stealing" a slot from the next-most-popular one.
-    const hiddenSet = new Set(hiddenRows);
-    const top5 = Array.from(counts.entries())
-      .filter(([cat]) => !hiddenSet.has(cat))
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([cat]) => cat);
-    const ordered = mergeWithDefaults(rowOrder, top5).filter((cat) => !hiddenSet.has(cat));
-    return ordered.map((cat) => ({
-      category: cat,
-      items: items.filter((it) => itemCategories(it).includes(cat)),
-    }));
-  }, [items, rowOrder, hiddenRows]);
-
-  // Pinned-filter rows in user-set order (mergeWithDefaults appends any
-  // newly pinned filters to the end of the saved order).
-  const orderedPinnedFilters = useMemo(() => {
-    const ids = pinnedFilters.map((p) => p.id);
-    const order = mergeWithDefaults(pinOrder, ids);
-    const byId = new Map(pinnedFilters.map((p) => [p.id, p]));
-    return order.map((id) => byId.get(id)).filter((p): p is SavedFilter => Boolean(p));
-  }, [pinnedFilters, pinOrder]);
-
-  // Reorder mode merges categories and pinned filters into one list so the
-  // user can freely swap between the two groups. The kind discriminator
-  // tells the drag-end handler which orderings to update.
-  type ReorderItem =
-    | { kind: 'cat'; id: string; row: typeof categoryRows[number] }
-    | { kind: 'pin'; id: string; pf: SavedFilter };
-  const mergedReorderItems = useMemo<ReorderItem[]>(
-    () => [
-      ...categoryRows.map((row): ReorderItem => ({ kind: 'cat', id: row.category, row })),
-      ...orderedPinnedFilters.map((pf): ReorderItem => ({ kind: 'pin', id: pf.id, pf })),
-    ],
-    [categoryRows, orderedPinnedFilters],
-  );
-
-  const onMergedReorderEnd = (data: ReorderItem[]) => {
-    const newCats = data.filter((i) => i.kind === 'cat').map((i) => i.id);
-    const newPins = data.filter((i) => i.kind === 'pin').map((i) => i.id);
-    replaceRowOrder(newCats);
-    replacePinOrder(newPins);
-  };
 
   const onItemDelete = useCallback(
     (id: string) => {
@@ -314,18 +126,6 @@ export default function HomeScreen() {
 
   const open = (it: LocalScreenshot) => sheetHostRef.current?.present(it.id);
 
-  // Apply filters (from sidebar) → navigate to filtered grid page (which is /library for now;
-  // dedicated /filtered route to be added). For sprint v2 simplicity we stay on home and
-  // just route to /library when a filter is applied via the sidebar.
-
-  // Pick-from-gallery — open the system image picker and import each
-  // selected image through the same upload pipeline as a watcher-detected
-  // screenshot. Lets the user add inspo / art / general images, not just
-  // their phone's Screenshots album.
-  // Gallery-picked images flow through the same post-screenshot popup
-  // as watcher-detected screenshots — same resonance/urgency/quick-tag
-  // chips, same Analyze & Add / Add without AI / Dismiss actions. The
-  // popup auto-iterates the queue one image at a time.
   const { enqueue: enqueueAssets } = useScreenshotWatcher();
   const onPickFromGallery = useCallback(async () => {
     setSidebarOpen(false);
@@ -334,7 +134,6 @@ export default function HomeScreen() {
     enqueueAssets(assets);
   }, [enqueueAssets]);
 
-  // LOADING STATE — first fetch hasn't completed yet
   if (!loaded && session) {
     return (
       <View style={[styles.container, styles.center]}>
@@ -343,7 +142,6 @@ export default function HomeScreen() {
     );
   }
 
-  // EMPTY STATE
   if (items.length === 0) {
     const isUploading = batchState && batchState.processed < batchState.total;
     return (
@@ -375,13 +173,7 @@ export default function HomeScreen() {
                   'The screenshots already imported stay in your library. The rest will not be processed.',
                   [
                     { text: 'Keep going', style: 'cancel' },
-                    {
-                      text: 'Cancel',
-                      style: 'destructive',
-                      onPress: () => {
-                        void setBatchState(null);
-                      },
-                    },
+                    { text: 'Cancel', style: 'destructive', onPress: () => { void setBatchState(null); } },
                   ],
                 );
               }}
@@ -412,10 +204,6 @@ export default function HomeScreen() {
           open={sidebarOpen}
           onClose={() => {
             setSidebarOpen(false);
-            // If the user picked filters while the sidebar was open and
-            // dismissed it (tap-outside / back), route them to /library
-            // where the filters actually apply — home's fixed rows don't
-            // render filtered results.
             if (filtersActive(filters) > 0) router.push('/library');
           }}
           filters={filters}
@@ -433,12 +221,7 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={{ paddingBottom: 60 + insets.bottom }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.ink} />}
-        // Allow normal page scroll even while reordering so the user can
-        // reach rows below the fold. DraggableFlatList claims its drag
-        // gestures via long-press and won't fight regular scroll.
       >
-        {/* Batch resume banner — appears when a bulk import is in progress
-            or has remaining items. Tap to jump back into /upload. */}
         {batchState && batchState.processed < batchState.total && (
           <Pressable onPress={() => router.push('/upload')} style={styles.batchBanner}>
             <Ionicons name="arrow-forward" size={16} color={c.parchment} />
@@ -448,9 +231,6 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* Top header — sidebar trigger + title. When the batch banner is
-            visible, it already provides the top safe-area gap, so the header
-            tightens up to avoid an awkward second gap. */}
         <View
           style={[
             styles.header,
@@ -474,7 +254,11 @@ export default function HomeScreen() {
             <Text style={styles.headerTitle}>Overlook</Text>
           </Pressable>
           <View style={{ flex: 1 }} />
-          {!reorderMode && (
+          {reorderMode ? (
+            <Pressable onPress={exitReorder} hitSlop={10}>
+              <Text style={styles.headerLink}>done</Text>
+            </Pressable>
+          ) : (
             <Pressable onPress={() => router.push('/library')} hitSlop={10}>
               <Text style={styles.headerLink}>all</Text>
             </Pressable>
@@ -492,62 +276,28 @@ export default function HomeScreen() {
             scrollLocked={zoomActive}
             onSeeAll={() => {
               const next = emptyFilters();
-              for (const k of URGENT_KEYS) next.urgencies.add(k);
+              for (const k of ['overdue', 'today', 'expires_soon', 'this_week']) next.urgencies.add(k);
               applyFilterCtx(next);
               router.push('/library');
             }}
           />
         )}
         {!reorderMode && urgent.length === 0 && whatsNext.length > 0 && (
-          <View style={styles.whatsNextWrap}>
-            <Pressable onPress={() => setShowWhatsNext((v) => !v)} hitSlop={6}>
-              <Text style={styles.whatsNextLabel}>
-                Nothing urgent · {showWhatsNext ? 'hide' : 'see what’s next'}
-              </Text>
-            </Pressable>
-            {showWhatsNext && (
-              <HomeRow
-                title="this month / season"
-                count={whatsNext.length}
-                items={whatsNext}
-                cellWidth={cellWidth}
-                queuedIds={queuedIds}
-                onCardPress={open}
-                scrollLocked={zoomActive}
-                onSeeAll={() => {
-                  const next = emptyFilters();
-                  next.urgencies.add('this_month');
-                  next.urgencies.add('this_spring');
-                  next.urgencies.add('this_summer');
-                  next.urgencies.add('this_autumn');
-                  next.urgencies.add('this_winter');
-                  applyFilterCtx(next);
-                  router.push('/library');
-                }}
-              />
-            )}
-          </View>
-        )}
-
-        {/* Reorder bar — visible above the merged drag list. Categories +
-            pinned albums can be reordered freely AND swapped between the
-            groups (drag a pinned album above categories, etc). */}
-        {reorderMode && (
-          <View style={styles.reorderHeader}>
-            <Text style={styles.reorderHint}>
-              Long-press a row title to drag, tap × to hide.
-            </Text>
-            {hiddenRows.length > 0 && (
-              <Pressable onPress={() => clearHidden()} hitSlop={8}>
-                <Text style={[styles.headerLink, { marginRight: 12 }]}>
-                  show {hiddenRows.length} hidden
-                </Text>
-              </Pressable>
-            )}
-            <Pressable onPress={() => setReorderMode(false)} hitSlop={8}>
-              <Text style={styles.headerLink}>done</Text>
-            </Pressable>
-          </View>
+          <HomeRow
+            title="coming up"
+            count={whatsNext.length}
+            items={whatsNext}
+            cellWidth={cellWidth}
+            queuedIds={queuedIds}
+            onCardPress={open}
+            scrollLocked={zoomActive}
+            onSeeAll={() => {
+              const next = emptyFilters();
+              for (const k of ['this_month', 'this_spring', 'this_summer', 'this_autumn', 'this_winter']) next.urgencies.add(k);
+              applyFilterCtx(next);
+              router.push('/library');
+            }}
+          />
         )}
 
         {reorderMode ? (
@@ -578,8 +328,6 @@ export default function HomeScreen() {
                       items={cards}
                       cellWidth={cellWidth}
                       queuedIds={queuedIds}
-                      // No card press in reorder mode — the FlatList still
-                      // renders cards but taps are absorbed by the drag gesture.
                       onCardPress={() => {}}
                       onSeeAll={() => {}}
                       onTitleLongPress={drag}
@@ -587,15 +335,8 @@ export default function HomeScreen() {
                       emptyMessage="No matches yet"
                       onHide={
                         item.kind === 'cat'
-                          ? () => hideRow(item.row.category)
-                          : async () => {
-                              // Unpin the saved filter — it stays available
-                              // in /saved-filters but stops surfacing on home.
-                              await togglePinned(item.pf.id, false);
-                              setPinnedFilters((prev) =>
-                                prev.filter((p) => p.id !== item.pf.id),
-                              );
-                            }
+                          ? () => hideCategory(item.row.category)
+                          : () => void unpinFilter(item.pf.id)
                       }
                     />
                   </View>
@@ -616,7 +357,7 @@ export default function HomeScreen() {
               queuedIds={queuedIds}
               onCardPress={open}
               scrollLocked={zoomActive}
-              onTitleLongPress={() => setReorderMode(true)}
+              onTitleLongPress={enterReorder}
               onSeeAll={() => {
                 const next = emptyFilters();
                 next.categories.add(row.category);
@@ -629,8 +370,6 @@ export default function HomeScreen() {
 
         {!reorderMode && orderedPinnedFilters.map((pf) => {
           const matched = applyFiltersToItems(items, pf.filters);
-          // pf.icon may be a category key (renders silhouette) OR an emoji
-          // (renders as text). Detect by looking it up in CATEGORIES.
           const iconIsCategory = pf.icon && (CATEGORIES as readonly string[]).includes(pf.icon);
           return (
             <HomeRow
@@ -646,7 +385,7 @@ export default function HomeScreen() {
               onCardPress={open}
               scrollLocked={zoomActive}
               emptyMessage="No matches yet"
-              onTitleLongPress={() => setReorderMode(true)}
+              onTitleLongPress={enterReorder}
               onSeeAll={() => {
                 applyFilterCtx(pf.filters);
                 setSearchQuery(pf.searchQuery ?? '');
@@ -670,31 +409,34 @@ export default function HomeScreen() {
         )}
 
         {!reorderMode && untagged.length > 0 && (
-          <HomeRow
-            title="untagged"
-            count={untagged.length}
-            items={untagged}
-            cellWidth={cellWidth}
-            queuedIds={queuedIds}
-            onCardPress={open}
-            scrollLocked={zoomActive}
-            dimmed
-            secondaryLabel="triage ›"
-            onSecondary={() => router.push('/triage')}
-            onSeeAll={() => {
-              applyFilterCtx(emptyFilters());
-              router.push('/library');
-            }}
-          />
+          <>
+            <Pressable
+              onPress={() => router.push('/triage')}
+              style={({ pressed }) => [styles.triageCta, pressed && { opacity: 0.75 }]}
+            >
+              <Text style={styles.triageCtaCount}>{untagged.length} untagged</Text>
+              <Text style={styles.triageCtaLink}>triage →</Text>
+            </Pressable>
+            <HomeRow
+              title="untagged"
+              count={untagged.length}
+              items={untagged}
+              cellWidth={cellWidth}
+              queuedIds={queuedIds}
+              onCardPress={open}
+              scrollLocked={zoomActive}
+              dimmed
+              onSeeAll={() => {
+                applyFilterCtx(emptyFilters());
+                router.push('/library');
+              }}
+            />
+          </>
         )}
       </ScrollView>
       </GestureDetector>
 
-      {/* Edge-swipe affordance — rendered AFTER the ScrollView so it stacks
-          on top and reliably catches left-edge swipes. */}
       <EdgeSwipe onOpen={() => setSidebarOpen(true)} />
-
-      {/* No FAB per spec — upload lives in the sidebar. */}
 
       <DetailSheetHost
         ref={sheetHostRef}
@@ -713,7 +455,6 @@ export default function HomeScreen() {
         onPickFromGallery={onPickFromGallery}
       />
 
-      {/* Onboarding overlays — fire once each, tracked via lib/hints. */}
       <GhostHint
         visible={showSwipeHint}
         variant="swipe-right"
@@ -726,18 +467,19 @@ export default function HomeScreen() {
         label="Pinch to resize cards"
         onDismiss={() => setShowPinchHint(false)}
       />
+      <GhostHint
+        visible={showSelectHint}
+        variant="tap"
+        label="Long press to select multiple"
+        onDismiss={() => setShowSelectHint(false)}
+        topOffset="65%"
+      />
     </View>
   );
 }
 
-// Wraps Sidebar with consistent nav callbacks
 const SidebarRender = ({
-  open,
-  onClose,
-  filters,
-  onFiltersChange,
-  email,
-  onPickFromGallery,
+  open, onClose, filters, onFiltersChange, email, onPickFromGallery,
 }: {
   open: boolean;
   onClose: () => void;
@@ -753,40 +495,14 @@ const SidebarRender = ({
     onFiltersChange={onFiltersChange}
     userEmail={email}
     onPickFromGallery={onPickFromGallery}
-    onUpload={() => {
-      onClose();
-      router.push('/upload');
-    }}
-    onLibrary={() => {
-      onClose();
-      router.push('/library');
-    }}
-    onApplyFilters={() => {
-      onClose();
-      router.push('/library');
-    }}
-    onLogo={() => {
-      onClose();
-      // Logo tap means "back to a clean home view" — clear any active filters
-      // so the user isn't stuck in a filtered state after navigating away.
-      onFiltersChange(emptyFilters());
-    }}
-    onSavedFilters={() => {
-      onClose();
-      router.push('/saved-filters');
-    }}
-    onTriage={() => {
-      onClose();
-      router.push('/triage');
-    }}
-    onSettings={() => {
-      onClose();
-      router.push('/settings');
-    }}
-    onSignOut={() => {
-      onClose();
-      void signOut();
-    }}
+    onUpload={() => { onClose(); router.push('/upload'); }}
+    onLibrary={() => { onClose(); router.push('/library'); }}
+    onApplyFilters={() => { onClose(); router.push('/library'); }}
+    onLogo={() => { onClose(); onFiltersChange(emptyFilters()); }}
+    onSavedFilters={() => { onClose(); router.push('/saved-filters'); }}
+    onTriage={() => { onClose(); router.push('/triage'); }}
+    onSettings={() => { onClose(); router.push('/settings'); }}
+    onSignOut={() => { onClose(); void signOut(); }}
   />
 );
 
@@ -796,163 +512,58 @@ const makeStyles = (c: Palette, f: FontSet) =>
     center: { alignItems: 'center', justifyContent: 'center', padding: 32 },
     title: { fontFamily: f.displayMedium, fontSize: 44, color: c.ink, letterSpacing: -0.5 },
     subtitle: {
-      fontSize: 11,
-      letterSpacing: 2,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-      marginTop: 6,
-      marginBottom: 24,
+      fontSize: 11, letterSpacing: 2, textTransform: 'uppercase',
+      color: c.inkMuted, marginTop: 6, marginBottom: 24,
     },
-    emptyHero: {
-      marginBottom: 24,
-      opacity: 0.92,
-    },
+    emptyHero: { marginBottom: 24, opacity: 0.92 },
     emptyBody: {
-      fontFamily: f.italic,
-      fontSize: 16,
-      color: c.inkSoft,
-      textAlign: 'center',
-      maxWidth: 280,
-      lineHeight: 24,
-      marginBottom: 36,
+      fontFamily: f.italic, fontSize: 16, color: c.inkSoft,
+      textAlign: 'center', maxWidth: 280, lineHeight: 24, marginBottom: 36,
     },
     demoLink: {
-      fontSize: 11,
-      letterSpacing: 1.4,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-      textDecorationLine: 'underline',
-      textDecorationStyle: 'dashed',
+      fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.inkMuted, textDecorationLine: 'underline', textDecorationStyle: 'dashed',
     },
-    bigBtn: {
-      backgroundColor: c.ink,
-      paddingHorizontal: 28,
-      paddingVertical: 16,
-      borderRadius: 4,
-    },
+    bigBtn: { backgroundColor: c.ink, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 4 },
     bigBtnText: {
-      color: c.parchment,
-      fontSize: 16,
-      letterSpacing: 1.4,
-      textTransform: 'uppercase',
-      fontWeight: '600',
+      color: c.parchment, fontSize: 16, letterSpacing: 1.4,
+      textTransform: 'uppercase', fontWeight: '600',
     },
     header: {
       flexDirection: 'row',
-      // Text items bottom-align so the "all" link sits flush with the
-      // baseline of the Overlook wordmark; the iris is overridden below
-      // to vertically center against the wordmark.
       alignItems: 'flex-end',
-      paddingHorizontal: 20,
-      paddingTop: 52,
-      paddingBottom: 20,
-      gap: 8,
-    },
-    headerTitleWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+      paddingHorizontal: 20, paddingTop: 52, paddingBottom: 20, gap: 8,
     },
     headerTitle: {
-      fontFamily: f.displayMedium,
-      fontSize: 26,
-      lineHeight: 26,
-      color: c.ink,
-      letterSpacing: -0.4,
-      includeFontPadding: false,
+      fontFamily: f.displayMedium, fontSize: 26, lineHeight: 26,
+      color: c.ink, letterSpacing: -0.4, includeFontPadding: false,
     },
     headerLink: {
-      fontSize: 11,
-      lineHeight: 11,
-      letterSpacing: 1.5,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-      textDecorationLine: 'underline',
-      includeFontPadding: false,
-    },
-    whatsNextWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 },
-    reorderBlock: {
-      marginVertical: 8,
-      paddingVertical: 8,
-      backgroundColor: c.parchmentSoft,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: c.divider,
+      fontSize: 11, lineHeight: 11, letterSpacing: 1.5, textTransform: 'uppercase',
+      color: c.inkMuted, textDecorationLine: 'underline', includeFontPadding: false,
     },
     rowActive: {
-      backgroundColor: c.parchmentSoft,
-      elevation: 6,
-      shadowColor: '#000',
-      shadowOpacity: 0.18,
-      shadowRadius: 8,
+      backgroundColor: c.parchmentSoft, elevation: 6,
+      shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 8,
       shadowOffset: { width: 0, height: 4 },
     },
-    reorderHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingBottom: 8,
+    triageCta: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      marginHorizontal: 20, marginBottom: 10, paddingHorizontal: 16, paddingVertical: 12,
+      borderWidth: 1, borderStyle: 'dashed', borderColor: c.inkMuted, borderRadius: 4,
     },
-    reorderHint: {
-      flex: 1,
-      fontFamily: f.italic,
-      fontSize: 13,
-      color: c.inkSoft,
-    },
-    reorderRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 14,
-      paddingVertical: 18,
-      paddingHorizontal: 20,
-      backgroundColor: c.parchment,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderColor: c.divider,
-    },
-    reorderRowActive: {
-      backgroundColor: c.parchmentSoft,
-      elevation: 6,
-      shadowColor: '#000',
-      shadowOpacity: 0.18,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
-    },
-    reorderRowTitle: {
-      flex: 1,
-      fontFamily: f.displayMedium,
-      fontSize: 18,
-      color: c.ink,
-      letterSpacing: -0.2,
-    },
-    reorderRowCount: {
-      fontFamily: f.italic,
-      fontSize: 14,
-      color: c.inkMuted,
-    },
-    whatsNextLabel: {
-      fontSize: 11,
-      letterSpacing: 1.4,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-      textDecorationLine: 'underline',
-      textDecorationStyle: 'dashed',
+    triageCtaCount: { fontSize: 13, color: c.ink, letterSpacing: 0.2 },
+    triageCtaLink: {
+      fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.inkMuted, textDecorationLine: 'underline',
     },
     batchBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: c.ink,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      marginHorizontal: 20,
-      marginTop: 56,
-      borderRadius: 4,
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      backgroundColor: c.ink, paddingHorizontal: 16, paddingVertical: 14,
+      marginHorizontal: 20, marginTop: 56, borderRadius: 4,
     },
     batchBannerText: {
-      flex: 1,
-      color: c.parchment,
-      fontSize: 12,
-      letterSpacing: 1.2,
-      textTransform: 'uppercase',
+      flex: 1, color: c.parchment, fontSize: 12,
+      letterSpacing: 1.2, textTransform: 'uppercase',
     },
   });

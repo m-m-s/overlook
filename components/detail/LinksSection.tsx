@@ -145,7 +145,8 @@ export const LinksSection = ({
           <Pressable
             onPress={() => open(sourceUrl)}
             onLongPress={() => setEditingSource((v) => !v)}
-            style={styles.pill}
+            hitSlop={6}
+            style={({ pressed }) => [styles.pill, pressed && { opacity: 0.75 }]}
           >
             <Ionicons name="globe-outline" size={14} color={c.ink} />
             <Text style={styles.pillLabel} numberOfLines={1}>
@@ -160,7 +161,8 @@ export const LinksSection = ({
             onPress={() => open(link.url)}
             onLongPress={link.source === 'manual' ? () => removeAt(i) : undefined}
             delayLongPress={350}
-            style={[styles.pill, link.source === 'manual' && styles.pillManual]}
+            hitSlop={6}
+            style={({ pressed }) => [styles.pill, link.source === 'manual' && styles.pillManual, pressed && { opacity: 0.75 }]}
           >
             <Ionicons name={actionUrlIcon(link.type)} size={14} color={c.ink} />
             <Text style={styles.pillLabel} numberOfLines={1}>
@@ -169,7 +171,7 @@ export const LinksSection = ({
           </Pressable>
         ))}
 
-        <Pressable onPress={() => setAdding(true)} style={[styles.pill, styles.pillAdd]}>
+        <Pressable onPress={() => setAdding(true)} hitSlop={6} style={({ pressed }) => [styles.pill, styles.pillAdd, pressed && { opacity: 0.75 }]}>
           <Ionicons name="add" size={14} color={c.inkMuted} />
           <Text style={[styles.pillLabel, { color: c.inkMuted }]}>Add link</Text>
         </Pressable>

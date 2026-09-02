@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, BackHandler, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
@@ -17,25 +16,26 @@ import { Iris } from '@/components/Iris';
 import { EdgeSwipe } from '@/components/EdgeSwipe';
 import { Sidebar } from '@/components/Sidebar';
 import { SignIn } from '@/components/SignIn';
-import { useToast } from '@/components/Toast';
 import { useDemoMode } from '@/lib/demoMode';
-import { applyFilters } from '@/lib/filters';
+import { applyFilters, sortByUrgency } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
-import { searchItems } from '@/lib/search';
-import { analyzeAndPersist, isAnalyzeConfigured } from '@/lib/analyze';
+import { buildSearchIndex, runSearch } from '@/lib/search';
 import { signOut, useSession } from '@/lib/auth';
 import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
-import { markHintSeen, wasHintSeen } from '@/lib/hints';
 import { pickGalleryImages } from '@/lib/galleryPicker';
 import { useScreenshotWatcher } from '@/lib/screenshotWatcher';
 import { fetchScreenshots } from '@/lib/screenshots';
 import { animDuration, useReduceMotion } from '@/lib/a11y';
-import { enqueueAnalysis, getQueuedIds } from '@/lib/analysisQueue';
-import { heavyHaptic, warnHaptic } from '@/lib/haptics';
+import { getQueuedIds } from '@/lib/analysisQueue';
+import { heavyHaptic } from '@/lib/haptics';
+import { effectiveUrgencyKey } from '@/lib/urgency';
 import { useUndoableDelete } from '@/lib/useUndoableDelete';
+import { useLibraryHints } from '@/lib/useLibraryHints';
+import { useLibraryUpload } from '@/lib/useLibraryUpload';
+import { useMultiSelect } from '@/lib/useMultiSelect';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { uploadScreenshot, type LocalScreenshot } from '@/lib/uploads';
+import type { LocalScreenshot } from '@/lib/uploads';
 
 type ColCount = 1 | 2 | 3 | 4;
 const COLS_KEY = 'overlook.grid_cols';
@@ -46,15 +46,10 @@ const toCardData = (it: LocalScreenshot): CardData => ({
   uri: it.uri,
   category: it.category ?? null,
   status: (it.status as keyof typeof statusColors) ?? null,
-  urgency: (it.urgency as keyof typeof urgencyColors) ?? null,
+  urgency: (effectiveUrgencyKey(it) as keyof typeof urgencyColors) ?? null,
   resonance: it.resonance ?? null,
 });
 
-/**
- * Compute the top 3 tag values to overlay in intent-mode cards. Prefers manual
- * tags (heavier signal), then AI tags. Skips untyped values that are very
- * generic (single chars). De-duplicates by lowercase value.
- */
 const intentTagPills = (it: LocalScreenshot): string[] => {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -69,19 +64,11 @@ const intentTagPills = (it: LocalScreenshot): string[] => {
   return out.slice(0, 3);
 };
 
-/** Multi-select top bar: slides down from above when active, slides up when not. */
 const BulkBar = ({
-  visible,
-  count,
-  onCancel,
-  onTag,
-  onDelete,
+  visible, count, onCancel, onTag, onDelete,
 }: {
-  visible: boolean;
-  count: number;
-  onCancel: () => void;
-  onTag: () => void;
-  onDelete: () => void;
+  visible: boolean; count: number;
+  onCancel: () => void; onTag: () => void; onDelete: () => void;
 }) => {
   const reduceMotion = useReduceMotion();
   const translateY = useRef(new Animated.Value(-110)).current;
@@ -120,28 +107,46 @@ const BulkBar = ({
 
 export default function LibraryScreen() {
   const { session, loading } = useSession();
-  const toast = useToast();
   const [items, setItems] = useState<LocalScreenshot[]>([]);
-  const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const sheetHostRef = useRef<DetailSheetHostHandle>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const { filters, setFilters, clearFilters, searchQuery } = useFilters();
-  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set());
-  const [multiSelectIds, setMultiSelectIds] = useState<Set<string>>(new Set());
   const [cols, setCols] = useState<ColCount>(3);
+  const [urgencySort, setUrgencySort] = useState<'asc' | 'desc'>('asc');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [demoOn, setDemoOn] = useDemoMode();
-  const insets = useSafeAreaInsets();
-  const inSelectMode = multiSelectIds.size > 0;
-  const isIntentMode = cols === 1;
+  const sheetHostRef = useRef<DetailSheetHostHandle>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const bulkSheetRef = useRef<BottomSheetModal>(null);
+  const { filters, setFilters, clearFilters, searchQuery } = useFilters();
   const { enqueue: enqueueAssets } = useScreenshotWatcher();
+  const insets = useSafeAreaInsets();
   const c = useColors();
   const f = useFonts();
   const styles = useMemo(() => makeStyles(c, f), [c, f]);
 
-  // Load persisted column count
+  const isIntentMode = cols === 1;
+
+  const { remove: undoableRemove, removeMany: undoableRemoveMany } = useUndoableDelete(setItems);
+
+  const {
+    multiSelectIds, inSelectMode, toggleMultiSelect, exitMultiSelect, onBulkApplied, onBulkDelete,
+  } = useMultiSelect(items, setItems, undoableRemoveMany);
+
+  const { busy, analyzingIds, onPick } = useLibraryUpload(session, setItems, setQueuedIds, setDemoOn);
+
+  const filtered = useMemo(() => applyFilters(items, filters), [items, filters]);
+  const searchIndex = useMemo(() => buildSearchIndex(filtered), [filtered]);
+  const visibleItems = useMemo(() => {
+    const searched = searchQuery.trim() ? runSearch(searchIndex, searchQuery) : filtered;
+    return filters.urgencies.size > 0 ? sortByUrgency(searched, urgencySort) : searched;
+  }, [filtered, searchIndex, searchQuery, urgencySort, filters.urgencies.size]);
+
+  const {
+    showLibraryPinchHint, setShowLibraryPinchHint,
+    showSelectHint, setShowSelectHint,
+    showIntentHint, setShowIntentHint,
+  } = useLibraryHints(items.length, cols);
+
   useEffect(() => {
     AsyncStorage.getItem(COLS_KEY).then((v) => {
       const n = v ? parseInt(v, 10) : 3;
@@ -149,114 +154,26 @@ export default function LibraryScreen() {
     });
   }, []);
 
-  // Persist on change
   useEffect(() => {
     AsyncStorage.setItem(COLS_KEY, String(cols)).catch(() => {});
   }, [cols]);
 
-  // Close any sticky overlays whenever this screen gains focus (e.g. coming
-  // back from /upload, /triage, etc) — defensive layered: useFocusEffect +
-  // pathname watcher to catch all navigation patterns.
   const pathname = usePathname();
   useEffect(() => {
     if (pathname === '/library') setSidebarOpen(false);
   }, [pathname]);
-  useFocusEffect(
-    useCallback(() => {
-      setSidebarOpen(false);
-    }, []),
-  );
 
-  // Android hardware back: nav-style. Sheet > sidebar > multi-select >
-  // default (let the navigator pop). Active filters do NOT intercept
-  // back — the user navigated INTO a filtered view via a filter pick or
-  // saved-filter tap, so back should pop back to where they came from.
-  // (Earlier behavior cleared filters in place, which felt like the
-  // back button was 'broken' — it reset the screen instead of navigating.)
+  useFocusEffect(useCallback(() => { setSidebarOpen(false); }, []));
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (sheetOpen) {
-        sheetHostRef.current?.dismiss();
-        return true;
-      }
-      if (sidebarOpen) {
-        setSidebarOpen(false);
-        return true;
-      }
-      if (inSelectMode) {
-        exitMultiSelect();
-        return true;
-      }
+      if (sheetOpen) { sheetHostRef.current?.dismiss(); return true; }
+      if (sidebarOpen) { setSidebarOpen(false); return true; }
+      if (inSelectMode) { exitMultiSelect(); return true; }
       return false;
     });
     return () => sub.remove();
   }, [sheetOpen, sidebarOpen, inSelectMode]);
-
-  // First-card hint: when items first appear, show a ghost-hand pinch-in
-  // overlay so users discover the gesture-based zoom.
-  const [showLibraryPinchHint, setShowLibraryPinchHint] = useState(false);
-  const prevItemsCount = useRef(items.length);
-  useEffect(() => {
-    if (prevItemsCount.current === 0 && items.length > 0) {
-      void (async () => {
-        if (!(await wasHintSeen('library-pinch-zoom'))) {
-          setShowLibraryPinchHint(true);
-          await markHintSeen('library-pinch-zoom');
-        }
-      })();
-    }
-    prevItemsCount.current = items.length;
-  }, [items.length]);
-
-  // Intent-mode hint: ghost dot converging when first entering 1-col view.
-  const [showIntentHint, setShowIntentHint] = useState(false);
-
-  // Pinch gesture: pinch out (scale > 1.3) -> zoom in (fewer cols).
-  // Pinch in (scale < 0.7) -> zoom out (more cols).
-  const pinchGesture = useMemo(
-    () =>
-      Gesture.Pinch()
-        .runOnJS(true)
-        .onEnd((e) => {
-          if (e.scale > 1.3) {
-            setCols((prev) => (prev > 1 ? ((prev - 1) as ColCount) : 1));
-          } else if (e.scale < 0.7) {
-            setCols((prev) => (prev < 4 ? ((prev + 1) as ColCount) : 4));
-          }
-        }),
-    [],
-  );
-
-  // Show a hint once when user enters intent mode (1 col) for the first time.
-  useEffect(() => {
-    if (cols !== 1) return;
-    void (async () => {
-      if (!(await wasHintSeen('intent-mode'))) {
-        setShowIntentHint(true);
-        await markHintSeen('intent-mode');
-      }
-    })();
-  }, [cols]);
-
-  const visibleItems = useMemo(() => {
-    const filtered = applyFilters(items, filters);
-    return searchQuery.trim() ? searchItems(filtered, searchQuery) : filtered;
-  }, [items, filters, searchQuery]);
-  const { remove: undoableRemove, removeMany: undoableRemoveMany } = useUndoableDelete(setItems);
-
-  const onRefresh = useCallback(async () => {
-    if (!session) return;
-    setRefreshing(true);
-    try {
-      const rows = await fetchScreenshots();
-      setItems(rows);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [session]);
-
-  const bulkSheetRef = useRef<BottomSheetModal>(null);
-  const bulkSnapPoints = useMemo(() => ['85%'], []);
 
   useEffect(() => {
     if (!session) return;
@@ -264,207 +181,28 @@ export default function LibraryScreen() {
     void getQueuedIds().then(setQueuedIds);
   }, [session, demoOn]);
 
-  // Two-step upload per spec privacy model: pick first, then user explicitly
-  // chooses to analyze with AI or add without AI. "Nothing auto-sends ever."
-  const runUpload = async (assets: ImagePicker.ImagePickerAsset[], analyze: boolean) => {
-    // Device-only architecture: we need an assetId for each picked image to
-    // resolve its URI on subsequent loads. Skip + warn for any picker assets
-    // missing an assetId (camera-captured items don't expose one).
-    const skipped = assets.filter((a) => !a.assetId).length;
-    const usable = assets.filter((a) => a.assetId);
-    if (skipped > 0) {
-      toast.error(
-        `${skipped} image${skipped === 1 ? '' : 's'} skipped (camera-only — must come from your Photos library to import).`,
-      );
-    }
-    if (usable.length === 0) return;
+  const onRefresh = useCallback(async () => {
+    if (!session) return;
+    setRefreshing(true);
+    try { setItems(await fetchScreenshots()); }
+    finally { setRefreshing(false); }
+  }, [session]);
 
-    // Real upload starting — clear demo mode so fetched rows aren't masked.
-    void setDemoOn(false);
-
-    const uploads = await Promise.all(
-      usable.map((a) =>
-        uploadScreenshot(a.uri, {
-          deviceAssetId: a.assetId ?? undefined,
+  const pinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .runOnJS(true)
+        .onEnd((e) => {
+          if (e.scale > 1.3) setCols((prev) => (prev > 1 ? ((prev - 1) as ColCount) : 1));
+          else if (e.scale < 0.7) setCols((prev) => (prev < 4 ? ((prev + 1) as ColCount) : 4));
         }),
-      ),
-    );
+    [],
+  );
 
-    // Show cards immediately
-    setItems((prev) => [...uploads, ...prev]);
-
-    if (!analyze || !isAnalyzeConfigured) return;
-
-    setAnalyzingIds((prev) => {
-      const next = new Set(prev);
-      for (const u of uploads) next.add(u.id);
-      return next;
-    });
-
-    // Run analyses concurrently, then update state once with the aggregated
-    // result so we don't race the failures counter or leak fire-and-forget
-    // promises.
-    const results = await Promise.allSettled(
-      uploads.map(async (u) => ({
-        id: u.id,
-        patch: await analyzeAndPersist(u.uri, u.id, u.deviceAssetId ?? undefined),
-      })),
-    );
-
-    let failures = 0;
-    const successPatches: { id: string; patch: NonNullable<Awaited<ReturnType<typeof analyzeAndPersist>>> }[] = [];
-    const failedIds: { id: string; uri: string }[] = [];
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      const upload = uploads[i];
-      if (r.status === 'fulfilled' && r.value.patch) {
-        successPatches.push({ id: r.value.id, patch: r.value.patch });
-      } else {
-        failures++;
-        failedIds.push({ id: upload.id, uri: upload.uri });
-      }
-    }
-    // Enqueue failed analyses for offline retry on next app foreground.
-    for (const f of failedIds) {
-      const u = uploads.find((x) => x.id === f.id);
-      await enqueueAnalysis(f.id, f.uri, u?.deviceAssetId ?? undefined);
-    }
-
-    setAnalyzingIds((prev) => {
-      const next = new Set(prev);
-      for (const u of uploads) next.delete(u.id);
-      return next;
-    });
-    if (successPatches.length > 0) {
-      setItems((prev) =>
-        prev.map((it) => {
-          const found = successPatches.find((s) => s.id === it.id);
-          return found ? { ...it, ...found.patch } : it;
-        }),
-      );
-    }
-    if (failures > 0) {
-      toast.show(
-        `${failures} of ${uploads.length} couldn't be AI-tagged — queued for retry when online.`,
-        { kind: 'error' },
-      );
-    }
-    // Refresh queued snapshot in case items were enqueued for retry.
-    void getQueuedIds().then(setQueuedIds);
-  };
-
-  const onPick = async () => {
-    setBusy(true);
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(
-          'Photo permission needed',
-          'Overlook needs access to your gallery to add screenshots. Open Settings → Apps → Overlook → Permissions to enable.',
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: 10,
-        quality: 0.9,
-      });
-      if (result.canceled || result.assets.length === 0) return;
-
-      const count = result.assets.length;
-      const assets = result.assets;
-
-      // Per spec privacy model: "Nothing auto-sends ever. Post-screenshot popup
-      // requires explicit tap to analyze." Confirm before AI analysis.
-      if (isAnalyzeConfigured) {
-        Alert.alert(
-          `Add ${count} screenshot${count === 1 ? '' : 's'}?`,
-          'Choose how to add them. AI tagging sends each image to Claude for analysis (~$0.003/image). "Add without AI" keeps them local-only — you can tag manually or analyze later from the card detail view.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Add without AI', onPress: () => void runUpload(assets, false) },
-            {
-              text: 'Analyze with AI',
-              style: 'default',
-              onPress: () => void runUpload(assets, true),
-            },
-          ],
-        );
-      } else {
-        // No AI configured — just add them
-        await runUpload(assets, false);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openDetail = (it: LocalScreenshot) => {
-    sheetHostRef.current?.present(it.id);
-  };
-
-  const toggleMultiSelect = (id: string) => {
-    setMultiSelectIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const exitMultiSelect = () => setMultiSelectIds(new Set());
-
-  const onCardPress = (it: LocalScreenshot) => {
-    if (inSelectMode) toggleMultiSelect(it.id);
-    else openDetail(it);
-  };
-
-  const onCardLongPress = (it: LocalScreenshot) => {
-    void heavyHaptic();
-    setMultiSelectIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(it.id)) next.delete(it.id);
-      else next.add(it.id);
-      return next;
-    });
-  };
-
-  const onBulkTag = () => {
-    if (multiSelectIds.size === 0) return;
-    bulkSheetRef.current?.present();
-  };
-
-  const onBulkApplied = (
-    patch: Partial<LocalScreenshot>,
-    appendedTag: { type?: string; value: string } | null,
-  ) => {
-    setItems((prev) =>
-      prev.map((it) =>
-        multiSelectIds.has(it.id)
-          ? {
-              ...it,
-              ...patch,
-              // appendedTag changes manual_typed_tags but we don't store those in
-              // LocalScreenshot — server stays source of truth, list-view ignores.
-            }
-          : it,
-      ),
-    );
-    if (appendedTag) {
-      // intentionally a no-op locally — appended tag isn't in card visual.
-    }
-    exitMultiSelect();
-  };
-
-  const onBulkDelete = () => {
-    const targets = items.filter((it) => multiSelectIds.has(it.id));
-    if (targets.length === 0) return;
-    void warnHaptic();
-    undoableRemoveMany(targets);
-    exitMultiSelect();
-  };
+  const openDetail = (it: LocalScreenshot) => sheetHostRef.current?.present(it.id);
+  const onCardPress = (it: LocalScreenshot) => { if (inSelectMode) toggleMultiSelect(it.id); else openDetail(it); };
+  const onCardLongPress = (it: LocalScreenshot) => { void heavyHaptic(); toggleMultiSelect(it.id); };
+  const onBulkTag = () => { if (multiSelectIds.size > 0) bulkSheetRef.current?.present(); };
 
   const onItemChange = useCallback(
     (id: string, patch: Partial<LocalScreenshot>) => {
@@ -481,7 +219,6 @@ export default function LibraryScreen() {
     [items, undoableRemove],
   );
 
-  // Backdrop for the bulk-tag sheet (still inline below).
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.4} />
@@ -492,14 +229,7 @@ export default function LibraryScreen() {
   const onSignOut = () => {
     Alert.alert('Sign out?', `You'll be signed out of ${session?.user.email ?? 'your account'}.`, [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          setItems([]);
-        },
-      },
+      { text: 'Sign out', style: 'destructive', onPress: async () => { await signOut(); setItems([]); } },
     ]);
   };
 
@@ -511,9 +241,7 @@ export default function LibraryScreen() {
     );
   }
 
-  if (isSupabaseConfigured && !session) {
-    return <SignIn />;
-  }
+  if (isSupabaseConfigured && !session) return <SignIn />;
 
   return (
     <View style={styles.container}>
@@ -539,14 +267,13 @@ export default function LibraryScreen() {
           >
             <Text style={styles.bigBtnText}>{busy ? 'uploading…' : 'upload screenshots'}</Text>
           </Pressable>
-          <Pressable onPress={() => void setDemoOn(true)} hitSlop={8} style={{ marginTop: 24 }}>
+          <Pressable onPress={() => void setDemoOn(true)} hitSlop={8} style={({ pressed }) => [{ marginTop: 24 }, pressed && { opacity: 0.75 }]}>
             <Text style={styles.demoLink}>or load demo data</Text>
           </Pressable>
         </View>
       ) : (
         <GestureDetector gesture={pinchGesture}>
           <FlatList
-            // key on cols forces FlatList to remount when numColumns changes.
             key={`grid-${cols}`}
             data={visibleItems}
             keyExtractor={(it) => it.id}
@@ -561,6 +288,8 @@ export default function LibraryScreen() {
                 totalCount={items.length}
                 filteredCount={visibleItems.length}
                 onOpenSidebar={() => setSidebarOpen(true)}
+                urgencySort={urgencySort}
+                onToggleUrgencySort={() => setUrgencySort((d) => d === 'asc' ? 'desc' : 'asc')}
               />
             }
             ListEmptyComponent={
@@ -584,18 +313,12 @@ export default function LibraryScreen() {
               </View>
             )}
             refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={c.ink}
-                colors={[c.ink]}
-              />
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.ink} colors={[c.ink]} />
             }
           />
         </GestureDetector>
       )}
 
-      {/* Edge swipe — rendered after the grid so it stacks on top reliably. */}
       {!inSelectMode && session && <EdgeSwipe onOpen={() => setSidebarOpen(true)} />}
 
       <DetailSheetHost
@@ -609,7 +332,7 @@ export default function LibraryScreen() {
 
       <BottomSheetModal
         ref={bulkSheetRef}
-        snapPoints={bulkSnapPoints}
+        snapPoints={useMemo(() => ['85%'], [])}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: c.parchment }}
         handleIndicatorStyle={{ backgroundColor: c.inkMuted }}
@@ -632,46 +355,23 @@ export default function LibraryScreen() {
           const assets = await pickGalleryImages({ allowsMultipleSelection: true });
           if (assets.length > 0) enqueueAssets(assets);
         }}
-        onUpload={() => {
-          setSidebarOpen(false);
-          // Navigate to bulk upload screen instead of opening the small picker.
-          // The small picker is also still available via the FAB on the grid.
-          router.push('/upload');
-        }}
-        onLibrary={() => {
-          setSidebarOpen(false);
-          clearFilters();
-          // Already on /library; clearing filters reveals the unfiltered grid.
-        }}
-        onApplyFilters={() => {
-          // Already on /library — just close the sidebar so the user can see
-          // the (already-active) filters take effect on the visible grid.
-          setSidebarOpen(false);
-        }}
-        onLogo={() => {
-          setSidebarOpen(false);
-          clearFilters();
-          router.push('/');
-        }}
-        onSavedFilters={() => {
-          setSidebarOpen(false);
-          router.push('/saved-filters');
-        }}
-        onTriage={() => {
-          setSidebarOpen(false);
-          router.push('/triage');
-        }}
-        onSettings={() => {
-          setSidebarOpen(false);
-          router.push('/settings');
-        }}
-        onSignOut={() => {
-          setSidebarOpen(false);
-          onSignOut();
-        }}
+        onUpload={() => { setSidebarOpen(false); router.push('/upload'); }}
+        onLibrary={() => { setSidebarOpen(false); clearFilters(); }}
+        onApplyFilters={() => { setSidebarOpen(false); }}
+        onLogo={() => { setSidebarOpen(false); clearFilters(); router.push('/'); }}
+        onSavedFilters={() => { setSidebarOpen(false); router.push('/saved-filters'); }}
+        onTriage={() => { setSidebarOpen(false); router.push('/triage'); }}
+        onSettings={() => { setSidebarOpen(false); router.push('/settings'); }}
+        onSignOut={() => { setSidebarOpen(false); onSignOut(); }}
       />
 
-      {/* Onboarding overlays */}
+      <GhostHint
+        visible={showSelectHint}
+        variant="tap"
+        label="Long press to select multiple"
+        onDismiss={() => setShowSelectHint(false)}
+        topOffset="65%"
+      />
       <GhostHint
         visible={showLibraryPinchHint}
         variant="pinch-in"
@@ -695,55 +395,28 @@ const makeStyles = (c: Palette, f: FontSet) =>
     empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
     emptyTitle: { fontFamily: f.displayMedium, fontSize: 44, color: c.ink, letterSpacing: -0.5 },
     emptySub: {
-      fontSize: 11,
-      letterSpacing: 2,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-      marginTop: 6,
-      marginBottom: 32,
+      fontSize: 11, letterSpacing: 2, textTransform: 'uppercase',
+      color: c.inkMuted, marginTop: 6, marginBottom: 32,
     },
-    bigBtn: {
-      backgroundColor: c.ink,
-      paddingHorizontal: 28,
-      paddingVertical: 16,
-      borderRadius: 4,
-    },
+    bigBtn: { backgroundColor: c.ink, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 4 },
     bigBtnText: {
-      color: c.parchment,
-      fontSize: 16,
-      letterSpacing: 1.4,
-      textTransform: 'uppercase',
-      fontWeight: '600',
+      color: c.parchment, fontSize: 16, letterSpacing: 1.4,
+      textTransform: 'uppercase', fontWeight: '600',
     },
     cellIntent: { width: '100%', aspectRatio: 9 / 16 },
     demoLink: {
-      fontSize: 11,
-      letterSpacing: 1.4,
-      textTransform: 'uppercase',
-      color: c.inkMuted,
-      textDecorationLine: 'underline',
-      textDecorationStyle: 'dashed',
+      fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase',
+      color: c.inkMuted, textDecorationLine: 'underline', textDecorationStyle: 'dashed',
     },
     bulkBar: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      paddingTop: 56,
-      paddingBottom: 14,
-      paddingHorizontal: 20,
-      backgroundColor: c.ink,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      zIndex: 20,
+      position: 'absolute', top: 0, left: 0, right: 0,
+      paddingTop: 56, paddingBottom: 14, paddingHorizontal: 20,
+      backgroundColor: c.ink, flexDirection: 'row', alignItems: 'center',
+      justifyContent: 'space-between', zIndex: 20,
     },
     bulkCount: {
-      color: c.parchment,
-      fontSize: 13,
-      letterSpacing: 1.5,
-      textTransform: 'uppercase',
-      fontWeight: '600',
+      color: c.parchment, fontSize: 13, letterSpacing: 1.5,
+      textTransform: 'uppercase', fontWeight: '600',
     },
     bulkIconBtn: { padding: 4 },
   });

@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { LayoutAnimation, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { SaveFilterButton } from './SaveFilterButton';
-import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { statusColors, urgencyColors } from '@/lib/colors';
 import { emptyFilters, filtersActive, type Filters } from '@/lib/filters';
 import { useFilters } from '@/lib/filtersContext';
-import { capitalize, STATUSES, URGENCIES } from '@/lib/options';
+import { capitalize, DIFFICULTIES, STATUSES, TIMES_TO_COMPLETE, URGENCIES } from '@/lib/options';
+import { useColors } from '@/lib/themeContext';
 
 type Props = {
   filters: Filters;
@@ -16,6 +18,9 @@ type Props = {
   filteredCount?: number;
   /** Callback to open the sidebar (where filters are set). */
   onOpenSidebar: () => void;
+  /** Current urgency sort direction — only relevant when urgency filters are active. */
+  urgencySort?: 'asc' | 'desc';
+  onToggleUrgencySort?: () => void;
 };
 
 const removeFromSet = <T,>(s: Set<T>, v: T): Set<T> => {
@@ -39,8 +44,29 @@ export const ActiveFilters = ({
   totalCount,
   filteredCount,
   onOpenSidebar,
+  urgencySort,
+  onToggleUrgencySort,
 }: Props) => {
   const { searchQuery, setSearchQuery } = useFilters();
+  const c = useColors();
+  const styles = useMemo(() => StyleSheet.create({
+    wrap: { paddingHorizontal: 20, paddingTop: 52, paddingBottom: 20 },
+    brandRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginBottom: 10 },
+    brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    brandText: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 26, lineHeight: 26, includeFontPadding: false, color: c.ink, letterSpacing: -0.4 },
+    topRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    menuBtn: { padding: 4 },
+    count: { flex: 1, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted },
+    clearAll: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted, textDecorationLine: 'underline' },
+    chipScroll: { flex: 1 },
+    chips: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+    totalLabel: { flex: 1, fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted, textAlign: 'right' },
+    metaRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10, gap: 6 },
+    metaText: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted },
+    metaSpacer: { flex: 1 },
+    metaSep: { color: c.divider, fontSize: 11 },
+    metaLink: { fontSize: 11, letterSpacing: 1.4, textTransform: 'uppercase', color: c.inkMuted, textDecorationLine: 'underline' },
+  }), [c]);
   const trimmedSearch = searchQuery.trim();
   const hasSearch = trimmedSearch.length > 0;
   const active = filtersActive(filters) + (hasSearch ? 1 : 0);
@@ -59,7 +85,7 @@ export const ActiveFilters = ({
           style={({ pressed }) => [pressed && { opacity: 0.7 }]}
           accessibilityLabel="Open sidebar"
         >
-          <Iris level={3} size={26} color={colors.ink} />
+          <Iris level={3} size={26} color={c.ink} />
         </Pressable>
         <Pressable
           onPress={() => router.replace('/')}
@@ -88,7 +114,7 @@ export const ActiveFilters = ({
                 label={`"${trimmedSearch}"`}
                 variant="meta"
                 selected
-                color={colors.ink}
+                color={c.ink}
                 onPress={onOpenSidebar}
                 onRemove={() => {
                   animateNext();
@@ -102,7 +128,7 @@ export const ActiveFilters = ({
                 label={q}
                 variant="meta"
                 selected
-                color={colors.ink}
+                color={c.ink}
                 onPress={onOpenSidebar}
                 onRemove={() => {
                   animateNext();
@@ -118,7 +144,7 @@ export const ActiveFilters = ({
                 label={URGENCIES.find((x) => x.key === u)?.label ?? u}
                 variant="meta"
                 selected
-                color={urgencyColors[u] ?? colors.ink}
+                color={urgencyColors[u] ?? c.ink}
                 onPress={onOpenSidebar}
                 onRemove={() => {
                   animateNext();
@@ -132,7 +158,7 @@ export const ActiveFilters = ({
                 label={STATUSES.find((x) => x.key === s)?.label ?? s}
                 variant="meta"
                 selected
-                color={statusColors[s] ?? colors.ink}
+                color={statusColors[s] ?? c.ink}
                 onPress={onOpenSidebar}
                 onRemove={() => {
                   animateNext();
@@ -140,17 +166,17 @@ export const ActiveFilters = ({
                 }}
               />
             ))}
-            {Array.from(filters.categories).map((c) => (
+            {Array.from(filters.categories).map((cat) => (
               <Chip
-                key={`c-${c}`}
-                label={capitalize(c)}
+                key={`c-${cat}`}
+                label={capitalize(cat)}
                 variant="meta"
                 selected
-                color={colors.ink}
+                color={c.ink}
                 onPress={onOpenSidebar}
                 onRemove={() => {
                   animateNext();
-                  onChange({ ...filters, categories: removeFromSet(filters.categories, c) });
+                  onChange({ ...filters, categories: removeFromSet(filters.categories, cat) });
                 }}
               />
             ))}
@@ -160,11 +186,39 @@ export const ActiveFilters = ({
                 label={`level ${r}`}
                 variant="meta"
                 selected
-                color={colors.ink}
+                color={c.ink}
                 onPress={onOpenSidebar}
                 onRemove={() => {
                   animateNext();
                   onChange({ ...filters, resonances: removeFromSet(filters.resonances, r) });
+                }}
+              />
+            ))}
+            {Array.from(filters.difficulties ?? []).map((d) => (
+              <Chip
+                key={`d-${d}`}
+                label={DIFFICULTIES.find((x) => x.key === d)?.label ?? capitalize(d)}
+                variant="meta"
+                selected
+                color={c.ink}
+                onPress={onOpenSidebar}
+                onRemove={() => {
+                  animateNext();
+                  onChange({ ...filters, difficulties: removeFromSet(filters.difficulties, d) });
+                }}
+              />
+            ))}
+            {Array.from(filters.timesToComplete ?? []).map((t) => (
+              <Chip
+                key={`t-${t}`}
+                label={TIMES_TO_COMPLETE.find((x) => x.key === t)?.label ?? t}
+                variant="meta"
+                selected
+                color={c.ink}
+                onPress={onOpenSidebar}
+                onRemove={() => {
+                  animateNext();
+                  onChange({ ...filters, timesToComplete: removeFromSet(filters.timesToComplete, t) });
                 }}
               />
             ))}
@@ -187,6 +241,16 @@ export const ActiveFilters = ({
               {isFiltered ? `${filteredCount} of ${totalCount}` : `${totalCount}`} results
             </Text>
           )}
+          {filters.urgencies.size > 0 && onToggleUrgencySort && (
+            <>
+              <Text style={styles.metaSep}>·</Text>
+              <Pressable onPress={onToggleUrgencySort} hitSlop={12}>
+                <Text style={styles.metaLink}>
+                  {urgencySort === 'desc' ? '↓ urgency' : '↑ urgency'}
+                </Text>
+              </Pressable>
+            </>
+          )}
           <View style={styles.metaSpacer} />
           <SaveFilterButton filters={filters} compact />
           <Text style={styles.metaSep}>·</Text>
@@ -195,7 +259,7 @@ export const ActiveFilters = ({
               onChange(emptyFilters());
               setSearchQuery('');
             }}
-            hitSlop={6}
+            hitSlop={12}
           >
             <Text style={styles.metaLink}>clear all</Text>
           </Pressable>
@@ -205,68 +269,3 @@ export const ActiveFilters = ({
   );
 };
 
-const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 20, paddingTop: 52, paddingBottom: 20 },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-    marginBottom: 10,
-  },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brandText: {
-    fontFamily: 'PlayfairDisplay_500Medium',
-    fontSize: 26,
-    lineHeight: 26,
-    includeFontPadding: false,
-    color: colors.ink,
-    letterSpacing: -0.4,
-  },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  menuBtn: { padding: 4 },
-  count: {
-    flex: 1,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-  },
-  clearAll: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    textDecorationLine: 'underline',
-  },
-  chipScroll: { flex: 1 },
-  chips: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  totalLabel: {
-    flex: 1,
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    textAlign: 'right',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 10,
-    gap: 6,
-  },
-  metaText: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-  },
-  metaSpacer: { flex: 1 },
-  metaSep: { color: colors.divider, fontSize: 11 },
-  metaLink: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    textDecorationLine: 'underline',
-  },
-});

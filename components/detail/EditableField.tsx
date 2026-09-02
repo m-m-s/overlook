@@ -1,20 +1,22 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useMemo, type ReactNode } from 'react';
+import Reanimated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Shake } from '../Shake';
-import { heavyHaptic } from '@/lib/haptics';
 import type { FontSet, Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
 
 type Props = {
-  /** Stable key used by the parent's editingSections set. */
-  sectionKey: string;
+  /** Accepted but unused — retained for call-site compatibility. */
+  sectionKey?: string;
   /** Section header label (lowercase per editorial style). */
   label: string;
   /** Whether this section is currently in edit mode. */
   editing: boolean;
-  /** Toggle this section's edit-mode flag (long-press anywhere or "done editing" tap). */
+  /** Tap target — toggles edit mode. */
   onToggle: () => void;
+  /** Called when "done editing" is tapped — saves and closes. Defaults to onToggle. */
+  onDone?: () => void;
   /** When true, the read slot renders. When false (and not editing), an
    *  italicized 'not set' hint shows. */
   hasValue: boolean;
@@ -38,6 +40,7 @@ export const EditableField = ({
   label,
   editing,
   onToggle,
+  onDone,
   hasValue,
   read,
   edit,
@@ -48,24 +51,29 @@ export const EditableField = ({
   return (
     <View>
       <Pressable
-        onLongPress={() => { void heavyHaptic(); onToggle(); }}
-        delayLongPress={350}
-        style={styles.head}
+        onPress={onToggle}
+        hitSlop={8}
+        style={({ pressed }) => [styles.head, pressed && { opacity: 0.75 }]}
       >
-        <Text style={styles.label}>{label}</Text>
+        <Text style={styles.label}>
+          {label}
+          {!editing && !hasValue && <Text style={styles.labelAdd}>  +</Text>}
+        </Text>
         {editing && (
-          <Pressable onPress={onToggle} hitSlop={8} style={styles.exit}>
+          <Pressable onPress={onDone ?? onToggle} hitSlop={8} style={styles.exit}>
             <Text style={styles.exitText}>done editing</Text>
           </Pressable>
         )}
       </Pressable>
       {editing ? (
-        <Shake trigger={editing}>{edit}</Shake>
+        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(110)}>
+          <Shake trigger={editing}>{edit}</Shake>
+        </Reanimated.View>
       ) : hasValue ? (
-        read
-      ) : (
-        <Text style={styles.empty}>not set</Text>
-      )}
+        <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(110)}>
+          {read}
+        </Reanimated.View>
+      ) : null}
     </View>
   );
 };
@@ -90,6 +98,12 @@ const makeStyles = (c: Palette, f: FontSet) =>
       paddingVertical: 2,
       paddingHorizontal: 4,
     },
+    labelAdd: {
+      fontSize: 11,
+      letterSpacing: 0,
+      color: c.inkMuted,
+      fontWeight: '300',
+    },
     exitText: {
       fontSize: 10,
       letterSpacing: 1.2,
@@ -97,11 +111,5 @@ const makeStyles = (c: Palette, f: FontSet) =>
       color: c.inkMuted,
       textDecorationLine: 'underline',
       textDecorationStyle: 'dashed',
-    },
-    empty: {
-      fontFamily: f.italic,
-      fontSize: 13,
-      color: c.inkMuted,
-      paddingVertical: 4,
     },
   });

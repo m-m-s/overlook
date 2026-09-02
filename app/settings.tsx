@@ -58,7 +58,7 @@ export default function SettingsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backBtn}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}>
           <Ionicons name="arrow-back" size={22} color={c.ink} />
         </Pressable>
         <Text style={styles.title}>Settings</Text>
@@ -86,7 +86,7 @@ export default function SettingsScreen() {
             await resetOnboarding();
             toast.show('Onboarding will replay next launch.');
           }}
-          style={styles.linkRow}
+          style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.75 }]}
         >
           <Text style={styles.linkText}>Replay welcome flow</Text>
           <Ionicons name="play-back-outline" size={16} color={c.inkMuted} />
@@ -98,7 +98,7 @@ export default function SettingsScreen() {
               clearHidden();
               toast.show('Restored hidden category rows.');
             }}
-            style={styles.linkRow}
+            style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.75 }]}
           >
             <Text style={styles.linkText}>
               Restore {hiddenRows.length} hidden home {hiddenRows.length === 1 ? 'row' : 'rows'}
@@ -194,7 +194,7 @@ export default function SettingsScreen() {
             await signOut();
             router.replace('/');
           }}
-          style={styles.linkRow}
+          style={({ pressed }) => [styles.linkRow, pressed && { opacity: 0.75 }]}
         >
           <Text style={styles.linkText}>Sign out</Text>
           <Ionicons name="log-out-outline" size={16} color={c.inkMuted} />
@@ -272,7 +272,7 @@ const ThemePicker = ({
           <Pressable
             key={opt.key}
             onPress={() => onChange(opt.key)}
-            style={[styles.themeOpt, active && styles.themeOptActive]}
+            style={({ pressed }) => [styles.themeOpt, active && styles.themeOptActive, pressed && { opacity: 0.75 }]}
           >
             <Text style={[styles.themeOptLabel, active && styles.themeOptLabelActive]}>
               {opt.label}

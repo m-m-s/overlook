@@ -30,7 +30,7 @@ export const UploadDone = ({
 
   return (
     <View style={[styles.center, { flex: 1, padding: 32 }]}>
-      <Text style={styles.h2}>imported {doneCount}</Text>
+      <Text style={styles.h1}>imported {doneCount}</Text>
       {failCount > 0 && <Text style={styles.subtle}>{failCount} failed</Text>}
       {hasFailures && failedCount > 0 && (
         <Pressable onPress={onRetryFailed} style={[styles.btn, styles.btnSecondary, styles.doneBtn]}>

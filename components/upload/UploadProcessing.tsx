@@ -38,7 +38,7 @@ export const UploadProcessing = ({
       <Pressable
         onPress={() => router.replace('/')}
         hitSlop={12}
-        style={{ position: 'absolute', top: 56, left: 20, padding: 4 }}
+        style={({ pressed }) => [{ position: 'absolute', top: 56, left: 20, padding: 4 }, pressed && { opacity: 0.75 }]}
         accessibilityLabel="Back to home"
       >
         <Ionicons name="arrow-back" size={22} color={c.ink} />
@@ -47,7 +47,7 @@ export const UploadProcessing = ({
       <View style={{ marginBottom: 16, opacity: paused ? 0.4 : 1 }}>
         <Iris level={3} size={56} color={c.ink} spinning={!paused} />
       </View>
-      <Text style={styles.h2}>{paused ? 'paused' : 'processing'}</Text>
+      <Text style={styles.h1}>{paused ? 'paused' : 'processing'}</Text>
       <Text style={styles.subtle}>{analyzeWithAI ? 'with AI tagging' : 'no AI tagging'}</Text>
 
       <View style={styles.statRow}>
@@ -102,7 +102,7 @@ export const UploadProcessing = ({
             )
           }
           hitSlop={8}
-          style={{ marginTop: 14 }}
+          style={({ pressed }) => [{ marginTop: 14 }, pressed && { opacity: 0.75 }]}
         >
           <Text style={styles.stopLink}>stop and exit</Text>
         </Pressable>

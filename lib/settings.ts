@@ -18,10 +18,6 @@ const KEYS = {
  *  onboarding flow once. Settings has a "reset onboarding" link that
  *  flips this back so the flow plays again. */
 export const useOnboardingComplete = () => useBoolSetting(KEYS.onboardingComplete, false);
-export const isOnboardingComplete = async (): Promise<boolean> => {
-  const v = await AsyncStorage.getItem(KEYS.onboardingComplete);
-  return v === '1';
-};
 export const markOnboardingComplete = async (): Promise<void> => {
   await AsyncStorage.setItem(KEYS.onboardingComplete, '1');
 };

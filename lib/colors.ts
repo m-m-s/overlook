@@ -154,6 +154,7 @@ const defaultStatusColors: Record<string, string> = {
 // Default (editorial) urgency palette — right side of top edge gradient
 // (warm temperature scale, hotter = more urgent).
 const defaultUrgencyColors: Record<string, string> = {
+  overdue: '#A93226', // deep red — past deadline
   today: '#C0392B', // warm red
   expires_soon: '#C0392B',
   this_week: '#D87538', // warm orange
@@ -179,6 +180,7 @@ const colorBlindStatusColors: Record<string, string> = {
 // blue (this year / someday) so urgency reads as a temperature ramp
 // distinguishable for all common color-vision deficiencies.
 const colorBlindUrgencyColors: Record<string, string> = {
+  overdue: '#882255', // deep purple — distinct from all urgency colors
   today: '#D55E00',        // vermillion
   expires_soon: '#D55E00',
   this_week: '#E69F00',    // orange
@@ -212,7 +214,7 @@ export const URGENCY_PALETTES = {
 
 const STATUS_KEYS = ['ready', 'supplies', 'in_progress', 'research', 'done'];
 const URGENCY_KEYS = [
-  'today', 'expires_soon', 'this_week', 'this_month', 'this_season', 'this_year', 'someday',
+  'overdue', 'today', 'expires_soon', 'this_week', 'this_month', 'this_season', 'this_year', 'someday',
 ];
 
 const statusTarget: Record<string, string> = {};

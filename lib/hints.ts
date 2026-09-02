@@ -41,13 +41,6 @@ const showTipsEnabled = async (): Promise<boolean> => {
   return v === '1';
 };
 
-/** Returns true only if the hint has never been shown AND tips are enabled. */
-export const shouldShowHint = async (name: string): Promise<boolean> => {
-  if (!(await showTipsEnabled())) return false;
-  const seen = await load();
-  return !seen[name];
-};
-
 export const wasHintSeen = async (name: string): Promise<boolean> => {
   const seen = await load();
   return Boolean(seen[name]);

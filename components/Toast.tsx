@@ -1,8 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { animDuration, useReduceMotion } from '@/lib/a11y';
-import { colors } from '@/lib/colors';
+import { useColors } from '@/lib/themeContext';
 
 type ToastKind = 'info' | 'error';
 type ToastAction = { label: string; onPress: () => void };
@@ -33,6 +33,26 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduceMotion = useReduceMotion();
+  const c = useColors();
+  const styles = useMemo(() => StyleSheet.create({
+    wrap: { position: 'absolute', top: 56, left: 16, right: 16, alignItems: 'center', zIndex: 50 },
+    toast: {
+      flexDirection: 'row', alignItems: 'center', backgroundColor: c.ink,
+      paddingHorizontal: 16, paddingVertical: 12, borderRadius: 4, maxWidth: 600, minHeight: 44,
+    },
+    toastTextRow: { flex: 1, flexShrink: 1 },
+    toastError: { backgroundColor: '#C0392B' },
+    text: { color: c.parchment, fontSize: 13, letterSpacing: 0.3 },
+    textError: { color: c.parchment },
+    actionBtn: {
+      marginLeft: 12, paddingHorizontal: 12, paddingVertical: 6,
+      borderRadius: 3, borderWidth: 1, borderColor: c.parchment,
+    },
+    actionText: {
+      color: c.parchment, fontSize: 12, letterSpacing: 1.4,
+      textTransform: 'uppercase', fontWeight: '600',
+    },
+  }), [c]);
 
   const dismiss = useCallback(() => {
     Animated.timing(opacity, {
@@ -103,50 +123,3 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  wrap: {
-    position: 'absolute',
-    top: 56,
-    left: 16,
-    right: 16,
-    alignItems: 'center',
-    zIndex: 50,
-  },
-  toast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.ink,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 4,
-    maxWidth: 600,
-    minHeight: 44,
-  },
-  toastTextRow: { flex: 1, flexShrink: 1 },
-  toastError: {
-    backgroundColor: '#C0392B',
-  },
-  text: {
-    color: colors.parchment,
-    fontSize: 13,
-    letterSpacing: 0.3,
-  },
-  textError: {
-    color: colors.parchment,
-  },
-  actionBtn: {
-    marginLeft: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: colors.parchment,
-  },
-  actionText: {
-    color: colors.parchment,
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-});

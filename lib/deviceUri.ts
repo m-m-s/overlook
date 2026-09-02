@@ -47,11 +47,3 @@ export const resolveDeviceAsset = async (assetId: string): Promise<Resolved | nu
   return null;
 };
 
-/** Bulk version — resolves many at once. Order is preserved; nulls for assets that fail. */
-export const resolveDeviceAssets = async (assetIds: string[]): Promise<(Resolved | null)[]> => {
-  return Promise.all(assetIds.map(resolveDeviceAsset));
-};
-
-export const clearDeviceAssetCache = (): void => {
-  cache.clear();
-};

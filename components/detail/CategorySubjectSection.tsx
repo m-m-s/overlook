@@ -9,7 +9,6 @@ import { SectionHeader } from './SectionHelpers';
 import { capitalize, CATEGORIES } from '@/lib/options';
 import type { FontSet, Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
-import { heavyHaptic } from '@/lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 type Props = {
@@ -23,6 +22,7 @@ type Props = {
   onToggleSubject: () => void;
   onSetCategory: (cat: Category | null) => void;
   onStageSubject: (s: string | null) => void;
+  onApply?: () => void;
 };
 
 export const CategorySubjectSection = ({
@@ -36,6 +36,7 @@ export const CategorySubjectSection = ({
   onToggleSubject,
   onSetCategory,
   onStageSubject,
+  onApply,
 }: Props) => {
   const c = useColors();
   const f = useFonts();
@@ -43,15 +44,12 @@ export const CategorySubjectSection = ({
 
   return (
     <>
-      {/* Breadcrumb — shown when not editing and at least one value is set */}
+      {/* Breadcrumb — shown when not editing and at least one value is set.
+          Tapping any part enters edit mode for that field. */}
       {!isEditingCategory && !isEditingSubject && (categories.length > 0 || subject) && (
         <View style={styles.breadcrumb}>
           {categories.map((cat) => (
-            <Pressable
-              key={cat}
-              onPress={onToggleCategory}
-              onLongPress={() => { void heavyHaptic(); onToggleCategory(); }}
-            >
+            <Pressable key={cat} onPress={onToggleCategory} hitSlop={6} style={({ pressed }) => pressed && { opacity: 0.75 }}>
               <Chip
                 label={capitalize(cat)}
                 variant="meta"
@@ -65,15 +63,12 @@ export const CategorySubjectSection = ({
             <Ionicons name="chevron-forward" size={14} color={c.inkMuted} />
           )}
           {subject && (
-            <Pressable
-              onPress={onToggleSubject}
-              onLongPress={() => { void heavyHaptic(); onToggleSubject(); }}
-            >
+            <Pressable onPress={onToggleSubject} hitSlop={6} style={({ pressed }) => pressed && { opacity: 0.75 }}>
               <Text style={styles.breadcrumbSubject}>{subject}</Text>
             </Pressable>
           )}
           {categories.length > 0 && !subject && (
-            <Pressable onPress={onToggleSubject} hitSlop={6}>
+            <Pressable onPress={onToggleSubject} hitSlop={6} style={({ pressed }) => pressed && { opacity: 0.75 }}>
               <Text style={styles.breadcrumbAddTitle}>+ add title</Text>
             </Pressable>
           )}
@@ -83,7 +78,7 @@ export const CategorySubjectSection = ({
       {/* Category edit — only when editing or nothing is set */}
       {(isEditingCategory || (!category && !subject)) && (
         <View>
-          <SectionHeader label="category" editing={isEditingCategory} onExit={onToggleCategory} onToggle={onToggleCategory} />
+          <SectionHeader label="category" editing={isEditingCategory} onExit={onApply ?? onToggleCategory} onToggle={onToggleCategory} showAdd={!isEditingCategory && categories.length === 0} />
           {isEditingCategory ? (
             <Shake trigger={isEditingCategory} style={styles.chipRow}>
               {CATEGORIES.map((cat) => {
@@ -107,16 +102,14 @@ export const CategorySubjectSection = ({
                 );
               })}
             </Shake>
-          ) : (
-            <Text style={styles.emptyHint}>not set</Text>
-          )}
+          ) : null}
         </View>
       )}
 
       {/* Subject edit — only when editing or nothing is set */}
       {(isEditingSubject || (!subject && !category)) && (
         <View>
-          <SectionHeader label="subject" editing={isEditingSubject} onExit={onToggleSubject} onToggle={onToggleSubject} />
+          <SectionHeader label="subject" editing={isEditingSubject} onExit={onApply ?? onToggleSubject} onToggle={onToggleSubject} showAdd={!isEditingSubject && !subject} />
           {isEditingSubject ? (
             <>
               {aiSubjects.length > 0 && !subject && (
@@ -140,9 +133,7 @@ export const CategorySubjectSection = ({
                 style={styles.subjectInput}
               />
             </>
-          ) : (
-            <Text style={styles.emptyHint}>not set</Text>
-          )}
+          ) : null}
         </View>
       )}
     </>
@@ -169,7 +160,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       borderColor: c.inkMuted,
     },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, rowGap: 8 },
-    emptyHint: { fontSize: 12, color: c.inkMuted, fontStyle: 'italic' },
     subjectInput: {
       fontSize: 16,
       fontFamily: f.displayMedium,

@@ -8,6 +8,7 @@ import type { CardData } from './Card';
 import { CategoryIcon, type Category } from './CategoryIcon';
 import { statusColors, urgencyColors, type FontSet, type Palette } from '@/lib/colors';
 import { heavyHaptic } from '@/lib/haptics';
+import { effectiveUrgencyKey } from '@/lib/urgency';
 import { useColors, useFonts } from '@/lib/themeContext';
 import type { LocalScreenshot } from '@/lib/uploads';
 
@@ -16,7 +17,7 @@ const toCardData = (it: LocalScreenshot): CardData => ({
   uri: it.uri,
   category: it.category ?? null,
   status: (it.status as keyof typeof statusColors) ?? null,
-  urgency: (it.urgency as keyof typeof urgencyColors) ?? null,
+  urgency: (effectiveUrgencyKey(it) as keyof typeof urgencyColors) ?? null,
   resonance: it.resonance ?? null,
 });
 
@@ -110,7 +111,7 @@ export const HomeRow = ({
     <View style={styles.row}>
       <View style={styles.rowHeader} onLayout={onHeaderLayout}>
         {iconCategory && (
-          <View style={styles.rowIcon}>
+          <View>
             <CategoryIcon category={iconCategory} size={20} color={c.ink} />
           </View>
         )}
@@ -118,6 +119,7 @@ export const HomeRow = ({
           <Text style={styles.rowEmoji}>{iconEmoji}</Text>
         )}
         <Pressable
+          onPress={!reorderMode ? onSeeAll : undefined}
           onLongPress={() => {
             if (onTitleLongPress) {
               void heavyHaptic();
@@ -126,6 +128,7 @@ export const HomeRow = ({
           }}
           delayLongPress={250}
           hitSlop={6}
+          style={({ pressed }) => pressed && !reorderMode && { opacity: 0.75 }}
         >
           <Text style={styles.rowTitle}>{title}</Text>
         </Pressable>
@@ -146,11 +149,11 @@ export const HomeRow = ({
         ) : (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             {onSecondary && (
-              <Pressable onPress={onSecondary} hitSlop={6}>
+              <Pressable onPress={onSecondary} hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.75 }}>
                 <Text style={styles.rowSeeAll}>{secondaryLabel ?? 'open ›'}</Text>
               </Pressable>
             )}
-            <Pressable onPress={onSeeAll} hitSlop={6}>
+            <Pressable onPress={onSeeAll} hitSlop={12} style={({ pressed }) => pressed && { opacity: 0.75 }}>
               <Text style={styles.rowSeeAll}>see all ›</Text>
             </Pressable>
           </View>
@@ -232,7 +235,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       letterSpacing: -0.3,
       textTransform: 'capitalize',
     },
-    rowIcon: {},
     rowEmoji: { fontSize: 20 },
     rowCount: {
       fontFamily: f.italic,
@@ -244,14 +246,6 @@ const makeStyles = (c: Palette, f: FontSet) =>
       letterSpacing: 1.6,
       textTransform: 'uppercase',
       color: c.inkMuted,
-    },
-    dashedConnector: {
-      flex: 1,
-      borderBottomWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: c.ink,
-      marginBottom: 4,
-      marginHorizontal: 8,
     },
     rowList: { paddingHorizontal: 0 },
     rowCell: { aspectRatio: 4 / 5 },

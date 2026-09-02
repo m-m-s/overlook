@@ -1,14 +1,16 @@
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Chip } from './Chip';
 import { Iris } from './Iris';
 import { useToast } from './Toast';
-import { colors, statusColors, urgencyColors } from '@/lib/colors';
+import { statusColors, urgencyColors } from '@/lib/colors';
+import { useColors } from '@/lib/themeContext';
 import { capitalize, CATEGORIES, RESONANCE_LEVELS, STATUSES, URGENCIES } from '@/lib/options';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { updateScreenshots, type ScreenshotPatch, type TypedTag } from '@/lib/screenshots';
+import { computeUrgencyDate } from '@/lib/urgency';
 import { buildTagFromValue, rememberTagType } from '@/lib/tagDictionary';
 import type { LocalScreenshot } from '@/lib/uploads';
 
@@ -22,6 +24,7 @@ type Props = {
 type Patch = {
   category?: string | null;
   urgency?: string | null;
+  urgency_date?: string | null;
   status?: string | null;
   resonance?: 1 | 2 | 3 | null;
 };
@@ -41,12 +44,30 @@ const appendTagToAll = async (ids: string[], tag: TypedTag): Promise<void> => {
   }
 };
 
-const SectionLabel = ({ children }: { children: string }) => (
-  <Text style={styles.sectionLabel}>{children}</Text>
-);
-
 export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
   const toast = useToast();
+  const c = useColors();
+  const styles = useMemo(() => StyleSheet.create({
+    scroll: { padding: 20, paddingBottom: 60, gap: 4 },
+    title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: c.ink, marginBottom: 4 },
+    help: { fontSize: 12, color: c.inkMuted, marginBottom: 8, lineHeight: 18 },
+    sectionLabel: { fontSize: 11, letterSpacing: 1.8, textTransform: 'uppercase', color: c.inkMuted, marginTop: 22, marginBottom: 10 },
+    row: { flexDirection: 'row', gap: 6 },
+    wrap: { flexWrap: 'wrap', rowGap: 8 },
+    irisBtn: { width: 44, height: 44, borderWidth: 1, borderColor: c.ink, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+    irisBtnActive: { backgroundColor: c.ink },
+    tagInput: { fontSize: 13, color: c.ink, paddingVertical: 8, paddingHorizontal: 10, borderWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderColor: c.ink, borderRadius: 3 },
+    ambiguousRow: { marginTop: 12, paddingVertical: 12, paddingHorizontal: 12, borderWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderColor: c.ink, borderRadius: 4, gap: 10 },
+    ambiguousLabel: { fontSize: 12, color: c.ink, fontStyle: 'italic' },
+    footer: { flexDirection: 'row', gap: 10, marginTop: 28, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.ink, borderStyle: 'dashed' },
+    cancelBtn: { flex: 1, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: c.ink, borderRadius: 4 },
+    cancelText: { color: c.ink, fontSize: 12, letterSpacing: 1.5, textTransform: 'uppercase' },
+    applyBtn: { flex: 2, paddingVertical: 14, alignItems: 'center', backgroundColor: c.ink, borderRadius: 4 },
+    applyText: { color: c.parchment, fontSize: 12, letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: '600' },
+  }), [c]);
+  const SectionLabel = ({ children }: { children: string }) => (
+    <Text style={styles.sectionLabel}>{children}</Text>
+  );
   const [patch, setPatch] = useState<Patch>({});
   const [tagText, setTagText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -139,7 +160,7 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
               label={capitalize(cat)}
               variant="meta"
               selected={active}
-              color={active ? colors.ink : colors.inkMuted}
+              color={active ? c.ink : c.inkMuted}
               onPress={() => setField('category', cat)}
             />
           );
@@ -154,9 +175,9 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
             <Pressable
               key={r}
               onPress={() => setField('resonance', r)}
-              style={[styles.irisBtn, active && styles.irisBtnActive]}
+              style={({ pressed }) => [styles.irisBtn, active && styles.irisBtnActive, pressed && { opacity: 0.75 }]}
             >
-              <Iris level={r} size={22} color={active ? colors.parchment : colors.ink} />
+              <Iris level={r} size={22} color={active ? c.parchment : c.ink} />
             </Pressable>
           );
         })}
@@ -172,8 +193,11 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
               label={u.label}
               variant="meta"
               selected={active}
-              color={active ? urgencyColors[u.key] : colors.inkMuted}
-              onPress={() => setField('urgency', u.key)}
+              color={active ? urgencyColors[u.key] : c.inkMuted}
+              onPress={() => {
+                const next = patch.urgency === u.key ? null : u.key;
+                setPatch((prev) => ({ ...prev, urgency: next, urgency_date: next ? computeUrgencyDate(next) : null }));
+              }}
             />
           );
         })}
@@ -189,7 +213,7 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
               label={s.label}
               variant="meta"
               selected={active}
-              color={active ? statusColors[s.key] : colors.inkMuted}
+              color={active ? statusColors[s.key] : c.inkMuted}
               onPress={() => setField('status', s.key)}
             />
           );
@@ -201,7 +225,7 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
         value={tagText}
         onChangeText={setTagText}
         placeholder="e.g. gift idea"
-        placeholderTextColor={colors.inkMuted}
+        placeholderTextColor={c.inkMuted}
         autoCapitalize="none"
         style={styles.tagInput}
       />
@@ -213,12 +237,12 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
           </Text>
           <View style={[styles.row, styles.wrap]}>
             {pendingAmbiguous.candidates.map((cand) => (
-              <Chip key={cand} label={cand} variant="meta" color={colors.ink} onPress={() => resolveAmbiguous(cand)} />
+              <Chip key={cand} label={cand} variant="meta" color={c.ink} onPress={() => resolveAmbiguous(cand)} />
             ))}
             <Chip
               label="neither — keep untyped"
               variant="add"
-              color={colors.inkMuted}
+              color={c.inkMuted}
               onPress={() => resolveAmbiguous(null)}
             />
           </View>
@@ -226,13 +250,13 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
       )}
 
       <View style={styles.footer}>
-        <Pressable onPress={onClose} style={styles.cancelBtn}>
+        <Pressable onPress={onClose} style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.75 }]}>
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
         <Pressable
           onPress={onApply}
           disabled={!canApply}
-          style={[styles.applyBtn, !canApply && { opacity: 0.4 }]}
+          style={({ pressed }) => [styles.applyBtn, !canApply && { opacity: 0.4 }, pressed && canApply && { opacity: 0.75 }]}
         >
           <Text style={styles.applyText}>{busy ? 'applying…' : 'apply'}</Text>
         </Pressable>
@@ -240,87 +264,3 @@ export const BulkTagSheet = ({ selectedIds, onApplied, onClose }: Props) => {
     </BottomSheetScrollView>
   );
 };
-
-const styles = StyleSheet.create({
-  scroll: { padding: 20, paddingBottom: 60, gap: 4 },
-  title: { fontFamily: 'PlayfairDisplay_500Medium', fontSize: 22, color: colors.ink, marginBottom: 4 },
-  help: { fontSize: 12, color: colors.inkMuted, marginBottom: 8, lineHeight: 18 },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-    color: colors.inkMuted,
-    marginTop: 22,
-    marginBottom: 10,
-  },
-  row: { flexDirection: 'row', gap: 6 },
-  wrap: { flexWrap: 'wrap', rowGap: 8 },
-  irisBtn: {
-    width: 44,
-    height: 44,
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  irisBtnActive: { backgroundColor: colors.ink },
-  tagInput: {
-    fontSize: 13,
-    color: colors.ink,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-    borderColor: colors.ink,
-    borderRadius: 3,
-  },
-  ambiguousRow: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderStyle: 'dashed',
-    borderColor: colors.ink,
-    borderRadius: 4,
-    gap: 10,
-  },
-  ambiguousLabel: { fontSize: 12, color: colors.ink, fontStyle: 'italic' },
-  footer: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 28,
-    paddingTop: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.ink,
-    borderStyle: 'dashed',
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: 4,
-  },
-  cancelText: {
-    color: colors.ink,
-    fontSize: 12,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  applyBtn: {
-    flex: 2,
-    paddingVertical: 14,
-    alignItems: 'center',
-    backgroundColor: colors.ink,
-    borderRadius: 4,
-  },
-  applyText: {
-    color: colors.parchment,
-    fontSize: 12,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    fontWeight: '600',
-  },
-});

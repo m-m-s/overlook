@@ -14,6 +14,7 @@ type Props = {
   aiTags: TypedTag[];
   isEditing: boolean;
   onToggle: () => void;
+  onApply?: () => void;
   newTag: string;
   onNewTagChange: (v: string) => void;
   onAddTag: () => void;
@@ -21,6 +22,7 @@ type Props = {
   onSetTagType: (idx: number, type: string | undefined) => void;
   pendingAmbiguous: { value: string; candidates: string[] } | null;
   onResolveAmbiguous: (type: string | null) => void;
+  onFilterByTag?: (tag: TypedTag) => void;
 };
 
 export const TagsSection = ({
@@ -28,6 +30,7 @@ export const TagsSection = ({
   aiTags,
   isEditing,
   onToggle,
+  onApply,
   newTag,
   onNewTagChange,
   onAddTag,
@@ -35,6 +38,7 @@ export const TagsSection = ({
   onSetTagType,
   pendingAmbiguous,
   onResolveAmbiguous,
+  onFilterByTag,
 }: Props) => {
   const c = useColors();
   const f = useFonts();
@@ -43,10 +47,8 @@ export const TagsSection = ({
 
   return (
     <View>
-      <SectionHeader label="tags" editing={isEditing} onExit={onToggle} onToggle={onToggle} />
-      {sorted.length === 0 && !isEditing ? (
-        <Text style={styles.emptyHint}>not set</Text>
-      ) : (
+      <SectionHeader label="tags" editing={isEditing} onExit={onApply ?? onToggle} onToggle={onToggle} showAdd={sorted.length === 0 && !isEditing} />
+      {sorted.length === 0 && !isEditing ? null : (
         <>
           <View style={styles.chipRow}>
             {sorted.map((entry) => {
@@ -65,7 +67,9 @@ export const TagsSection = ({
                             const next = types[(cur + 1) % types.length];
                             onSetTagType(manualIndex!, next);
                           }
-                        : undefined
+                        : onFilterByTag
+                          ? () => onFilterByTag(tag)
+                          : undefined
                     }
                     onRemove={isEditing ? () => onRemoveTag(manualIndex!) : undefined}
                   />
@@ -76,6 +80,7 @@ export const TagsSection = ({
                   key={`a-${tag.value}-${entry.aiIndex}`}
                   label={tag.type ? `${tag.type}:${tag.value}` : tag.value}
                   variant="ai"
+                  onPress={onFilterByTag && !isEditing ? () => onFilterByTag(tag) : undefined}
                 />
               );
             })}
@@ -129,7 +134,6 @@ export const TagsSection = ({
 const makeStyles = (c: Palette, f: FontSet) =>
   StyleSheet.create({
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, rowGap: 8 },
-    emptyHint: { fontSize: 12, color: c.inkMuted, fontStyle: 'italic' },
     tagInput: {
       fontSize: 13,
       color: c.ink,

@@ -35,31 +35,12 @@ const useOrderHook = (storageKey: string) => {
     AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
   };
 
-  /** Move the named entry up by one, persisting the new order. */
-  const moveUp = (name: string, allKnown: string[]) => {
-    const merged = mergeWithDefaults(order, allKnown);
-    const idx = merged.indexOf(name);
-    if (idx <= 0) return;
-    const next = [...merged];
-    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-    persist(next);
-  };
-
-  const moveDown = (name: string, allKnown: string[]) => {
-    const merged = mergeWithDefaults(order, allKnown);
-    const idx = merged.indexOf(name);
-    if (idx === -1 || idx >= merged.length - 1) return;
-    const next = [...merged];
-    [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
-    persist(next);
-  };
-
   /** Replace the entire order — used by drag-and-drop reorder. */
   const replace = (next: string[]) => {
     persist(next);
   };
 
-  return { order, moveUp, moveDown, replace };
+  return { order, replace };
 };
 
 /**
@@ -91,12 +72,9 @@ export const useHiddenRows = () => {
     if (hidden.includes(name)) return;
     persist([...hidden, name]);
   };
-  const unhide = (name: string) => {
-    persist(hidden.filter((n) => n !== name));
-  };
   const clear = () => persist([]);
 
-  return { hidden, hide, unhide, clear };
+  return { hidden, hide, clear };
 };
 
 /** Merge user order with currently-known names. Anything in `allKnown` but

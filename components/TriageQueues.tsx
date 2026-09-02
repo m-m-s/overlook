@@ -7,6 +7,7 @@ import type { FontSet, Palette } from '@/lib/colors';
 import { useColors, useFonts } from '@/lib/themeContext';
 
 export type QueueKey =
+  | 'overdue'
   | 'untagged'
   | 'incomplete'
   | 'incomplete-resonance'
@@ -38,12 +39,12 @@ export const TriageQueues = ({ counts, totalItems, onEnterQueue, onBack }: Props
   const [incompleteExpanded, setIncompleteExpanded] = useState(false);
 
   const allCaughtUp =
-    counts.untagged === 0 && counts.incomplete === 0 && counts['ai-unreviewed'] === 0;
+    counts.overdue === 0 && counts.untagged === 0 && counts.incomplete === 0 && counts['ai-unreviewed'] === 0;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
+        <Pressable onPress={onBack} hitSlop={12} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.75 }]}>
           <Ionicons name="arrow-back" size={22} color={c.ink} />
         </Pressable>
         <Text style={styles.title}>Triage</Text>
@@ -58,6 +59,14 @@ export const TriageQueues = ({ counts, totalItems, onEnterQueue, onBack }: Props
       )}
 
       <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+        <QueueRow
+          label="overdue"
+          hint="deadline passed — reschedule or clear"
+          count={counts.overdue}
+          disabled={counts.overdue === 0}
+          labelColor="#A93226"
+          onPress={() => onEnterQueue('overdue')}
+        />
         <QueueRow
           label="untagged"
           hint="needs everything"
@@ -124,6 +133,7 @@ const QueueRow = ({
   disabled,
   onPress,
   indent,
+  labelColor,
   chevron = 'chevron-forward',
 }: {
   label: string;
@@ -132,6 +142,7 @@ const QueueRow = ({
   disabled?: boolean;
   onPress: () => void;
   indent?: boolean;
+  labelColor?: string;
   chevron?: React.ComponentProps<typeof Ionicons>['name'];
 }) => {
   const c = useColors();
@@ -140,14 +151,15 @@ const QueueRow = ({
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
-      style={[
+      style={({ pressed }) => [
         styles.queueRow,
         indent && styles.queueRowIndent,
         disabled && { opacity: 0.4 },
+        pressed && !disabled && { opacity: 0.75 },
       ]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[styles.queueLabel, indent && styles.queueLabelIndent]}>{label}</Text>
+        <Text style={[styles.queueLabel, indent && styles.queueLabelIndent, labelColor ? { color: labelColor } : null]}>{label}</Text>
         <Text style={styles.queueHint}>{hint}</Text>
       </View>
       <Text style={[styles.queueCount, indent && { fontSize: 22 }]}>{count}</Text>
