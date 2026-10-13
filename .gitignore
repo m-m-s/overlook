@@ -46,3 +46,7 @@ app-example
 
 # Claude Code agent worktrees (local checkouts, not project source)
 .claude/worktrees/
+
+
+   docs/HANDOFF.md
+   docs/NOTES.md
